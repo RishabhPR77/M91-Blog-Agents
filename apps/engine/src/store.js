@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto'
 import { getConfig } from './config.js'
 import { log } from './util/log.js'
-import { sleep } from './util/retry.js'
+import { sleep, retry } from './util/retry.js'
 import { istDate } from './util/time.js'
 
 export const RECORD_TYPES = Object.freeze([
@@ -21,6 +21,15 @@ export const LEAD_STATUSES = Object.freeze(['open', 'used', 'discarded', 'expire
 export const RECORD_SCHEMAS = Object.freeze(Object.fromEntries(RECORD_TYPES.map((t) => [t, Object.freeze({})])))
 
 const MEM0_HOST = 'https://api.mem0.ai'
+
+/** A failed connection (not an HTTP answer): fetch's "fetch failed", resets, timeouts, DNS. */
+export function isNetworkError(error) {
+  if (!error) return false
+  const code = error.cause?.code ?? error.code ?? ''
+  return (error.name === 'TypeError' && /fetch failed/i.test(error.message)) ||
+    /^(ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EPIPE|UND_ERR_[A-Z_]+)$/.test(code) ||
+    error.name === 'TimeoutError' || /socket hang up|network error/i.test(error.message ?? '')
+}
 
 export class StoreError extends Error {
   constructor(message, details) {
@@ -88,13 +97,25 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
   let clientPromise
   const client = () => (clientPromise ??= clientFactory(apiKey))
 
+  // Mem0 calls that are safe to repeat (reads, update/delete by id, event polls) retry network blips
+  // up to 2 times (seen live: one "fetch failed" ended a run). New-record writes are not retried,
+  // since a retry after a lost reply could save a second copy.
+  const net = (fn, what) => retry(fn, {
+    retries: 2,
+    baseMs: 1000,
+    maxMs: 4000,
+    sleepFn,
+    shouldRetry: isNetworkError,
+    onRetry: (error, attempt) => log.warn('Mem0 network error; retrying', { what, attempt, error })
+  })
+
   const entityFilters = (briefId) => (briefId ? { AND: [{ agent_id: agentId }, { run_id: briefId }] } : { agent_id: agentId })
 
   /** Polls GET /v1/event/<id>/ until the add has been processed. */
   async function waitForEvent(eventId) {
     const deadline = Date.now() + eventTimeoutMs
     while (Date.now() < deadline) {
-      const res = await fetch(`${MEM0_HOST}/v1/event/${encodeURIComponent(eventId)}/`, { headers: { Authorization: `Token ${apiKey}` } })
+      const res = await net(() => fetch(`${MEM0_HOST}/v1/event/${encodeURIComponent(eventId)}/`, { headers: { Authorization: `Token ${apiKey}` } }), 'event')
       if (!res.ok) throw new StoreError(`Mem0 event lookup failed with HTTP ${res.status}`)
       const event = await res.json()
       if (event.status === 'SUCCEEDED') return event
@@ -108,7 +129,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     const c = await client()
     const out = []
     for (let page = 1; page <= 50; page++) {
-      const res = await c.getAll({ filters: entityFilters(briefId), page, pageSize: 100 })
+      const res = await net(() => c.getAll({ filters: entityFilters(briefId), page, pageSize: 100 }), 'list')
       const results = Array.isArray(res) ? res : res?.results ?? []
       out.push(...results)
       if (Array.isArray(res) || !res?.next || results.length === 0) break
@@ -160,9 +181,9 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
       return { id, payload, metadata, dryRun: true }
     }
     const c = await client()
-    const current = await c.get(id)
+    const current = await net(() => c.get(id), 'get')
     const merged = { ...(current?.metadata ?? {}), ...metadata }
-    await c.update(id, { ...(payload !== undefined && { text: JSON.stringify(payload) }), metadata: merged })
+    await net(() => c.update(id, { ...(payload !== undefined && { text: JSON.stringify(payload) }), metadata: merged }), 'update')
     return toRecord({ ...current, id, metadata: merged, memory: payload !== undefined ? JSON.stringify(payload) : current?.memory })
   }
 
@@ -171,7 +192,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     const c = await client()
     let m
     try {
-      m = await c.get(id)
+      m = await net(() => c.get(id), 'get')
     } catch {
       return null
     }
@@ -194,7 +215,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
   async function searchSimilar(text, filters = {}) {
     const c = await client()
     const briefId = filters.brief_id ?? filters.briefId
-    const res = await c.search(text, { filters: entityFilters(briefId), topK: filters.topK ?? 10 })
+    const res = await net(() => c.search(text, { filters: entityFilters(briefId), topK: filters.topK ?? 10 }), 'search')
     const results = Array.isArray(res) ? res : res?.results ?? []
     return results.map((m) => ({ ...toRecord(m), score: m.score ?? null })).filter((r) => matches(r, filters))
   }
@@ -214,7 +235,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
   async function deleteRecord(id) {
     if (dryRun || String(id).startsWith(DRY_ID)) return
     const c = await client()
-    await c.delete(id)
+    await net(() => c.delete(id), 'delete')
   }
 
   return { dryRun, createRecord, updateRecord, getRecord, getRecords, getOne, searchSimilar, addLesson, deleteRecord }

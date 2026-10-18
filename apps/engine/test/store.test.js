@@ -132,3 +132,22 @@ test('unknown record type is rejected', async () => {
   const { store } = setup()
   await assert.rejects(store.createRecord({ type: 'nope', payload: {} }), /Unknown record type/)
 })
+
+test('Mem0 network blips are retried for safe calls (search), but a new-record add is not retried', async () => {
+  const { isNetworkError } = await import('../src/store.js')
+  const blip = () => Object.assign(new TypeError('fetch failed'), { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } })
+  assert.equal(isNetworkError(blip()), true)
+  assert.equal(isNetworkError(new Error('HTTP 400 bad request')), false)
+
+  let searches = 0
+  let adds = 0
+  const client = {
+    async search() { if (++searches < 3) throw blip(); return { results: [] } },
+    async add() { adds++; throw blip() }
+  }
+  const store = createStore({ config: fakeConfig(), clientFactory: async () => client, fetch: fakeFetch(() => ({})), sleepFn: async () => {} })
+  assert.deepEqual(await store.searchSimilar('x'), [])
+  assert.equal(searches, 3)
+  await assert.rejects(store.createRecord({ type: 'brief', payload: {} }), /fetch failed/)
+  assert.equal(adds, 1)
+})
