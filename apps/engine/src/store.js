@@ -63,7 +63,8 @@ export function toRecord(memory) {
     type: md.type,
     briefId: md.brief_id ?? null,
     status: md.status ?? null,
-    version: md.version ?? null,
+    // Mem0 can hand metadata numbers back as strings ("1"); keep versions numeric so "1" + 1 is 2, not "11".
+    version: md.version == null || md.version === '' ? null : Number.isNaN(Number(md.version)) ? md.version : Number(md.version),
     topicGroup: md.topic_group ?? null,
     date: md.date ?? null,
     payload: tryParse(memory.memory ?? memory.data?.memory),

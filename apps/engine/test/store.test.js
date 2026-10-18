@@ -151,3 +151,11 @@ test('Mem0 network blips are retried for safe calls (search), but a new-record a
   await assert.rejects(store.createRecord({ type: 'brief', payload: {} }), /fetch failed/)
   assert.equal(adds, 1)
 })
+
+test('versions come back as numbers even when Mem0 returns metadata as strings ("1" + 1 = 2, not "11")', async () => {
+  const { toRecord } = await import('../src/store.js')
+  assert.equal(toRecord({ id: 'a', memory: '{}', metadata: { type: 'draft', version: '1' } }).version, 1)
+  assert.equal(toRecord({ id: 'a', memory: '{}', metadata: { type: 'draft', version: 3 } }).version, 3)
+  assert.equal(toRecord({ id: 'a', memory: '{}', metadata: { type: 'draft', version: null } }).version, null)
+  assert.equal(toRecord({ id: 'a', memory: '{}', metadata: { type: 'draft', version: '1' } }).version + 1, 2)
+})
