@@ -24,7 +24,11 @@
     "strategist": "node --env-file=../../.env src/cli.js strategist",
     "strategist:dry": "cross-env DRY_RUN=true node --env-file=../../.env src/cli.js strategist",
     "brief": "node --env-file=../../.env src/cli.js brief",
-    "pin": "node --env-file=../../.env src/cli.js pin"
+    "pin": "node --env-file=../../.env src/cli.js pin",
+    "writer": "node --env-file=../../.env src/cli.js writer",
+    "writer:dry": "cross-env DRY_RUN=true node --env-file=../../.env src/cli.js writer",
+    "draft": "node --env-file=../../.env src/cli.js draft",
+    "checks": "node --env-file=../../.env src/cli.js checks"
   },
   "dependencies": {
     "@m91/content": "0.1.0",

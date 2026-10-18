@@ -185,7 +185,19 @@ async function strategist() {
   }
 }
 
-const TESTS = { S1: s1, S2: s2, S3: s3, S4: s4, S5: s5, SCOUT: scout, STRATEGIST: strategist }
+async function writer() {
+  const { writerSmoke } = await import('./writer.smoke.js')
+  try {
+    const r = await writerSmoke(config)
+    record('WRITER new', r.real.hard_passed ? 'PASS' : 'CHECK (hard failures)', '', r.real.model_used, `${r.real.word_count} words, grade ${r.real.reading.post_grade}, repairs ${r.real.repairs_used}`)
+    record('WRITER revise', r.rev.version === r.real.version + 1 ? 'PASS' : 'CHECK', '', r.rev.model_used, `v${r.rev.version}, ${r.rev.draft.revision_notes.length} revision notes`)
+    if (r.tutorial) record('WRITER tutorial', r.tutorial.draft.checks.results.find((x) => x.id === 'tutorial_code_verbatim')?.passed ? 'PASS' : 'FAIL', '', r.tutorial.model_used, 'tutorial_code_verbatim')
+  } catch (e) {
+    record('WRITER', 'FAIL', '', config.writer.model, e.message.split('\n')[0])
+  }
+}
+
+const TESTS = { S1: s1, S2: s2, S3: s3, S4: s4, S5: s5, SCOUT: scout, STRATEGIST: strategist, WRITER: writer }
 for (const name of selected) {
   if (!TESTS[name]) {
     console.error(`Unknown smoke test ${name}`)

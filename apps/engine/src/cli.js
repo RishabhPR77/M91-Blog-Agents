@@ -6,9 +6,17 @@
 // npm run strategist -- --mode=rebrief --brief-id=<id> --feedback-file=<path.json>
 //   feedback file: [{ "area": "angle", "problem": "…", "fix": "…" }]  or  { "feedback": [...] }
 // npm run brief -- --show <brief_id>
+// npm run writer -- --brief-id=<id> [--brief-version=<n>] [--mode=revise --feedback-file=<path.json>]
+// npm run draft -- --show <brief_id> [--version <n>]  |  --export <brief_id> [--version <n>] --out <file.md>
+// npm run checks -- --file <post.md> --brief-id <id>
 // npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"] | --list | --cancel <pinned_id>
 
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
+import { runWriter } from './writer/index.js'
+import { draftsOf } from './writer/save.js'
+import { loadBrief, allowedUrlSet, tutorialSourceText } from './writer/inputs.js'
+import { runContentChecks, parseMarkdown, urlKey } from './checks/content.js'
+import { createUrlChecker } from './scout/checks.js'
 import { pathToFileURL } from 'node:url'
 import { getConfig, ConfigError } from './config.js'
 import { log, registerSecrets, setLevel } from './util/log.js'
@@ -40,6 +48,10 @@ async function scoutCommand(args, { config, store, notifier }) {
   const file = JSON.parse(await readFile(args['claims-file'], 'utf8'))
   const claims = Array.isArray(file) ? file : file.claims
   return runScout({ mode, briefId: args['brief-id'], version: args.version ? Number(args.version) : undefined, claims, reviewerNote: file.reviewer_note }, { config, store, notifier })
+}
+
+function printChecks(results) {
+  console.table(results.map((r) => ({ check: r.id, severity: r.severity, passed: r.passed ? 'yes' : 'NO', value: r.value, detail: String(r.detail ?? '').slice(0, 70) })))
 }
 
 /** npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"] | --list | --cancel <id> */
@@ -107,6 +119,59 @@ async function main() {
   }
 
   if (args._[0] === 'pin') return pinCommand(args, { store })
+
+  if (args._[0] === 'writer') {
+    if (!args['brief-id'] || args['brief-id'] === true) throw new Error('usage: npm run writer -- --brief-id=<id> [--brief-version=<n>] [--mode=revise --feedback-file=<path.json>]')
+    const mode = args.mode ?? 'new'
+    let feedback = []
+    if (mode === 'revise') {
+      if (!args['feedback-file']) throw new Error('revise mode needs --feedback-file=<path.json>')
+      const file = JSON.parse(await readFile(args['feedback-file'], 'utf8'))
+      feedback = Array.isArray(file) ? file : file.feedback
+    }
+    const { calls, draft, ...result } = await runWriter({ mode, briefId: args['brief-id'], briefVersion: args['brief-version'] ? Number(args['brief-version']) : undefined, feedback }, { config, store, notifier })
+    log.info('writer finished', result)
+    console.table(calls.map((c) => ({ call: c.call, model: c.model, delivery: c.delivery, ms: c.ms, result: c.result, hard_failures: c.hard_failures?.length ?? 0, error: c.error ? c.error.slice(0, 60) : '' })))
+    printChecks(draft.checks.results)
+    return
+  }
+
+  if (args._[0] === 'draft') {
+    const id = args.show ?? args.export
+    if (!id || id === true) throw new Error('usage: npm run draft -- --show <brief_id> [--version <n>]  |  --export <brief_id> [--version <n>] --out <file.md>')
+    const all = await draftsOf(store, id)
+    const d = args.version ? all.find((x) => (x.version ?? x.payload?.version) === Number(args.version)) : all[0]
+    if (!d) return console.log(`No draft for ${id}${args.version ? ` v${args.version}` : ''}.`)
+    if (args.export) {
+      if (!args.out || args.out === true) throw new Error('--export needs --out <file.md>')
+      await writeFile(args.out, d.payload.post_markdown, 'utf8')
+      return console.log(`Exported ${id} v${d.version} (${d.status}) to ${args.out}`)
+    }
+    const p = d.payload
+    console.log(`--- ${id} v${d.version} · ${d.status} · record ${d.id} · ${p.word_count} words · grades intro ${p.reading?.intro_grade} / post ${p.reading?.post_grade} · model ${p.model_used} · repairs ${p.repairs_used} ---`)
+    printChecks(p.checks?.results ?? [])
+    console.log(p.post_markdown)
+    return
+  }
+
+  if (args._[0] === 'checks') {
+    if (!args.file || !args['brief-id']) throw new Error('usage: npm run checks -- --file <post.md> --brief-id <id>')
+    const md = await readFile(args.file, 'utf8')
+    const briefRecord = await loadBrief(store, args['brief-id'])
+    if (!briefRecord) throw new Error(`no brief ${args['brief-id']}`)
+    const brief = briefRecord.payload
+    const parsed = parseMarkdown(md)
+    const tutorialText = brief.post_type === 'tutorial' || brief.tutorial?.use ? await tutorialSourceText(brief, { config }) : ''
+    const checker = createUrlChecker({ timeoutMs: config.scout.urlCheckTimeoutMs })
+    const linkStatuses = new Map()
+    await Promise.all([...new Set(parsed.links.map((l) => l.url))].map(async (u) => linkStatuses.set(urlKey(u), await checker.check(u))))
+    // A bare Markdown file has no JSON answer or SEO fields: those two checks don't apply.
+    const draft = { title: parsed.h1[0] ?? '', post_markdown: md, tldr: parsed.tldr ?? [], seo: { title_tag: 'n/a', meta_description: 'n/a', slug_suggestion: '' } }
+    const r = runContentChecks({ draft, brief, config, allowedUrls: allowedUrlSet(brief, { ctaUrl: config.m91.ctaUrl }).set, tutorialText, linkStatuses })
+    printChecks(r.results.filter((x) => x.id !== 'schema' && x.id !== 'seo_lengths'))
+    console.log(`words ${r.word_count} · grades intro ${r.reading.intro_grade} / post ${r.reading.post_grade} · hard checks ${r.results.filter((x) => x.severity === 'hard' && x.id !== 'schema' && x.id !== 'seo_lengths').every((x) => x.passed) ? 'passed' : 'FAILED'}`)
+    return
+  }
 
   if (args._[0] === 'scout') {
     log.info('scout starting', { mode: args.mode ?? 'research', dryRun: config.runtime.dryRun })
