@@ -6,6 +6,7 @@ import { getConfig } from './config.js'
 import { log } from './util/log.js'
 import { retry, sleep } from './util/retry.js'
 import { newThreadId } from './util/ids.js'
+import { emit, threadPrefix } from './events.js'
 
 /** kind: config | token | billing | rate_limit | server | network | bad_request | timeout | truncated | parse */
 export class AiError extends Error {
@@ -144,7 +145,24 @@ export function createViaSocketClient({ config = getConfig(), fetch = globalThis
    * (default AI_MAX_RETRIES) and `onRetry(error, attempt)` is told about each one.
    * @returns {Promise<{ content, threadId, messageId, finishReason, model, ms, delivery }>}
    */
-  async function aiSend({ agent, prompt, message, jsonSchema, threadId, briefId = 'adhoc', version = 1, timeoutMs, pollMs, delivery, retries, onRetry } = {}) {
+  /** aiSend plus one `ai.call` event per call (model, delivery, ms, retries; never the prompt or token). */
+  async function aiSend(params = {}) {
+    const started = now()
+    let retryCount = 0
+    const counted = { ...params, onRetry: (e, n) => { retryCount++; params.onRetry?.(e, n) } }
+    const settings = config[params.agent]
+    const base = { agent: params.agent, service: settings?.service, model: settings?.model, delivery: params.delivery ?? settings?.delivery }
+    try {
+      const r = await aiSendOnce(counted)
+      emit('ai.call', { agent: params.agent, data: { ...base, model: r.model ?? base.model, ms: r.ms, retries: retryCount, finish_reason: r.finishReason ?? null, thread: threadPrefix(r.threadId), recovered_from_history: r.recoveredFromHistory } })
+      return r
+    } catch (error) {
+      emit('ai.call', { agent: params.agent, level: 'error', data: { ...base, ms: now() - started, retries: retryCount, finish_reason: error.result?.finishReason ?? null, thread: threadPrefix(params.threadId), error: error.kind ?? 'error' } })
+      throw error
+    }
+  }
+
+  async function aiSendOnce({ agent, prompt, message, jsonSchema, threadId, briefId = 'adhoc', version = 1, timeoutMs, pollMs, delivery, retries, onRetry } = {}) {
     const agentSettings = config[agent]
     if (!agentSettings?.service) throw new AiError(`Unknown agent "${agent}"`, { kind: 'config' })
     if (delivery !== undefined && delivery !== 'sync' && delivery !== 'rtlayer') throw new AiError(`aiSend: delivery must be sync or rtlayer`, { kind: 'config' })

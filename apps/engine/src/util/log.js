@@ -56,10 +56,22 @@ export function setSink(fn) {
   return () => { sink = previous }
 }
 
+// Listeners get every written line, already masked (events.js turns them into `log` events).
+const listeners = new Set()
+export function onLogLine(fn) {
+  listeners.add(fn)
+  return () => listeners.delete(fn)
+}
+
 function write(level, msg, fields) {
   if (LEVELS[level] < threshold) return
   const entry = { time: new Date().toISOString(), level, msg: maskString(msg), ...mask(fields ?? {}) }
   sink(level, JSON.stringify(entry))
+  for (const fn of listeners) {
+    try {
+      fn(entry)
+    } catch {}
+  }
 }
 
 export const log = {

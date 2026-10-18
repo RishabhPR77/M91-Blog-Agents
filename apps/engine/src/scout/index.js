@@ -11,6 +11,7 @@ import { validateAgainst, createUrlChecker, normaliseUrl, isKeptStatus, protectF
 import { buildDocsBundle, fetchSkillReadme, DocsError } from './docs.js'
 import { classifyCluster, mergeClusterPayload, storedStoryUrls, isDuplicateTutorial } from './dedupe.js'
 import { rankClusters } from './rank.js'
+import { emit, scoutStepName } from '../events.js'
 
 /** An error that fails the pipeline run (brief 13). */
 export class ScoutError extends Error {
@@ -61,6 +62,7 @@ export async function runScout(params = {}, deps = {}) {
     let activeSchema = schema
     const started = now()
     const meta = () => ({ call, model: sc.model, delivery: delivery ?? sc.delivery, ms: now() - started, retries })
+    emit('step.started', { agent: 'scout', step: scoutStepName(call) })
 
     for (;;) {
       if (callsUsed >= sc.maxCalls) throw Object.assign(new BudgetError(`SCOUT_MAX_CALLS (${sc.maxCalls}) reached before ${call}`), { meta: meta() })
@@ -116,6 +118,11 @@ export async function runScout(params = {}, deps = {}) {
     }
     calls.push(entry)
     log.info('scout call', entry)
+    if (meta.call !== 'research_summary') {
+      const step = scoutStepName(meta.call)
+      emit(error ? 'step.failed' : 'step.finished', { agent: 'scout', step, ...(error && { message: error }), data: { ms: meta.ms, retries: meta.retries, model: meta.model, delivery: meta.delivery } })
+      if (!error) emit('step.output', { agent: 'scout', step, message: `${kept} kept of ${returned} returned${dropped ? ` (${dropped} dropped)` : ''}`, data: { returned, kept, dropped } })
+    }
     try {
       await store.createRecord({ type: 'run_log', briefId: runId, payload: entry, status: error ? 'error' : 'ok' })
     } catch (e) {

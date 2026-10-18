@@ -10,6 +10,7 @@ import { buildPlanPrompt, repairTail, rebriefTail, TRUNCATED_PROBLEM } from './p
 import { buildInputs, buildStrategistMessage, InputsError } from './inputs.js'
 import { validateBrief, autoFix, findProblems } from './checks.js'
 import { finalizeBrief, saveBrief, markLeadsUsed, setLeadStatus } from './save.js'
+import { emit } from '../events.js'
 
 export class StrategistError extends Error {
   constructor(message, problems = []) {
@@ -69,6 +70,7 @@ export async function runStrategist(params = {}, deps = {}) {
     const record = { run_id: runId, agent: 'strategist', time: istIso(new Date(now())), ...entry }
     calls.push(record)
     log.info('strategist call', record)
+    emit('step.output', { agent: 'strategist', step: `strategist.${entry.call}`, message: entry.error ? `failed: ${entry.error}` : `${entry.result}${entry.problems?.length ? ` (${entry.problems.length} problems)` : ''}`, data: { result: entry.result, problems: entry.problems?.length ?? 0, auto_fixes: entry.auto_fixes?.length ?? 0, ms: entry.ms } })
     try {
       await store.createRecord({ type: 'run_log', briefId: runId, payload: record, status: entry.error ? 'error' : entry.result })
     } catch (e) {
@@ -161,6 +163,7 @@ export async function runStrategist(params = {}, deps = {}) {
     auto_fixes: autoFixes,
     warnings
   }
+  emit('step.output', { agent: 'strategist', step: 'strategist', message: `brief ${briefId} v${briefVersion}: ${final.post_type}, group ${final.topic_group} — "${final.titles[0]}"`, data: { brief_id: briefId, brief_version: briefVersion, record_id: rec.id, lead: final.lead, repairs_used: repairs } })
   return { ...result, brief: final, calls }
 }
 

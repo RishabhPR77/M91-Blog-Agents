@@ -8,6 +8,7 @@ import { istIso, istHuman } from './util/time.js'
 import { stubAgents } from './agents/stubs.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
+import { emit } from './events.js'
 
 /** Reviewer feedback items for the Strategist: strings become { area, problem }. */
 export function strategistFeedback(review) {
@@ -53,6 +54,27 @@ export class LockedError extends Error {
     super(message)
     this.name = 'LockedError'
   }
+}
+
+/** A one-line summary plus record ids for a step's output (never the whole payload). */
+export function summariseOutput(agent, out) {
+  if (!out || typeof out !== 'object') return null
+  if (agent === 'scout' && out.mode === 'research') {
+    const c = out.counts ?? {}
+    return {
+      message: `${c.clusters_new ?? 0} new clusters (${c.clusters_merged ?? 0} merged), ${c.stories ?? 0} stories, ${c.tutorials ?? 0} tutorials${out.reused ? ' (reused research)' : ''}`,
+      data: { cluster_ids: out.cluster_ids, story_ids: out.story_ids, tutorial_ids: out.tutorial_ids, style_profile_id: out.style_profile_id, calls_used: out.calls_used, warnings: out.warnings?.length ?? 0 }
+    }
+  }
+  if (agent === 'scout' && out.mode === 'sources') {
+    return { message: `${out.claims_supported} supported, ${out.claims_unverified} unverified, ${out.claims_contradicted} contradicted`, data: { record_id: out.record_id } }
+  }
+  if (agent === 'strategist' && out.brief_id) {
+    return { message: `brief ${out.brief_id} v${out.brief_version}: "${out.title}"`, data: { brief_id: out.brief_id, brief_version: out.brief_version, record_id: out.record_id, lead: out.lead, repairs_used: out.repairs_used } }
+  }
+  if (agent === 'reviewer') return { message: out.pass ? `pass (${out.score})` : `fail (${out.score}) → ${out.send_to ?? 'writer'}`, data: { pass: out.pass, score: out.score, send_to: out.send_to ?? null } }
+  if (agent === 'writer') return { message: `draft "${out.title ?? ''}"`, data: {} }
+  return null
 }
 
 export function assertTransition(from, to) {
@@ -151,12 +173,17 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
 
   async function step(agent, input) {
     const started = now()
+    emit('step.started', { agent, step: agent })
     try {
       const { output, model } = await agents[agent](input)
       await runLog({ agent, model: model ?? null, ms: now() - started, result: 'ok', error: null })
+      emit('step.finished', { agent, step: agent, data: { ms: now() - started, model: model ?? null } })
+      const summary = summariseOutput(agent, output)
+      if (summary) emit('step.output', { agent, step: agent, ...summary })
       return output
     } catch (error) {
       await runLog({ agent, model: null, ms: now() - started, result: 'error', error: error.message })
+      emit('step.failed', { agent, step: agent, message: error.message, data: { ms: now() - started } })
       throw error
     }
   }
