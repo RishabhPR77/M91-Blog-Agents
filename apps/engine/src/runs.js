@@ -12,9 +12,11 @@ import { withRun, emit, subscribe } from './events.js'
 import { runPipeline, defaultAgents, acquireLock, LockedError } from './orchestrator.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
+import { runWriter } from './writer/index.js'
+import { loadBrief } from './writer/inputs.js'
 
 export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'publish'])
-export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist'])
+export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer'])
 export const TRIGGERS = Object.freeze(['manual', 'cron', 'api', 'cli'])
 const TOP_STEPS = ['scout', 'strategist', 'writer', 'checks', 'reviewer', 'promo', 'designer', 'publisher']
 
@@ -76,6 +78,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (!TRIGGERS.includes(trigger)) throw new RunError('bad_trigger', `trigger must be one of ${TRIGGERS.join(', ')}`)
     if (dryRun !== undefined && typeof dryRun !== 'boolean') throw new RunError('bad_params', 'dry_run must be true or false')
     if (active) throw new RunError('run_in_progress', `run ${active.runId} is in progress`, 409)
+    if (mode === 'writer') await checkWriterParams(params, configForRun(config, { dryRun, params }))
 
     const runConfig = configForRun(config, { dryRun, params })
     const runId = newRunId(new Date(now()))
@@ -209,6 +212,22 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
         throw error
       }
     }
+    if (mode === 'writer') {
+      emit('step.started', { agent: 'writer', step: 'writer' })
+      try {
+        const feedback = params.feedback ?? []
+        const wmode = feedback.length ? 'revise' : 'new'
+        const out = agents?.writer
+          ? (await agents.writer({ runId, briefId: params.brief_id, briefVersion: params.brief_version, writerMode: wmode, review: { feedback }, config: runConfig })).output
+          : await runWriter({ mode: wmode, runId, briefId: params.brief_id, briefVersion: params.brief_version, feedback }, { config: runConfig, store, notifier })
+        emit('step.finished', { agent: 'writer', step: 'writer' })
+        emit('step.output', { agent: 'writer', step: 'writer', message: `Draft v${out.version}: ${out.word_count} words · grade ${out.reading?.post_grade} · hard checks ${out.hard_passed ? 'passed' : 'failed'} · repairs ${out.repairs_used}`, data: { record_id: out.record_id, brief_id: out.brief_id, version: out.version } })
+        return { status: 'succeeded', brief_id: out.brief_id, summary: `draft v${out.version} of ${out.brief_id}: ${out.title}`, warnings: out.warnings }
+      } catch (error) {
+        emit('step.failed', { agent: 'writer', step: 'writer', message: error.message })
+        throw error
+      }
+    }
     // strategist
     emit('step.started', { agent: 'strategist', step: 'strategist' })
     try {
@@ -223,6 +242,15 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       emit('step.failed', { agent: 'strategist', step: 'strategist', message: error.message })
       throw error
     }
+  }
+
+  /** writer mode needs params.brief_id of an existing brief (checked before the run starts → 400). */
+  async function checkWriterParams(params, runConfig) {
+    if (typeof params.brief_id !== 'string' || !params.brief_id.trim()) throw new RunError('bad_params', 'writer mode needs params.brief_id')
+    if (params.brief_version !== undefined && !(Number.isInteger(params.brief_version) && params.brief_version >= 1)) throw new RunError('bad_params', 'params.brief_version must be a whole number ≥ 1')
+    if (params.feedback !== undefined && !Array.isArray(params.feedback)) throw new RunError('bad_params', 'params.feedback must be a list of feedback items')
+    const brief = await loadBrief(storeFactory(runConfig), params.brief_id, params.brief_version)
+    if (!brief) throw new RunError('unknown_brief', `no brief ${params.brief_id}${params.brief_version ? ` v${params.brief_version}` : ''}`)
   }
 
   /** Cancels the active run (Task 4). Returns false if that run isn't running. */

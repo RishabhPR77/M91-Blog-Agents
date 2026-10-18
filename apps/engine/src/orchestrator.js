@@ -8,6 +8,7 @@ import { istIso, istHuman } from './util/time.js'
 import { stubAgents } from './agents/stubs.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
+import { runWriter } from './writer/index.js'
 import { emit, throwIfCancelled, CancelledError } from './events.js'
 
 /** Reviewer feedback items for the Strategist: strings become { area, problem }. */
@@ -27,6 +28,10 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
         ? await runScout({ mode: 'sources', briefId: ctx.briefId, version: ctx.version, claims: ctx.review?.claims ?? ctx.review?.feedback ?? [], reviewerNote: ctx.review?.note }, deps)
         : await runScout({ mode: 'research', runId: ctx.runId }, deps)
       return { model: config.scout.model, output }
+    },
+    async writer(ctx) {
+      const output = await runWriter({ mode: ctx.writerMode ?? 'new', runId: ctx.runId, briefId: ctx.briefId, briefVersion: ctx.briefVersion, feedback: ctx.writerMode === 'revise' ? ctx.review?.feedback ?? [] : [], sourcePack: ctx.writerMode === 'revise' ? ctx.sourcePack : null }, deps)
+      return { model: output.model_used ?? config.writer.model, output }
     },
     async strategist(ctx) {
       const output = ctx.strategistMode === 'rebrief'
@@ -73,6 +78,12 @@ export function summariseOutput(agent, out) {
     return { message: `brief ${out.brief_id} v${out.brief_version}: "${out.title}"`, data: { brief_id: out.brief_id, brief_version: out.brief_version, record_id: out.record_id, lead: out.lead, repairs_used: out.repairs_used } }
   }
   if (agent === 'reviewer') return { message: out.pass ? `pass (${out.score})` : `fail (${out.score}) → ${out.send_to ?? 'writer'}`, data: { pass: out.pass, score: out.score, send_to: out.send_to ?? null } }
+  if (agent === 'writer' && out.record_id) {
+    return {
+      message: `Draft v${out.version}: ${Number(out.word_count).toLocaleString('en-US')} words · grade ${out.reading?.post_grade} · hard checks ${out.hard_passed ? 'passed' : 'failed'} · repairs ${out.repairs_used}`,
+      data: { record_id: out.record_id, brief_id: out.brief_id, version: out.version, hard_passed: out.hard_passed, model: out.model_used }
+    }
+  }
   if (agent === 'writer') return { message: `draft "${out.title ?? ''}"`, data: {} }
   return null
 }
@@ -153,8 +164,9 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   let leads, brief, draft, review, sourcePack, briefRecord
   let scoutMode = 'research'
   let strategistMode = 'plan'
+  let writerMode = 'new'
   let briefVersion = 0
-  const ctx = () => ({ runId, briefId, version, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, config })
+  const ctx = () => ({ runId, briefId, version, round: counters.rounds, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, writerMode, config })
 
   const setState = (to) => {
     state = assertTransition(state, to)
@@ -231,7 +243,9 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
       version++
       counters.rounds++
       draft = await step('writer', ctx())
-      await store.createRecord({ type: 'draft', briefId, payload: draft, status: 'drafted', version, topicGroup: brief?.topic_group ?? null })
+      // The real Writer saves its own draft (and numbers it); the stub's draft is saved here.
+      if (draft?.record_id) version = draft.version
+      else await store.createRecord({ type: 'draft', briefId, payload: draft, status: 'drafted', version, topicGroup: brief?.topic_group ?? null })
       setState('reviewing')
       review = await step('reviewer', ctx())
       await store.createRecord({ type: 'review', briefId, payload: review, status: review?.pass ? 'pass' : 'fail', version })
@@ -242,17 +256,24 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
         if (briefRecord?.id) await store.updateRecord(briefRecord.id, undefined, { status: 'approved' })
         break
       }
+      const reason = (review?.feedback ?? []).map((f) => (typeof f === 'string' ? f : f.problem)).filter(Boolean).slice(0, 2).join('; ')
+      emit('loop.route', { agent: 'reviewer', message: decision.action === 'fail' ? `stop: ${decision.reason}` : `send_to ${review?.send_to ?? 'writer'}${reason ? `: ${reason}` : ''}`, data: { send_to: review?.send_to ?? 'writer', action: decision.action, score: review?.score ?? null, round: counters.rounds } })
       if (decision.action === 'fail') throw Object.assign(new Error(decision.reason), { routing: true })
 
       setState('revising')
-      if (decision.action === 'revise') counters.writerRevisions++
+      if (decision.action === 'revise') {
+        counters.writerRevisions++
+        writerMode = 'revise'
+      }
       if (decision.action === 'rebrief') {
         counters.rebriefs++
         await plan('rebrief')
+        writerMode = 'new'
       }
       if (decision.action === 'rescout') {
         counters.scoutRetries++
         await findSources()
+        writerMode = 'revise'
       }
       setState('drafting')
     }

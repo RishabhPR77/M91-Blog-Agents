@@ -53,13 +53,55 @@ function normaliseSchema(agent, jsonSchema) {
   return { name: agent, strict: true, schema: jsonSchema }
 }
 
-function parseJsonContent(content) {
-  if (content && typeof content === 'object') return content
-  try {
-    return JSON.parse(content)
-  } catch {
-    throw new AiError('AI answer was not valid JSON', { kind: 'parse' })
+/** The first balanced top-level {…} block in text (string-aware), or null. */
+export function firstJsonObject(text) {
+  const s = String(text)
+  const start = s.indexOf('{')
+  if (start < 0) return null
+  let depth = 0
+  let inStr = false
+  let esc = false
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i]
+    if (inStr) {
+      if (esc) esc = false
+      else if (ch === '\\') esc = true
+      else if (ch === '"') inStr = false
+    } else if (ch === '"') inStr = true
+    else if (ch === '{') depth++
+    else if (ch === '}' && --depth === 0) return s.slice(start, i + 1)
   }
+  return null
+}
+
+/**
+ * Parses an AI answer. Over rtlayer the content is a string, sometimes wrapped in ``` fences or
+ * with text around the JSON: strip the fences, then try the first top-level {…} block.
+ * `fixes` (optional array) receives a note for each repair applied.
+ */
+export function parseJsonContent(content, fixes) {
+  if (content && typeof content === 'object') return content
+  const text = String(content ?? '')
+  try {
+    return JSON.parse(text)
+  } catch {}
+  const unfenced = text.trim().replace(/^```(?:json|JSON)?\s*\n?/, '').replace(/\n?```\s*$/, '')
+  if (unfenced !== text.trim()) {
+    try {
+      const v = JSON.parse(unfenced)
+      fixes?.push('stripped code fences around the JSON answer')
+      return v
+    } catch {}
+  }
+  const block = firstJsonObject(unfenced)
+  if (block) {
+    try {
+      const v = JSON.parse(block)
+      fixes?.push('extracted the JSON object from text around it')
+      return v
+    } catch {}
+  }
+  throw new AiError('AI answer was not valid JSON', { kind: 'parse' })
 }
 
 /**
@@ -156,10 +198,10 @@ export function createViaSocketClient({ config = getConfig(), fetch = globalThis
     const base = { agent: params.agent, service: settings?.service, model: settings?.model, delivery: params.delivery ?? settings?.delivery }
     try {
       const r = await aiSendOnce(counted)
-      emit('ai.call', { agent: params.agent, data: { ...base, model: r.model ?? base.model, ms: r.ms, retries: retryCount, finish_reason: r.finishReason ?? null, thread: threadPrefix(r.threadId), recovered_from_history: r.recoveredFromHistory } })
+      emit('ai.call', { agent: params.agent, data: { ...base, ...(params.call && { call: params.call }), model: r.model ?? base.model, ms: r.ms, retries: retryCount, finish_reason: r.finishReason ?? null, thread: threadPrefix(r.threadId), recovered_from_history: r.recoveredFromHistory } })
       return r
     } catch (error) {
-      emit('ai.call', { agent: params.agent, level: 'error', data: { ...base, ms: now() - started, retries: retryCount, finish_reason: error.result?.finishReason ?? null, thread: threadPrefix(params.threadId), error: error.kind ?? 'error' } })
+      emit('ai.call', { agent: params.agent, level: 'error', data: { ...base, ...(params.call && { call: params.call }), ms: now() - started, retries: retryCount, finish_reason: error.result?.finishReason ?? null, thread: threadPrefix(params.threadId), error: error.kind ?? 'error' } })
       throw error
     }
   }
@@ -183,6 +225,7 @@ export function createViaSocketClient({ config = getConfig(), fetch = globalThis
     }
 
     const started = now()
+    const parseFixes = []
     log.debug('ai send', { agent, service: settings.service, model: settings.model, delivery: settings.delivery, threadId: thread })
     // A sync call that outlives the gateway gets a 502 after ~1 minute, but the run continues and its
     // answer lands in the thread history (ai.md). Re-sending would pay for the call twice, so read it there.
@@ -209,7 +252,7 @@ export function createViaSocketClient({ config = getConfig(), fetch = globalThis
     let result
     if (fromHistory) {
       result = {
-        content: schema ? parseJsonContent(fromHistory.content) : fromHistory.content,
+        content: schema ? parseJsonContent(fromHistory.content, parseFixes) : fromHistory.content,
         threadId: thread,
         messageId: fromHistory.message_id,
         finishReason: fromHistory.finish_reason ?? null,
@@ -217,7 +260,7 @@ export function createViaSocketClient({ config = getConfig(), fetch = globalThis
       }
     } else if (sync) {
       result = {
-        content: schema ? parseJsonContent(data.content) : data.content,
+        content: schema ? parseJsonContent(data.content, parseFixes) : data.content,
         threadId: data.thread_id ?? thread,
         messageId: data.message_id,
         finishReason: data.finish_reason,
@@ -231,7 +274,7 @@ export function createViaSocketClient({ config = getConfig(), fetch = globalThis
         pollMs: pollMs ?? vs.pollIntervalMs ?? 3000
       })
       result = {
-        content: schema ? parseJsonContent(answer.content) : answer.content,
+        content: schema ? parseJsonContent(answer.content, parseFixes) : answer.content,
         threadId: data.thread_id ?? thread,
         messageId,
         finishReason: answer.finish_reason ?? null,
@@ -241,6 +284,7 @@ export function createViaSocketClient({ config = getConfig(), fetch = globalThis
     result.ms = now() - started
     result.delivery = settings.delivery
     result.recoveredFromHistory = Boolean(fromHistory)
+    result.parseFixes = parseFixes
     log.info('ai answer', { agent, model: result.model ?? settings.model, finishReason: result.finishReason, ms: result.ms, threadId: result.threadId })
     if (result.finishReason === 'truncated') throw new TruncatedError(result)
     return result

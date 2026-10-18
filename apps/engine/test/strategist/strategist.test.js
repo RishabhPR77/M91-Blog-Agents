@@ -207,7 +207,7 @@ test('orchestrator: Scout stub → real Strategist → Writer stub; approval mar
   const cfg = config({ DRY_RUN: 'true' })
   const store = await seededStore()
   const notifier = fakeNotifier()
-  const agents = { ...defaultAgents({ config: cfg, store, notifier, agentDeps: { aiSend: fakeAi(), now } }), scout: stubAgents.scout }
+  const agents = { ...defaultAgents({ config: cfg, store, notifier, agentDeps: { aiSend: fakeAi(), now } }), scout: stubAgents.scout, writer: stubAgents.writer }
   const r = await runPipeline({ config: cfg, store, notifier, agents, now, briefId: '261017-1405-ABCD' })
   assert.equal(r.state, 'approved')
   assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 4), ['scout', 'strategist', 'writer', 'reviewer'])
@@ -224,6 +224,7 @@ test('orchestrator: reviewer send_to strategist → re-brief version 2', async (
   const agents = {
     ...defaultAgents({ config: cfg, store, notifier: fakeNotifier(), agentDeps: { aiSend: fakeAi(), now } }),
     scout: stubAgents.scout,
+    writer: stubAgents.writer,
     reviewer: async () => ({ model: 'stub', output: n++ === 0 ? { pass: false, score: 60, feedback: [{ area: 'angle', problem: 'weak angle', send_to: 'strategist' }], send_to: 'strategist' } : { pass: true, score: 90, feedback: [] } })
   }
   const r = await runPipeline({ config: cfg, store, notifier: fakeNotifier(), agents, now, briefId: '261017-1405-ABCD' })
