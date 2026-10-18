@@ -75,7 +75,7 @@ export function createNotifier({ config = getConfig(), fetch = globalThis.fetch 
   }
 
   async function slack(text) {
-    const parts = chunkText(text)
+    const parts = chunkText(text, config.notify.chunkChars ?? SLACK_PART_MAX)
     if (dryRun) {
       log.info('DRY_RUN: would post to Slack', { parts: parts.length, preview: parts.map((p) => p.slice(0, 200)) })
       return { dryRun: true, parts: parts.length }

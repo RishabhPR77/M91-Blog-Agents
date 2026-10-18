@@ -47,6 +47,11 @@ const DEFAULTS = {
   // viaSocket refuses a `message` over 50,000 characters; the docs bundle must leave room for the rest.
   DOCS_MAX_PAGES: '15', DOCS_MAX_CHARS: '45000', M91_DOCS_HOSTS: 'm91.msg91.com', DEDUPE_SIMILARITY: '0.85',
   URL_CHECK_TIMEOUT_MS: '10000',
+  // Phase 4: Writer
+  WRITER_MAX_REPAIRS: '1', WRITER_REVISION_INPUT: 'context', TUTORIAL_SOURCE_MAX_CHARS: '40000', SLACK_POST_DRAFTS: 'false',
+  READING_GRADE_HARD_MARGIN: '2', WORDS_HARD_MARGIN_PCT: '20', SLACK_CHUNK_CHARS: '2800',
+  // Temporary until the real Reviewer (Phase 5): pass | fail_once | fail_always
+  REVIEWER_STUB_MODE: 'pass',
   // Phase 3.5: dashboard API
   DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', PORT: '8080',
   // Designer (Phase 8) and blog + Embarko (Phase 7)
@@ -161,6 +166,24 @@ export function loadConfig(env = process.env) {
   }
 
   const dryRun = bool('DRY_RUN')
+  const writerFallback = () => {
+    const service = str('WRITER_FALLBACK_SERVICE')
+    const model = str('WRITER_FALLBACK_MODEL')
+    if (!service && !model) return { fallbackService: undefined, fallbackModel: undefined }
+    if (!service || !model) {
+      problems.push(`${service ? 'WRITER_FALLBACK_MODEL' : 'WRITER_FALLBACK_SERVICE'}: set both WRITER_FALLBACK_SERVICE and WRITER_FALLBACK_MODEL, or neither`)
+      return {}
+    }
+    if (!SERVICES.includes(service)) {
+      problems.push(`WRITER_FALLBACK_SERVICE: must be one of ${SERVICES.join(' | ')}`)
+      return {}
+    }
+    if (!MODELS[service].includes(model)) {
+      problems.push(`WRITER_FALLBACK_MODEL: not in ai.md's "Choosing the model" list for service ${service}`)
+      return {}
+    }
+    return { fallbackService: service, fallbackModel: model }
+  }
   const dashboardAuth = bool('DASHBOARD_AUTH')
   const timezone = str('TIMEZONE', { required: true })
   if (timezone) {
@@ -212,8 +235,16 @@ export function loadConfig(env = process.env) {
       lessonsLimit: int('LESSONS_LIMIT', { max: 50 }),
       allowUpdateBriefs: bool('ALLOW_UPDATE_BRIEFS')
     },
-    writer: { ...agent('writer'), fallbackModel: str('WRITER_FALLBACK_MODEL') },
-    reviewer: agent('reviewer'),
+    writer: {
+      ...agent('writer'),
+      ...writerFallback(),
+      maxRepairs: int('WRITER_MAX_REPAIRS', { max: 5 }),
+      revisionInput: oneOf('WRITER_REVISION_INPUT', ['context', 'full']),
+      // At most 48000: the tutorial text travels in the message, which viaSocket caps at 50,000 characters.
+      tutorialSourceMaxChars: int('TUTORIAL_SOURCE_MAX_CHARS', { min: 1000, max: 48000 }),
+      postDrafts: bool('SLACK_POST_DRAFTS')
+    },
+    reviewer: { ...agent('reviewer'), stubMode: oneOf('REVIEWER_STUB_MODE', ['pass', 'fail_once', 'fail_always']) },
     promo: agent('promo'),
     mem0: {
       apiKey: str('MEM0_API_KEY', { required: true }),
@@ -226,7 +257,8 @@ export function loadConfig(env = process.env) {
       // Optional here; notify.js refuses a real send when they are missing.
       slackWebhookUrl: url('SLACK_POST_WEBHOOK_URL'),
       m91WebhookUrl: url('M91_ALERT_WEBHOOK_URL'),
-      sharedKey: str('WEBHOOK_SHARED_KEY')
+      sharedKey: str('WEBHOOK_SHARED_KEY'),
+      chunkChars: int('SLACK_CHUNK_CHARS', { min: 500, max: 3900 })
     },
     m91: {
       docsUrl: url('M91_DOCS_URL', { required: true }),
@@ -249,6 +281,8 @@ export function loadConfig(env = process.env) {
       defaultTone: str('DEFAULT_TONE', { required: true }),
       readingGradeIntroMax: int('READING_GRADE_INTRO_MAX', { min: 1, max: 20 }),
       readingGradePostMax: int('READING_GRADE_POST_MAX', { min: 1, max: 20 }),
+      readingGradeHardMargin: num('READING_GRADE_HARD_MARGIN', { min: 0, max: 10 }),
+      wordsHardMarginPct: int('WORDS_HARD_MARGIN_PCT', { max: 100 }),
       timezone
     },
     runtime: {
