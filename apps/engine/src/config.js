@@ -47,8 +47,8 @@ const DEFAULTS = {
   // viaSocket refuses a `message` over 50,000 characters; the docs bundle must leave room for the rest.
   DOCS_MAX_PAGES: '15', DOCS_MAX_CHARS: '45000', M91_DOCS_HOSTS: 'm91.msg91.com', DEDUPE_SIMILARITY: '0.85',
   URL_CHECK_TIMEOUT_MS: '10000',
-  // Phase 3.5: dashboard API and scheduler
-  DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', SCHEDULE_ENABLED: 'false', SCHEDULE_CRON: '0 7 * * 1,3,5', PORT: '8080',
+  // Phase 3.5: dashboard API
+  DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', PORT: '8080',
   // Designer (Phase 8) and blog + Embarko (Phase 7)
   DESIGNER_AI_SERVICE: 'openai', DESIGNER_AI_MODEL: 'gpt-5.6-luna', DESIGNER_DELIVERY: 'rtlayer',
   BLOG_APP_NAME: 'm91-blog', BLOG_BASE_URL: 'https://m91-blog.embarko.app', NOINDEX_FIRST_N_POSTS: '10',
@@ -162,17 +162,6 @@ export function loadConfig(env = process.env) {
 
   const dryRun = bool('DRY_RUN')
   const dashboardAuth = bool('DASHBOARD_AUTH')
-  // Five-field cron (minute hour day-of-month month day-of-week): digits, *, /, -, , only.
-  const cronPattern = (key) => {
-    const value = str(key, { required: true })
-    if (value === undefined) return undefined
-    const fields = value.split(/\s+/)
-    if (fields.length !== 5 || fields.some((f) => !/^[\d*/,-]+$/.test(f))) {
-      problems.push(`${key}: must be a five-field cron pattern (e.g. "0 7 * * 1,3,5")`)
-      return undefined
-    }
-    return value
-  }
   const timezone = str('TIMEZONE', { required: true })
   if (timezone) {
     try {
@@ -276,10 +265,6 @@ export function loadConfig(env = process.env) {
       port: int('DASHBOARD_PORT', { min: 1, max: 65535 }),
       auth: dashboardAuth,
       password: str('DASHBOARD_PASSWORD', { required: dashboardAuth === true })
-    },
-    schedule: {
-      enabled: bool('SCHEDULE_ENABLED'),
-      cron: cronPattern('SCHEDULE_CRON')
     },
     // Used from Phase 8 (validated now).
     designer: agent('designer'),

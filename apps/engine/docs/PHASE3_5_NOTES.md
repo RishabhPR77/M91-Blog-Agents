@@ -1,4 +1,4 @@
-# Phase 3.5: two-app layout, live events, run records, cancel, dashboard API, scheduler
+# Phase 3.5: two-app layout, live events, run records, cancel, dashboard API
 
 ## Decisions (agreed with you)
 
@@ -10,8 +10,10 @@
   A unit test fails if the two drift apart. `.env.example` is legacy and ignored by git.
 - **Run vs brief ids:** runs are `R-YYMMDD-HHMM-XXXX`, briefs keep `YYMMDD-HHMM-XXXX`. Old briefs whose
   `run_id` equals their `brief_id` still load (briefs are always looked up by `brief_id`).
-- **Scheduler:** built but **off**: runs are started by hand from the dashboard. Nothing runs on a
-  timer unless `SCHEDULE_ENABLED=true` or the dashboard's schedule switch is turned on.
+- **No scheduler for now:** Task 6 was built, then removed at your request. Runs are started by hand from the
+  dashboard (POST /api/runs) or a terminal (POST /run with x-trigger-key, or the CLI). No croner, no
+  SCHEDULE_* keys, no /api/settings/schedule; GET /api/settings has no schedule fields. The run trigger
+  list still accepts "cron", but nothing uses it.
 - **Smoke test credits:** low-cost Scout settings are passed as run params, never by editing `.env`.
 
 ## Interpretations (tell me if any is wrong)
@@ -44,8 +46,6 @@ PORT=8080
 DASHBOARD_PORT=5173
 DASHBOARD_AUTH=false
 DASHBOARD_PASSWORD=
-SCHEDULE_ENABLED=false
-SCHEDULE_CRON=0 7 * * 1,3,5
 DESIGNER_AI_SERVICE=openai
 DESIGNER_AI_MODEL=gpt-5.6-luna
 DESIGNER_DELIVERY=rtlayer

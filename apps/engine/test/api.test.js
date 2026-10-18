@@ -17,12 +17,12 @@ function gate() {
   return { wait: () => p, open: () => open() }
 }
 
-async function withApi({ env = {}, agents = {}, scheduler, keepAliveMs } = {}, fn) {
+async function withApi({ env = {}, agents = {}, keepAliveMs } = {}, fn) {
   const restoreLog = setSink(() => {})
   const config = fakeConfig(env)
   const store = memoryStore()
   const manager = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => ({ ...stubAgents, ...agents }) })
-  const server = createServer({ triggerKey: TRIGGER, manager, store, config, scheduler, keepAliveMs })
+  const server = createServer({ triggerKey: TRIGGER, manager, store, config, keepAliveMs })
   await new Promise((r) => server.listen(0, '127.0.0.1', r))
   const base = `http://127.0.0.1:${server.address().port}`
   const call = async (method, path, body, headers = {}) => {
@@ -173,23 +173,14 @@ test('GET /api/settings never returns a secret (fake secret values)', async () =
     assert.ok(!/sokt\.io|webhook|password|secret/i.test(r.text))
     assert.equal(r.json.models.strategist.model, 'gpt-5.6-luna')
     assert.equal(r.json.runtime.dry_run, false)
-    assert.equal(r.json.schedule.enabled, false)
+    assert.equal(r.json.schedule, undefined, 'no scheduler for now')
   })
   assert.ok(!JSON.stringify(publicSettings(fakeConfig(secrets))).includes('ZZ'))
 })
 
-test('POST /api/settings/schedule: validation, 503 without a scheduler, next run time with one', async () => {
+test('there is no schedule endpoint (runs are started by hand)', async () => {
   await withApi({}, async ({ call }) => {
-    assert.equal((await call('POST', '/api/settings/schedule', { enabled: 'on' })).status, 400)
-    assert.equal((await call('POST', '/api/settings/schedule', { enabled: true })).status, 503)
-  })
-  let enabled = false
-  const scheduler = { status: () => ({ enabled, cron: '0 7 * * 1,3,5', next_run_at: enabled ? '2026-10-19T07:00:00+05:30' : null }), setEnabled: async (v) => { enabled = v; return scheduler.status() } }
-  await withApi({ scheduler }, async ({ call }) => {
-    const r = await call('POST', '/api/settings/schedule', { enabled: true })
-    assert.equal(r.status, 200)
-    assert.equal(r.json.next_run_at, '2026-10-19T07:00:00+05:30')
-    assert.equal((await call('GET', '/api/settings')).json.schedule.enabled, true)
+    assert.equal((await call('POST', '/api/settings/schedule', { enabled: true })).status, 404)
   })
 })
 

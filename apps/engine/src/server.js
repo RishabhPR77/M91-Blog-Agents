@@ -1,5 +1,5 @@
 // HTTP server.
-//   GET  /health, POST /run (x-trigger-key)  — kept for cloud schedulers (Phase 1)
+//   GET  /health, POST /run (x-trigger-key)  — manual runs from a terminal or a cloud trigger
 //   /api/*                                   — dashboard API (Phase 3.5, Task 5)
 // With DASHBOARD_AUTH=false the server binds to 127.0.0.1 only and /api needs no login.
 
@@ -39,7 +39,7 @@ class ApiError extends Error {
 }
 
 /** Non-secret settings, built from an allowlist (never secrets, never URLs carrying keys). */
-export function publicSettings(config, schedule = null) {
+export function publicSettings(config) {
   const agent = (a) => ({ service: a.service, model: a.model, delivery: a.delivery })
   const sc = config.scout
   const st = config.strategist
@@ -69,7 +69,6 @@ export function publicSettings(config, schedule = null) {
       timezone: config.content.timezone, reading_grade_intro_max: config.content.readingGradeIntroMax, reading_grade_post_max: config.content.readingGradePostMax
     },
     runtime: { dry_run: config.runtime.dryRun, auto_publish: config.runtime.autoPublish, log_level: config.runtime.logLevel },
-    schedule: schedule ?? { enabled: config.schedule?.enabled ?? false, cron: config.schedule?.cron ?? null, next_run_at: null },
     dashboard: { auth: Boolean(config.dashboard?.auth), port: config.dashboard?.port ?? null }
   }
 }
@@ -94,10 +93,10 @@ const runSummary = (r) => {
 const parseCookies = (header = '') => Object.fromEntries(header.split(';').map((c) => c.trim().split('=')).filter(([k, v]) => k && v).map(([k, v]) => [k, decodeURIComponent(v)]))
 
 /**
- * @param {{ triggerKey, run?, manager?, store?, config?, scheduler?, now?, keepAliveMs?, sessionMs? }} deps
+ * @param {{ triggerKey, run?, manager?, store?, config?, now?, keepAliveMs?, sessionMs? }} deps
  *   `run` alone keeps the Phase 1 behaviour (POST /run runs it); with `manager`, /run and /api use the run manager.
  */
-export function createServer({ triggerKey, run, manager, store, config, scheduler, now = Date.now, keepAliveMs = 15000, sessionMs = 12 * 3600 * 1000 } = {}) {
+export function createServer({ triggerKey, run, manager, store, config, now = Date.now, keepAliveMs = 15000, sessionMs = 12 * 3600 * 1000 } = {}) {
   let legacyRunning = null
   const auth = Boolean(config?.dashboard?.auth)
   const password = config?.dashboard?.password ?? ''
@@ -271,13 +270,7 @@ export function createServer({ triggerKey, run, manager, store, config, schedule
     }
 
     // Settings
-    if (path === '/api/settings' && method === 'GET') return send(res, 200, publicSettings(config, scheduler?.status() ?? null))
-    if (path === '/api/settings/schedule' && method === 'POST') {
-      const body = await readJson(req)
-      if (typeof body.enabled !== 'boolean') throw new ApiError(400, 'bad_enabled', 'enabled must be true or false')
-      if (!scheduler) return fail(res, 503, 'no_scheduler', 'the scheduler is not running in this process')
-      return send(res, 200, await scheduler.setEnabled(body.enabled))
-    }
+    if (path === '/api/settings' && method === 'GET') return send(res, 200, publicSettings(config))
 
     // Pinned topics
     if (path === '/api/pinned' && method === 'GET') return send(res, 200, { pinned: await listPins(store) })
@@ -356,19 +349,11 @@ async function main() {
   }
   const store = getStore()
   const manager = createRunManager({ config })
-  let scheduler = null
-  try {
-    const { createScheduler } = await import('./scheduler.js')
-    scheduler = createScheduler({ config, store, manager })
-    await scheduler.start()
-  } catch (error) {
-    if (error?.code !== 'ERR_MODULE_NOT_FOUND') log.error('scheduler did not start', { error })
-  }
-  const server = createServer({ triggerKey: config.runtime.triggerKey, manager, store, config, scheduler })
+  const server = createServer({ triggerKey: config.runtime.triggerKey, manager, store, config })
   const port = config.server?.port ?? (Number(process.env.PORT) || 8080)
   // Without dashboard auth the API is for this machine only.
   const host = config.dashboard?.auth ? '0.0.0.0' : '127.0.0.1'
-  server.listen(port, host, () => log.info('server listening', { host, port, dryRun: config.runtime.dryRun, dashboardAuth: Boolean(config.dashboard?.auth), schedule: scheduler?.status() ?? null }))
+  server.listen(port, host, () => log.info('server listening', { host, port, dryRun: config.runtime.dryRun, dashboardAuth: Boolean(config.dashboard?.auth) }))
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main()

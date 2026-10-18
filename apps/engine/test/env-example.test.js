@@ -10,7 +10,7 @@ const example = readFileSync(new URL('../../../env.example', import.meta.url), '
 const entries = Object.fromEntries(example.split(/\r?\n/).filter((l) => /^[A-Z0-9_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]))
 
 function keysReadByConfig() {
-  const keys = new Set([...source.matchAll(/(?:str|int|bool|url|oneOf|num|list|cronPattern)\('([A-Z0-9_]+)'/g)].map((m) => m[1]))
+  const keys = new Set([...source.matchAll(/(?:str|int|bool|url|oneOf|num|list)\('([A-Z0-9_]+)'/g)].map((m) => m[1]))
   for (const a of [...AGENTS, 'designer']) for (const s of ['_AI_SERVICE', '_AI_MODEL', '_DELIVERY']) keys.add(a.toUpperCase() + s)
   return keys
 }
@@ -39,7 +39,7 @@ test('Phase 3.5 keys: designer validated, blog settings, dashboard password only
   assert.deepEqual(c.designer, { service: 'openai', model: 'gpt-5.6-luna', delivery: 'rtlayer' })
   assert.deepEqual(c.blog, { appName: 'm91-blog', baseUrl: 'https://m91-blog.embarko.app', embarkoDeployToken: undefined, noindexFirstNPosts: 10 })
   assert.equal(c.dashboard.port, 5173)
-  assert.equal(c.schedule.enabled, false)
+  assert.equal(c.schedule, undefined, 'no scheduler for now')
   assert.equal(c.publish, undefined)
   assert.throws(() => loadConfig(fakeEnv({ DESIGNER_AI_MODEL: 'gpt-99' })), /DESIGNER_AI_MODEL/)
   assert.throws(() => loadConfig(fakeEnv({ BLOG_BASE_URL: 'not a url' })), /BLOG_BASE_URL/)
