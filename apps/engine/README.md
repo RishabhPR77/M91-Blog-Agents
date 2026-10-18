@@ -11,7 +11,7 @@ tests and packaging. Later phases add the real agents: Scout → Strategist → 
 
 1. Node.js 20 or newer.
 2. `npm ci`
-3. Copy `.env.example` to `.env` and fill in the blanks. Keep comments on their own lines (no
+3. Copy `env.example` (repo root) to `.env` at the repo root and fill in the blanks. Keep comments on their own lines (no
    `KEY=value  # note`). `.env` is never committed.
 4. Build the two viaSocket webhook flows: [docs/SETUP_FLOWS.md](docs/SETUP_FLOWS.md).
 
@@ -41,7 +41,7 @@ treated as stale and cleared.
 
 ### What DRY_RUN and AUTO_PUBLISH do
 
-- `DRY_RUN=true`: nothing goes to Slack, M91 or a publish target; the engine logs what it would send.
+- `DRY_RUN=true`: nothing goes to Slack, M91 or a publish target, and nothing is saved to Mem0 except `run_log` and `run` records (marked `dry_run: true`); the engine logs what it would send.
   AI calls and Mem0 records still happen, so `run_log` records stay visible.
 - `AUTO_PUBLISH=false`: never publish. In Phase 1, publishing is a no-op placeholder either way.
 
@@ -57,11 +57,11 @@ when the container starts. It runs as the non-root `node` user.
 
 ## Setting env vars on a cloud host
 
-Set every key from `.env.example` as an environment variable or secret in the platform's settings.
+Set every key from `env.example` as an environment variable or secret in the platform's settings.
 For example: Render or Railway → *Environment*, Fly.io → `fly secrets set KEY=value`, Google Cloud
 Run → *Variables & Secrets*, AWS ECS → the task definition's `environment` / `secrets`, Azure
 Container Apps → *Secrets* plus env refs. Store the secret keys (`VIASOCKET_EMBED_SECRET`,
-`MEM0_API_KEY`, `WEBHOOK_SHARED_KEY`, `PIPELINE_TRIGGER_KEY`, `PUBLISH_API_KEY`, and both webhook
+`MEM0_API_KEY`, `WEBHOOK_SHARED_KEY`, `PIPELINE_TRIGGER_KEY`, `DASHBOARD_PASSWORD`, `EMBARKO_DEPLOY_TOKEN`, and both webhook
 URLs) as **secrets**, not plain variables. The container's start command is `node src/server.js`,
 which reads `process.env` directly.
 

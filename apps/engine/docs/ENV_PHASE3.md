@@ -1,5 +1,7 @@
 # Phase 3 keys to add to `.env.example` and `.env`
 
+> **Superseded:** every key now lives in `env.example` at the repo root (Phase 3.5). This file is kept for history.
+
 Copy this block into **both** files yourself (Claude can't write either). Every key has the same default
 built in, so nothing breaks if a line is missing.
 

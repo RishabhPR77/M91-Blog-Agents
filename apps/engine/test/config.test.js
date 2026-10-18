@@ -83,12 +83,17 @@ test('an inline "# comment" on a value gets a hint', () => {
   assert.match(problems.join('\n'), /WRITER_DELIVERY: .*inline "# comment"/)
 })
 
-test('empty optional keys are accepted (webhooks, MEM0 org/project, publish)', () => {
-  const empty = { SLACK_POST_WEBHOOK_URL: '', M91_ALERT_WEBHOOK_URL: '', MEM0_ORG_ID: '', MEM0_PROJECT_ID: '', PUBLISH_TARGET: '', PUBLISH_API_URL: '', PUBLISH_API_KEY: '', M91_CTA_URL: '' }
+test('empty optional keys are accepted (webhooks, MEM0 org/project, Embarko token, dashboard password)', () => {
+  const empty = { SLACK_POST_WEBHOOK_URL: '', M91_ALERT_WEBHOOK_URL: '', MEM0_ORG_ID: '', MEM0_PROJECT_ID: '', EMBARKO_DEPLOY_TOKEN: '', DASHBOARD_PASSWORD: '', M91_CTA_URL: '' }
   const c = loadConfig(fakeEnv({ ...empty, DRY_RUN: 'false' }))
   assert.equal(c.notify.slackWebhookUrl, undefined)
-  assert.equal(c.publish.apiUrl, undefined)
+  assert.equal(c.blog.embarkoDeployToken, undefined)
   assert.equal(c.mem0.orgId, undefined)
+})
+
+test('old PUBLISH_* keys in .env are ignored (removed in Phase 3.5)', () => {
+  const c = loadConfig(fakeEnv({ PUBLISH_TARGET: 'x', PUBLISH_API_URL: 'not even a url', PUBLISH_API_KEY: 'k' }))
+  assert.equal(c.publish, undefined)
 })
 
 test('TARGET_WORDS_MIN must not exceed TARGET_WORDS_MAX', () => {

@@ -21,7 +21,6 @@ export const SECRET_KEYS = Object.freeze([
   'PIPELINE_TRIGGER_KEY',
   'DASHBOARD_PASSWORD',
   'EMBARKO_DEPLOY_TOKEN',
-  'PUBLISH_API_KEY',
   'SLACK_POST_WEBHOOK_URL',
   'M91_ALERT_WEBHOOK_URL'
 ])
@@ -50,6 +49,9 @@ const DEFAULTS = {
   URL_CHECK_TIMEOUT_MS: '10000',
   // Phase 3.5: dashboard API and scheduler
   DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', SCHEDULE_ENABLED: 'false', SCHEDULE_CRON: '0 7 * * 1,3,5', PORT: '8080',
+  // Designer (Phase 8) and blog + Embarko (Phase 7)
+  DESIGNER_AI_SERVICE: 'openai', DESIGNER_AI_MODEL: 'gpt-5.6-luna', DESIGNER_DELIVERY: 'rtlayer',
+  BLOG_APP_NAME: 'm91-blog', BLOG_BASE_URL: 'https://m91-blog.embarko.app', NOINDEX_FIRST_N_POSTS: '10',
   // Phase 3: Strategist
   STRATEGIST_MAX_REPAIRS: '1', RECENT_BRIEFS_WINDOW: '10', TITLE_MAX_CHARS: '70', OUTLINE_MIN_SECTIONS: '4',
   OUTLINE_MAX_SECTIONS: '8', MIN_QUESTION_HEADINGS: '3', LESSONS_LIMIT: '5', ALLOW_UPDATE_BRIEFS: 'false',
@@ -279,10 +281,14 @@ export function loadConfig(env = process.env) {
       enabled: bool('SCHEDULE_ENABLED'),
       cron: cronPattern('SCHEDULE_CRON')
     },
-    publish: {
-      target: str('PUBLISH_TARGET'),
-      apiUrl: url('PUBLISH_API_URL'),
-      apiKey: str('PUBLISH_API_KEY')
+    // Used from Phase 8 (validated now).
+    designer: agent('designer'),
+    // Blog + Embarko, used from Phase 7. The deploy token is optional until then.
+    blog: {
+      appName: str('BLOG_APP_NAME', { required: true }),
+      baseUrl: url('BLOG_BASE_URL', { required: true })?.replace(/\/+$/, ''),
+      embarkoDeployToken: str('EMBARKO_DEPLOY_TOKEN'),
+      noindexFirstNPosts: int('NOINDEX_FIRST_N_POSTS', { max: 1000 })
     }
   }
 

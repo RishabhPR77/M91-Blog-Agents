@@ -1,5 +1,7 @@
 # Phase 2 keys to add to `.env.example` and `.env`
 
+> **Superseded:** every key now lives in `env.example` at the repo root (Phase 3.5). This file is kept for history.
+
 Claude can't write either file (deny rules), so copy this block into **both** yourself.
 All values are non-secret defaults. If a key is missing, the config uses the same default, so these
 lines are for visibility and for overriding.
