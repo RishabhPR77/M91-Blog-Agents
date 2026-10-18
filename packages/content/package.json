@@ -1,0 +1,18 @@
+{
+  "name": "@m91/content",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Post format v1 shared by the engine and the blog",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./post.schema.json": "./src/post.schema.json",
+    "./blocks": "./src/blocks.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ajv": "8.18.0"
+  }
+}

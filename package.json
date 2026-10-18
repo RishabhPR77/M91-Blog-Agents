@@ -1,36 +1,18 @@
 {
-  "name": "m91-blog-v2",
-  "version": "0.1.0",
+  "name": "m91-blog-engine",
   "private": true,
-  "description": "M91 Blog Engine v2 — Phase 1 foundation",
+  "description": "M91 Blog Engine v2: engine app, blog app and shared content package",
   "type": "module",
   "engines": {
     "node": ">=20"
   },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "test": "node --test",
-    "smoke": "node --env-file=.env smoke/run.js",
-    "pipeline": "node --env-file=.env src/cli.js",
-    "start": "node src/server.js",
-    "start:local": "node --env-file=.env src/server.js",
-    "check": "node viasocket-check.mjs src",
-    "pipeline:dry": "cross-env DRY_RUN=true node --env-file=.env src/cli.js",
-    "scout": "node --env-file=.env src/cli.js scout",
-    "scout:dry": "cross-env DRY_RUN=true node --env-file=.env src/cli.js scout",
-    "scout:lite": "cross-env DRY_RUN=true SCOUT_QUESTION_GROUPS=1 SCOUT_QUESTIONS_PER_GROUP=3 DOCS_MAX_CHARS=15000 DOCS_MAX_PAGES=5 SCOUT_MAX_CALLS=6 AI_MAX_RETRIES=1 node --env-file=.env src/cli.js scout",
-    "pipeline:lite": "cross-env DRY_RUN=true SCOUT_QUESTION_GROUPS=1 SCOUT_QUESTIONS_PER_GROUP=3 DOCS_MAX_CHARS=15000 DOCS_MAX_PAGES=5 SCOUT_MAX_CALLS=6 AI_MAX_RETRIES=1 node --env-file=.env src/cli.js",
-    "scout:lite:live": "cross-env DRY_RUN=false SCOUT_QUESTION_GROUPS=1 SCOUT_QUESTIONS_PER_GROUP=3 DOCS_MAX_CHARS=15000 DOCS_MAX_PAGES=5 SCOUT_MAX_CALLS=6 AI_MAX_RETRIES=1 SCOUT_MIN_OPEN_CLUSTERS=1 node --env-file=.env src/cli.js scout",
-    "strategist": "node --env-file=.env src/cli.js strategist",
-    "strategist:dry": "cross-env DRY_RUN=true node --env-file=.env src/cli.js strategist",
-    "brief": "node --env-file=.env src/cli.js brief",
-    "pin": "node --env-file=.env src/cli.js pin"
-  },
-  "dependencies": {
-    "ajv": "8.18.0",
-    "mem0ai": "3.3.1",
-    "viasocket-apps": "0.6.0"
-  },
-  "devDependencies": {
-    "cross-env": "7.0.3"
+    "dev:engine": "npm run dev --workspace @m91/engine",
+    "test": "npm test --workspaces --if-present",
+    "check": "npm run check --workspace @m91/engine"
   }
 }
