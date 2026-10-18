@@ -80,6 +80,8 @@ export function validBrief(over = {}) {
     cta: { text: 'Try M91.', url: CTA },
     review_flags: [],
     notes_for_writer: ['Not legal or compliance advice.'],
+    interactive_ideas: [{ block_type: 'phone_ring_sim', why: 'Shows the approval call the reader is setting up.' }],
+    internal_links: [],
     ...over
   }
 }

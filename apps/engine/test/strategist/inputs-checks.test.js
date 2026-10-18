@@ -66,7 +66,7 @@ test('blocked_group and least_used_groups', () => {
 test('message: sections in order, ids present, under 50,000 chars', async () => {
   const { inputs } = await setup()
   const { message } = buildStrategistMessage(inputs, '--- TAIL ---')
-  const order = ['TODAY', 'PINNED TOPICS DUE', 'RAPID-RESPONSE STORIES', 'OTHER STORIES', 'QUESTION CLUSTERS', 'TUTORIAL LEADS', 'STYLE NOTES', 'M91 FACTS', 'RECENT BRIEFS', 'ALREADY COVERED', 'LESSONS', 'COMPETITORS']
+  const order = ['TODAY', 'PINNED TOPICS DUE', 'RAPID-RESPONSE STORIES', 'OTHER STORIES', 'QUESTION CLUSTERS', 'TUTORIAL LEADS', 'STYLE NOTES', 'M91 FACTS', 'RECENT BRIEFS', 'PUBLISHED POSTS', 'ALREADY COVERED', 'LESSONS', 'COMPETITORS']
   let at = -1
   for (const s of order) {
     const i = message.indexOf(`--- ${s} ---`)

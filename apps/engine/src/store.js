@@ -10,7 +10,7 @@ import { istDate } from './util/time.js'
 
 export const RECORD_TYPES = Object.freeze([
   'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'draft',
-  'review', 'promo_pack', 'run_log', 'lesson', 'lock', 'm91_facts', 'source_pack', 'pinned_topic', 'run', 'setting'
+  'review', 'promo_pack', 'run_log', 'lesson', 'lock', 'm91_facts', 'source_pack', 'pinned_topic', 'run', 'setting', 'published_post'
 ])
 
 // Statuses used across record types. brief: new → superseded (re-brief) / approved (Reviewer pass).

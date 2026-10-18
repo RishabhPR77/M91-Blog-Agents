@@ -128,6 +128,13 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
   const alreadyCovered = covered.sort((a, b) => byDateDesc(a.date, b.date)).slice(0, 60).map((l) => `- ${l.text.replace(/\s+/g, ' ').slice(0, 200)}`)
 
   // Lessons (Phase 5 writes them).
+  // Published posts (Phase 7 writes them): the only allowed targets for internal_links.
+  const publishedPosts = (await store.getRecords({ type: 'published_post' }))
+    .filter((r) => r.status !== 'unpublished' && r.payload?.url)
+    .sort((a, b) => byDateDesc(a.payload?.published_at ?? a.date, b.payload?.published_at ?? b.date))
+    .slice(0, 40)
+    .map((r) => ({ title: r.payload.title ?? '', url: r.payload.url, topic_group: r.payload.topic_group ?? r.topicGroup ?? null, summary: String(r.payload.summary ?? r.payload.description ?? '').slice(0, 200) }))
+
   const lessons = st.lessonsLimit > 0
     ? (await store.getRecords({ type: 'lesson' })).sort((a, b) => byDateDesc(a.date, b.date)).slice(0, st.lessonsLimit)
       .map((r) => (typeof r.payload === 'string' ? r.payload : r.payload?.text ?? JSON.stringify(r.payload)))
@@ -164,6 +171,8 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     leastUsedGroups: leastUsedGroups(recentBriefs),
     alreadyCovered,
     lessons,
+    publishedPosts,
+    publishedUrls: new Set(publishedPosts.map((p) => urlKey(p.url))),
     competitors: sc.competitors,
     leadIndex,
     allowedUrls: allowed,
@@ -187,6 +196,7 @@ export function buildStrategistMessage(inputs, tail = '', max = MESSAGE_MAX) {
     '--- STYLE NOTES ---', listOrNone(inputs.styleNotes),
     '--- M91 FACTS ---', json(inputs.facts),
     '--- RECENT BRIEFS ---', json(inputs.recentBriefs.map(({ date, topic_group, post_type, title }) => ({ date, topic_group, post_type, title }))),
+    '--- PUBLISHED POSTS ---', listOrNone(inputs.publishedPosts ?? []),
     '--- ALREADY COVERED ---', inputs.alreadyCovered.slice(0, take.covered).join('\n') || 'none',
     '--- LESSONS ---', inputs.lessons.length ? inputs.lessons.map((l) => `- ${l}`).join('\n') : 'none',
     '--- COMPETITORS ---', inputs.competitors.join(', '),

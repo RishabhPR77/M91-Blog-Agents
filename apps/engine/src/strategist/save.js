@@ -16,7 +16,6 @@ export function finalizeBrief(brief, { briefId, briefVersion, runId, config, now
     date: istDate(d),
     word_target: { min: config.content.targetWordsMin, max: config.content.targetWordsMax },
     reading_level: { intro_max_grade: config.content.readingGradeIntroMax, post_max_grade: config.content.readingGradePostMax },
-    internal_links: [],
     run_id: runId,
     created_at: istIso(d)
   }

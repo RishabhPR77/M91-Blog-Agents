@@ -1,4 +1,6 @@
-// The brief's strict JSON schema — exact shape from the Phase 3 brief, section 8.
+// The brief's strict JSON schema — exact shape from the Phase 3 brief, section 8 (+ Phase 3.5 fields).
+
+import { BLOCK_TYPES } from '@m91/content'
 
 const obj = (properties) => ({ type: 'object', additionalProperties: false, required: Object.keys(properties), properties })
 const str = { type: 'string' }
@@ -32,6 +34,9 @@ export const strategist_brief = {
     sources: arr(obj({ url: str, what_it_supports: str })),
     cta: obj({ text: str, url: str }),
     review_flags: arr({ type: 'string', enum: ['rapid-response', 'comparison'] }),
-    notes_for_writer: arr(str)
+    notes_for_writer: arr(str),
+    // Phase 3.5: block ideas (names from @m91/content) and AI-chosen links to published posts.
+    interactive_ideas: arr(obj({ block_type: { type: 'string', enum: [...BLOCK_TYPES] }, why: str })),
+    internal_links: arr(obj({ url: str, anchor_text: str, why: str }))
   })
 }

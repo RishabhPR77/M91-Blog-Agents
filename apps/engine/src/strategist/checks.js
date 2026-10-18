@@ -5,6 +5,7 @@ import { strategist_brief } from './schemas.js'
 import { STANDING_CLAIMS, DEFAULT_CTA_TEXT } from './prompts.js'
 import { urlKey } from './inputs.js'
 import { storyDateRule } from '../scout/checks.js'
+import { isBlockType } from '@m91/content'
 
 const validate = new Ajv({ allErrors: true, strict: false }).compile(strategist_brief.schema)
 
@@ -113,6 +114,11 @@ export function autoFix(input, { config, inputs }) {
     const before = b[key].length
     b[key] = uniq(b[key])
     if (b[key].length !== before) fixes.push(`removed duplicate ${key}`)
+  }
+  // internal_links: with no published posts the list must be empty.
+  if (!(inputs.publishedPosts?.length) && b.internal_links.length) {
+    b.internal_links = []
+    fixes.push('cleared internal_links (there are no published posts yet)')
   }
   return { brief: b, fixes }
 }
@@ -226,6 +232,20 @@ export async function findProblems(b, { config, inputs, store, excludeBriefId = 
   const q = b.outline.filter((s) => s.heading.endsWith('?')).length
   if (q < st.minQuestionHeadings) P(`only ${q} outline headings are questions ending with "?"; at least ${st.minQuestionHeadings} are needed`)
   b.outline.forEach((s, i) => { if (!s.answer_first) P(`outline[${i}].answer_first is empty`) })
+
+  // Interactive ideas: known block names, at most 4.
+  if (b.interactive_ideas.length > 4) P(`interactive_ideas has ${b.interactive_ideas.length} items; at most 4`)
+  b.interactive_ideas.forEach((idea, i) => {
+    if (!isBlockType(idea.block_type)) P(`interactive_ideas[${i}].block_type "${idea.block_type}" is not a known block type`)
+    if (!idea.why) P(`interactive_ideas[${i}].why is empty`)
+  })
+
+  // Internal links: published posts only, at most 3.
+  if (b.internal_links.length > 3) P(`internal_links has ${b.internal_links.length} items; at most 3`)
+  b.internal_links.forEach((l, i) => {
+    if (!inputs.publishedUrls?.has(urlKey(l.url))) P(`internal_links[${i}] ${l.url} is not a URL from PUBLISHED POSTS`)
+    if (!l.anchor_text) P(`internal_links[${i}].anchor_text is empty`)
+  })
 
   // Keywords
   if (!b.keyword) P('keyword is empty')

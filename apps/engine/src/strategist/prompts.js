@@ -62,6 +62,8 @@ Topic groups:
 - "sources": every URL the post will rely on, each with what it supports. Only URLs from the inputs.
 - "cta": a one-line call to action and the URL {{cta_url}}.
 - "notes_for_writer": warnings and things to be careful with: what not to claim, any gaps the writer must not fill, how to attribute the story or news ("reported by <outlet>"), and that the post must not be framed as legal, regulatory or compliance advice.
+- "interactive_ideas": up to 4 interactive blocks that would genuinely help a reader understand or do this (for example a step checklist for a tutorial, a phone_ring_sim to show the approval flow). Leave it empty if none would help.
+- "internal_links": up to 3 links to PUBLISHED POSTS that are genuinely related, with natural anchor text. Only URLs from PUBLISHED POSTS. Empty if there are none.
 
 === RULES ===
 - Never invent facts, numbers, quotes, stories, customers, URLs or ids.
