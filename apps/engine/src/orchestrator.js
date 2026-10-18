@@ -261,7 +261,8 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'approved', error: null })
     return { briefId, state, version, counters, steps }
   } catch (error) {
-    if (error instanceof CancelledError) {
+    // Once a run is cancelled, a later error (e.g. a network failure mid-step) still ends it as cancelled: no failure alert.
+    if (error instanceof CancelledError || signal?.aborted) {
       state = 'cancelled'
       await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'cancelled', error: null })
       log.info('pipeline cancelled', { runId, briefId })

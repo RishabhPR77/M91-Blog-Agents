@@ -156,7 +156,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     } catch (error) {
       result = error instanceof LockedError
         ? { status: 'failed', error: error.message, summary: 'another run holds the lock' }
-        : { status: error.name === 'CancelledError' ? 'cancelled' : 'failed', error: error.message }
+        : { status: error.name === 'CancelledError' || signal.aborted ? 'cancelled' : 'failed', error: error.message }
     } finally {
       await lock?.release().catch((error) => log.error('could not release run lock', { runId, error }))
     }

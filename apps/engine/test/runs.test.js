@@ -139,6 +139,22 @@ test('cancel between steps: status cancelled, later steps never run, lock releas
   assert.equal(s.notifier.sent.m91.length, 0)
 })
 
+test('cancel, then a network error inside the in-flight step: still cancelled, no failure alert', async () => {
+  const restore = quiet()
+  let fail
+  const s = setup({ agents: { scout: () => new Promise((_, reject) => { fail = () => reject(Object.assign(new TypeError('fetch failed'), { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } })) }) } })
+  const { run_id } = await s.manager.startRun({ mode: 'full' })
+  await new Promise((r) => setImmediate(r))
+  s.manager.cancelRun(run_id)
+  fail()
+  const r = await s.manager.wait(run_id)
+  restore()
+  assert.equal(r.status, 'cancelled')
+  assert.equal(replay(run_id).at(-1).type, 'run.cancelled')
+  assert.equal(s.notifier.sent.m91.length, 0)
+  assert.deepEqual(s.notifier.sent.slack, [`⏹️ Run ${run_id} cancelled`])
+})
+
 test('scout and strategist modes run just that agent', async () => {
   const restore = quiet()
   const scoutOut = { mode: 'research', counts: { clusters_new: 2, stories: 1, tutorials: 0, questions: 4 }, cluster_ids: ['C-1', 'C-2'], calls_used: 6, warnings: [] }
