@@ -1,0 +1,19 @@
+# Secrets — never commit (any folder). The template is env.example (no leading dot), which is committed.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Dependencies / build
+node_modules/
+npm-debug.log*
+coverage/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local Claude settings (personal)
+.claude/settings.local.json

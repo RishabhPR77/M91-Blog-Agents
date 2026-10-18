@@ -1,0 +1,15 @@
+.env
+.env.*
+node_modules
+npm-debug.log*
+coverage
+.git
+.gitignore
+.claude
+CLAUDE.md
+test
+smoke
+docs
+viasocket-check.mjs
+Dockerfile
+.dockerignore
