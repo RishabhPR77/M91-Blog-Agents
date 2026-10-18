@@ -17,7 +17,7 @@ import { createNotifier } from './notify.js'
 import { createRunManager } from './runs.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
-import { newRecordId } from './util/ids.js'
+import { listPins, addPin, cancelPin, DATE_RE } from './pins.js'
 
 /** --key=value, --key value, or a bare --flag (true). Anything else is positional. */
 export function parseArgs(argv) {
@@ -42,28 +42,21 @@ async function scoutCommand(args, { config, store, notifier }) {
   return runScout({ mode, briefId: args['brief-id'], version: args.version ? Number(args.version) : undefined, claims, reviewerNote: file.reviewer_note }, { config, store, notifier })
 }
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-
 /** npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"] | --list | --cancel <id> */
 export async function pinCommand(args, { store }) {
   if (args.list) {
-    const pins = (await store.getRecords({ type: 'pinned_topic' })).sort((a, b) => String(a.payload?.target_date).localeCompare(String(b.payload?.target_date)))
+    const pins = await listPins(store)
     if (!pins.length) return console.log('No pinned topics.')
-    console.table(pins.map((p) => ({ pinned_id: p.payload.pinned_id, date: p.payload.target_date, priority: p.payload.priority, status: p.status, topic: String(p.payload.topic).slice(0, 70), used_by: p.payload.used_by ?? '' })))
+    console.table(pins.map((p) => ({ pinned_id: p.pinned_id, date: p.target_date, priority: p.priority, status: p.status, topic: String(p.topic).slice(0, 70), used_by: p.used_by ?? '' })))
     return
   }
   if (args.cancel) {
-    const pin = (await store.getRecords({ type: 'pinned_topic' })).find((p) => p.payload?.pinned_id === args.cancel)
-    if (!pin) throw new Error(`No pinned topic ${args.cancel}`)
-    await store.updateRecord(pin.id, pin.payload, { status: 'cancelled' })
+    await cancelPin(store, args.cancel)
     return console.log(`Cancelled ${args.cancel}.`)
   }
-  const topic = typeof args.topic === 'string' ? args.topic.trim() : ''
-  if (!topic || !DATE_RE.test(String(args.date))) throw new Error('usage: npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"]')
-  const priority = args.priority === 'high' ? 'high' : 'normal'
-  const payload = { pinned_id: newRecordId('PIN'), topic, target_date: args.date, priority, notes: typeof args.notes === 'string' ? args.notes : '' }
-  const rec = await store.createRecord({ type: 'pinned_topic', briefId: null, payload, status: 'open' })
-  console.log(rec.dryRun ? `DRY_RUN: not saved. Would pin ${payload.pinned_id} for ${payload.target_date}.` : `Pinned ${payload.pinned_id} for ${payload.target_date} (${priority}).`)
+  if (typeof args.topic !== 'string' || !DATE_RE.test(String(args.date))) throw new Error('usage: npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"]')
+  const { pin, saved } = await addPin(store, { topic: args.topic, date: args.date, priority: args.priority === 'high' ? 'high' : undefined, notes: typeof args.notes === 'string' ? args.notes : undefined })
+  console.log(saved ? `Pinned ${pin.pinned_id} for ${pin.target_date} (${pin.priority}).` : `DRY_RUN: not saved. Would pin ${pin.pinned_id} for ${pin.target_date}.`)
 }
 
 async function main() {

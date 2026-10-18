@@ -19,6 +19,8 @@ export const SECRET_KEYS = Object.freeze([
   'MEM0_API_KEY',
   'WEBHOOK_SHARED_KEY',
   'PIPELINE_TRIGGER_KEY',
+  'DASHBOARD_PASSWORD',
+  'EMBARKO_DEPLOY_TOKEN',
   'PUBLISH_API_KEY',
   'SLACK_POST_WEBHOOK_URL',
   'M91_ALERT_WEBHOOK_URL'
@@ -46,6 +48,8 @@ const DEFAULTS = {
   // viaSocket refuses a `message` over 50,000 characters; the docs bundle must leave room for the rest.
   DOCS_MAX_PAGES: '15', DOCS_MAX_CHARS: '45000', M91_DOCS_HOSTS: 'm91.msg91.com', DEDUPE_SIMILARITY: '0.85',
   URL_CHECK_TIMEOUT_MS: '10000',
+  // Phase 3.5: dashboard API and scheduler
+  DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', SCHEDULE_ENABLED: 'false', SCHEDULE_CRON: '0 7 * * 1,3,5', PORT: '8080',
   // Phase 3: Strategist
   STRATEGIST_MAX_REPAIRS: '1', RECENT_BRIEFS_WINDOW: '10', TITLE_MAX_CHARS: '70', OUTLINE_MIN_SECTIONS: '4',
   OUTLINE_MAX_SECTIONS: '8', MIN_QUESTION_HEADINGS: '3', LESSONS_LIMIT: '5', ALLOW_UPDATE_BRIEFS: 'false',
@@ -155,6 +159,18 @@ export function loadConfig(env = process.env) {
   }
 
   const dryRun = bool('DRY_RUN')
+  const dashboardAuth = bool('DASHBOARD_AUTH')
+  // Five-field cron (minute hour day-of-month month day-of-week): digits, *, /, -, , only.
+  const cronPattern = (key) => {
+    const value = str(key, { required: true })
+    if (value === undefined) return undefined
+    const fields = value.split(/\s+/)
+    if (fields.length !== 5 || fields.some((f) => !/^[\d*/,-]+$/.test(f))) {
+      problems.push(`${key}: must be a five-field cron pattern (e.g. "0 7 * * 1,3,5")`)
+      return undefined
+    }
+    return value
+  }
   const timezone = str('TIMEZONE', { required: true })
   if (timezone) {
     try {
@@ -249,6 +265,19 @@ export function loadConfig(env = process.env) {
       dryRun,
       triggerKey: str('PIPELINE_TRIGGER_KEY'),
       logLevel: oneOf('LOG_LEVEL', LOG_LEVELS)
+    },
+    server: {
+      port: int('PORT', { min: 1, max: 65535 })
+    },
+    dashboard: {
+      // Used by the Phase 6 dashboard dev server (it proxies /api to PORT).
+      port: int('DASHBOARD_PORT', { min: 1, max: 65535 }),
+      auth: dashboardAuth,
+      password: str('DASHBOARD_PASSWORD', { required: dashboardAuth === true })
+    },
+    schedule: {
+      enabled: bool('SCHEDULE_ENABLED'),
+      cron: cronPattern('SCHEDULE_CRON')
     },
     publish: {
       target: str('PUBLISH_TARGET'),

@@ -63,6 +63,9 @@ export function memoryStore({ similarity, dryRun = false } = {}) {
     async searchSimilar(text, filters = {}) {
       return [...records.values()].filter((r) => matches(r, { type: filters.type })).map((r) => ({ ...r, score: score(text, r) }))
     },
+    async getRecord(id) {
+      return records.get(id) ?? null
+    },
     async getRecords(filters) {
       return [...records.values()].filter((r) => matches(r, filters))
     },

@@ -166,6 +166,19 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     return toRecord({ ...current, id, metadata: merged, memory: payload !== undefined ? JSON.stringify(payload) : current?.memory })
   }
 
+  /** One record by memory id, or null (also null for another agent's memory). */
+  async function getRecord(id) {
+    const c = await client()
+    let m
+    try {
+      m = await c.get(id)
+    } catch {
+      return null
+    }
+    if (!m || (m.agentId ?? m.agent_id) && (m.agentId ?? m.agent_id) !== agentId) return null
+    return toRecord({ ...m, id: m.id ?? id })
+  }
+
   /** Records under our agent_id, filtered by type / brief_id / status / version / topic_group. */
   async function getRecords(filters = {}) {
     const briefId = filters.brief_id ?? filters.briefId
@@ -204,7 +217,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     await c.delete(id)
   }
 
-  return { dryRun, createRecord, updateRecord, getRecords, getOne, searchSimilar, addLesson, deleteRecord }
+  return { dryRun, createRecord, updateRecord, getRecord, getRecords, getOne, searchSimilar, addLesson, deleteRecord }
 }
 
 let defaultStore
