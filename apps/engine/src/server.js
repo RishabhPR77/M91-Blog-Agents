@@ -5,9 +5,7 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import { getConfig, ConfigError } from './config.js'
 import { log, registerSecrets, setLevel } from './util/log.js'
-import { getStore } from './store.js'
-import { createNotifier } from './notify.js'
-import { runPipeline } from './orchestrator.js'
+import { createRunManager } from './runs.js'
 
 /** Constant-time comparison; hashing first makes lengths equal so length isn't leaked either. */
 export function keysMatch(given, expected) {
@@ -65,9 +63,11 @@ async function main() {
     console.error('Invalid configuration:\n  - PIPELINE_TRIGGER_KEY: required for the server, at least 16 characters')
     process.exit(2)
   }
-  const store = getStore()
-  const notifier = createNotifier({ config })
-  const server = createServer({ triggerKey: config.runtime.triggerKey, run: () => runPipeline({ config, store, notifier }) })
+  const manager = createRunManager({ config })
+  const server = createServer({
+    triggerKey: config.runtime.triggerKey,
+    run: async () => manager.wait((await manager.startRun({ mode: 'full', trigger: 'api' })).run_id)
+  })
   const port = Number(process.env.PORT) || 8080
   server.listen(port, () => log.info('server listening', { port, dryRun: config.runtime.dryRun }))
 }

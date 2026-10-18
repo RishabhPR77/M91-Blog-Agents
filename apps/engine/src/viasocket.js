@@ -6,7 +6,7 @@ import { getConfig } from './config.js'
 import { log } from './util/log.js'
 import { retry, sleep } from './util/retry.js'
 import { newThreadId } from './util/ids.js'
-import { emit, threadPrefix } from './events.js'
+import { emit, threadPrefix, throwIfCancelled } from './events.js'
 
 /** kind: config | token | billing | rate_limit | server | network | bad_request | timeout | truncated | parse */
 export class AiError extends Error {
@@ -120,7 +120,9 @@ export function createViaSocketClient({ config = getConfig(), fetch = globalThis
   async function waitForAnswer(threadId, messageId, { timeoutMs, pollMs }) {
     const deadline = now() + timeoutMs
     while (now() < deadline) {
+      throwIfCancelled()
       await sleepFn(pollMs)
+      throwIfCancelled()
       let payload
       try {
         ;({ payload } = await call('GET', `/embed/ai/threads/${encodeURIComponent(threadId)}/history?page=1`))

@@ -44,8 +44,8 @@ export function memoryStore({ similarity, dryRun = false } = {}) {
       this.dryRun = value
     },
     async createRecord({ type, payload, briefId = null, status = null, version = null, topicGroup = null, date = '2026-10-17' }) {
-      if (type === 'run_log') payload = { ...payload, dry_run: dryRun }
-      if (dryRun && type !== 'run_log') return { id: `dryrun-${++seq}`, type, payload, briefId, status, version, topicGroup, date, dryRun: true }
+      if (type === 'run_log' || type === 'run') payload = { ...payload, dry_run: dryRun }
+      if (dryRun && type !== 'run_log' && type !== 'run') return { id: `dryrun-${++seq}`, type, payload, briefId, status, version, topicGroup, date, dryRun: true }
       writes.create++
       const id = `mem-${++seq}`
       const record = { id, type, payload, briefId, status, version, topicGroup, date, metadata: { type, brief_id: briefId, status, version, topic_group: topicGroup, date } }
@@ -53,7 +53,7 @@ export function memoryStore({ similarity, dryRun = false } = {}) {
       return record
     },
     async updateRecord(id, payload, metadata = {}) {
-      if (dryRun) return { id, payload, metadata, dryRun: true }
+      if (dryRun && metadata.type !== 'run') return { id, payload, metadata, dryRun: true }
       writes.update++
       const r = records.get(id)
       Object.assign(r, { payload: payload ?? r.payload, metadata: { ...r.metadata, ...metadata } })

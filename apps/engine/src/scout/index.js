@@ -11,7 +11,7 @@ import { validateAgainst, createUrlChecker, normaliseUrl, isKeptStatus, protectF
 import { buildDocsBundle, fetchSkillReadme, DocsError } from './docs.js'
 import { classifyCluster, mergeClusterPayload, storedStoryUrls, isDuplicateTutorial } from './dedupe.js'
 import { rankClusters } from './rank.js'
-import { emit, scoutStepName } from '../events.js'
+import { emit, scoutStepName, throwIfCancelled, CancelledError } from '../events.js'
 
 /** An error that fails the pipeline run (brief 13). */
 export class ScoutError extends Error {
@@ -62,6 +62,7 @@ export async function runScout(params = {}, deps = {}) {
     let activeSchema = schema
     const started = now()
     const meta = () => ({ call, model: sc.model, delivery: delivery ?? sc.delivery, ms: now() - started, retries })
+    throwIfCancelled()
     emit('step.started', { agent: 'scout', step: scoutStepName(call) })
 
     for (;;) {
@@ -135,6 +136,7 @@ export async function runScout(params = {}, deps = {}) {
     try {
       return await callAi(call, opts)
     } catch (error) {
+      if (error instanceof CancelledError) throw error
       await runLog(error.meta ?? { call, model: sc.model, delivery: opts.delivery ?? sc.delivery, ms: 0, retries: 0 }, { error: error.message })
       if (FATAL_KINDS.includes(error?.kind)) throw new ScoutError(`${call}: ${error.message}`)
       warnings.push(`${call} failed: ${error.message}`)
@@ -475,6 +477,7 @@ export async function runScout(params = {}, deps = {}) {
     try {
       res = await callAi('facts', { task: FACTS, sections: { docs: bundle.bundle }, schema: SCHEMAS.scout_m91_facts, fallbackSchema: scout_m91_facts_inline, delivery: sc.delivery })
     } catch (error) {
+      if (error instanceof CancelledError) throw error
       await runLog(error.meta ?? { call: 'facts', model: sc.model, delivery: sc.delivery, ms: 0, retries: 0 }, { error: error.message })
       throw new ScoutError(`M91 facts call failed: ${error.message}`)
     }
@@ -565,6 +568,7 @@ export async function runScout(params = {}, deps = {}) {
     try {
       res = await callAi('sources', { task: SOURCES, sections: { claims: claimText }, schema: SCHEMAS.scout_sources, delivery: sc.researchDelivery })
     } catch (error) {
+      if (error instanceof CancelledError) throw error
       await runLog(error.meta ?? { call: 'sources', model: sc.model, delivery: sc.researchDelivery, ms: 0, retries: 0 }, { error: error.message })
       throw new ScoutError(`sources call failed: ${error.message}`)
     }

@@ -10,7 +10,7 @@ import { buildPlanPrompt, repairTail, rebriefTail, TRUNCATED_PROBLEM } from './p
 import { buildInputs, buildStrategistMessage, InputsError } from './inputs.js'
 import { validateBrief, autoFix, findProblems } from './checks.js'
 import { finalizeBrief, saveBrief, markLeadsUsed, setLeadStatus } from './save.js'
-import { emit } from '../events.js'
+import { emit, throwIfCancelled, CancelledError } from '../events.js'
 
 export class StrategistError extends Error {
   constructor(message, problems = []) {
@@ -86,6 +86,7 @@ export async function runStrategist(params = {}, deps = {}) {
   let callName = mode
   let tail = baseTail
   for (;;) {
+    throwIfCancelled()
     const { message, trimmed } = buildStrategistMessage(inputs, tail)
     if (trimmed.length) warnings.push(`message trimmed to fit 50,000 characters (${trimmed.at(-1)})`)
     const started = now()
@@ -93,6 +94,7 @@ export async function runStrategist(params = {}, deps = {}) {
     try {
       res = await aiSend({ agent: 'strategist', prompt, message, jsonSchema: strategist_brief, threadId: newStrategistThreadId(runId, callName), retries: config.viasocket.maxRetries })
     } catch (error) {
+      if (error instanceof CancelledError) throw error
       const meta = { call: callName, model: st.model, delivery: st.delivery, ms: now() - started }
       if (error instanceof TruncatedError) {
         problems = [TRUNCATED_PROBLEM]

@@ -30,6 +30,20 @@ export function withRun(runId, fn, { signal } = {}) {
 export const currentRunId = () => als.getStore()?.runId ?? null
 export const currentSignal = () => als.getStore()?.signal ?? null
 
+/** The run was cancelled (cancelRun). Agents never turn this into a warning. */
+export class CancelledError extends Error {
+  constructor(message = 'run cancelled') {
+    super(message)
+    this.name = 'CancelledError'
+    this.kind = 'cancelled'
+  }
+}
+
+/** Throws CancelledError when the current run (or the given signal) has been cancelled. */
+export function throwIfCancelled(signal = currentSignal()) {
+  if (signal?.aborted) throw new CancelledError()
+}
+
 function bufferFor(runId) {
   let b = runs.get(runId)
   if (!b) {

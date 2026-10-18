@@ -14,7 +14,7 @@ import { getConfig, ConfigError } from './config.js'
 import { log, registerSecrets, setLevel } from './util/log.js'
 import { getStore } from './store.js'
 import { createNotifier } from './notify.js'
-import { runPipeline } from './orchestrator.js'
+import { createRunManager } from './runs.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
 import { newRecordId } from './util/ids.js'
@@ -123,11 +123,16 @@ async function main() {
     return
   }
 
-  log.info('pipeline starting', { dryRun: config.runtime.dryRun, autoPublish: config.runtime.autoPublish })
-  const result = await runPipeline({ config, store, notifier })
-  log.info('pipeline finished', { briefId: result.briefId, state: result.state, version: result.version, counters: result.counters, error: result.error ?? result.reason })
-  for (const s of result.steps) log.info('run_log', s)
-  process.exitCode = result.state === 'approved' ? 0 : 1
+  // npm run pipeline  (= run --mode=full), or: node src/cli.js run --mode=scout|strategist|full [--dry-run]
+  const mode = args._[0] === 'run' ? args.mode ?? 'full' : 'full'
+  const manager = createRunManager({ config })
+  const { run_id } = await manager.startRun({ mode, trigger: 'cli', ...(args['dry-run'] && { dryRun: true }) })
+  log.info('run started', { run_id, mode, dryRun: args['dry-run'] ? true : config.runtime.dryRun })
+  const result = await manager.wait(run_id)
+  const run = result.run ?? {}
+  console.table((run.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, ai_calls: s.ai_calls, models: s.models.join(' '), summary: String(s.summary).slice(0, 70), error: s.error ? String(s.error).slice(0, 50) : '' })))
+  log.info('run finished', { run_id, status: result.status, brief_id: run.brief_id, summary: run.result_summary, ms: run.ms })
+  process.exitCode = result.status === 'succeeded' ? 0 : 1
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

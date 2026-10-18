@@ -10,7 +10,7 @@ import { istDate } from './util/time.js'
 
 export const RECORD_TYPES = Object.freeze([
   'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'draft',
-  'review', 'promo_pack', 'run_log', 'lesson', 'lock', 'm91_facts', 'source_pack', 'pinned_topic'
+  'review', 'promo_pack', 'run_log', 'lesson', 'lock', 'm91_facts', 'source_pack', 'pinned_topic', 'run'
 ])
 
 // Statuses used across record types. brief: new → superseded (re-brief) / approved (Reviewer pass).
@@ -83,7 +83,8 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
   // DRY_RUN rule: no Mem0 writes, except run_log records, which carry dry_run: true.
   // Reads still happen. Skipped writes return a placeholder record with a "dryrun-" id.
   const DRY_ID = 'dryrun-'
-  const skipWrite = (type) => dryRun && type !== 'run_log'
+  // DRY_RUN still writes run_log and run records (they carry dry_run: true) so dry runs show in history.
+  const skipWrite = (type) => dryRun && type !== 'run_log' && type !== 'run'
   let clientPromise
   const client = () => (clientPromise ??= clientFactory(apiKey))
 
@@ -120,7 +121,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     if (!RECORD_TYPES.includes(type)) throw new StoreError(`Unknown record type "${type}"`)
     const recordKey = randomUUID()
     const metadata = { type, brief_id: briefId ?? null, status, version, topic_group: topicGroup, date, record_key: recordKey }
-    if (type === 'run_log') {
+    if (type === 'run_log' || type === 'run') {
       metadata.dry_run = dryRun
       payload = { ...payload, dry_run: dryRun }
     }
@@ -153,7 +154,8 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
 
   /** Updates one record in place by memory id (never adds a second copy). Metadata is merged. */
   async function updateRecord(id, payload, metadata = {}) {
-    if (dryRun) {
+    // run records are kept up to date in DRY_RUN too (the caller marks them with metadata.type = 'run').
+    if (dryRun && metadata.type !== 'run') {
       log.info('DRY_RUN: Mem0 update skipped', { id })
       return { id, payload, metadata, dryRun: true }
     }

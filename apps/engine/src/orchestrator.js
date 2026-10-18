@@ -8,7 +8,7 @@ import { istIso, istHuman } from './util/time.js'
 import { stubAgents } from './agents/stubs.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
-import { emit } from './events.js'
+import { emit, throwIfCancelled, CancelledError } from './events.js'
 
 /** Reviewer feedback items for the Strategist: strings become { area, problem }. */
 export function strategistFeedback(review) {
@@ -25,13 +25,13 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
     async scout(ctx) {
       const output = ctx.scoutMode === 'sources'
         ? await runScout({ mode: 'sources', briefId: ctx.briefId, version: ctx.version, claims: ctx.review?.claims ?? ctx.review?.feedback ?? [], reviewerNote: ctx.review?.note }, deps)
-        : await runScout({ mode: 'research', runId: ctx.briefId }, deps)
+        : await runScout({ mode: 'research', runId: ctx.runId }, deps)
       return { model: config.scout.model, output }
     },
     async strategist(ctx) {
       const output = ctx.strategistMode === 'rebrief'
-        ? await runStrategist({ mode: 'rebrief', runId: ctx.briefId, briefId: ctx.briefId, briefVersion: ctx.briefVersion, feedback: strategistFeedback(ctx.review) }, deps)
-        : await runStrategist({ mode: 'plan', runId: ctx.briefId, briefId: ctx.briefId, scoutResult: ctx.leads }, deps)
+        ? await runStrategist({ mode: 'rebrief', runId: ctx.runId, briefId: ctx.briefId, briefVersion: ctx.briefVersion, feedback: strategistFeedback(ctx.review) }, deps)
+        : await runStrategist({ mode: 'plan', runId: ctx.runId, briefId: ctx.briefId, scoutResult: ctx.leads }, deps)
       return { model: config.strategist.model, output }
     }
   }
@@ -142,7 +142,7 @@ export async function acquireLock(store, { owner, now = Date.now } = {}) {
  * Runs one pipeline.
  * @param {{ config?, store, notifier, agents?, now?, onState? }} deps
  */
-export async function runPipeline({ config = getConfig(), store, notifier, agents, now = Date.now, briefId = newBriefId(new Date(now())) } = {}) {
+export async function runPipeline({ config = getConfig(), store, notifier, agents, now = Date.now, briefId = newBriefId(new Date(now())), runId = briefId, lock: useLock = true, signal = null } = {}) {
   agents ??= defaultAgents({ config, store, notifier })
   const limits = config.limits
   const dryRun = config.runtime.dryRun
@@ -154,7 +154,7 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   let scoutMode = 'research'
   let strategistMode = 'plan'
   let briefVersion = 0
-  const ctx = () => ({ briefId, version, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, config })
+  const ctx = () => ({ runId, briefId, version, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, config })
 
   const setState = (to) => {
     state = assertTransition(state, to)
@@ -165,13 +165,14 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     const record = { time: istIso(new Date(now())), state, round: counters.rounds, version, ...entry }
     steps.push(record)
     try {
-      await store.createRecord({ type: 'run_log', briefId, payload: record, status: entry.result, version })
+      await store.createRecord({ type: 'run_log', briefId: runId, payload: record, status: entry.result, version })
     } catch (error) {
       log.error('could not write run_log', { briefId, error })
     }
   }
 
   async function step(agent, input) {
+    throwIfCancelled(signal)
     const started = now()
     emit('step.started', { agent, step: agent })
     try {
@@ -215,7 +216,7 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
 
   let lock
   try {
-    lock = await acquireLock(store, { owner: briefId, now })
+    lock = useLock ? await acquireLock(store, { owner: runId, now }) : { release: async () => {} }
   } catch (error) {
     log.warn('pipeline not started', { error })
     return { briefId, state: 'skipped', reason: error.message, steps }
@@ -260,6 +261,12 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'approved', error: null })
     return { briefId, state, version, counters, steps }
   } catch (error) {
+    if (error instanceof CancelledError) {
+      state = 'cancelled'
+      await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'cancelled', error: null })
+      log.info('pipeline cancelled', { runId, briefId })
+      return { runId, briefId, state, version, counters, steps }
+    }
     if (state !== 'failed') state = 'failed'
     await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'failed', error: error.message })
     log.error('pipeline failed', { briefId, error, counters })
