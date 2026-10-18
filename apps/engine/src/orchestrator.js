@@ -30,7 +30,7 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
       return { model: config.scout.model, output }
     },
     async writer(ctx) {
-      const output = await runWriter({ mode: ctx.writerMode ?? 'new', runId: ctx.runId, briefId: ctx.briefId, briefVersion: ctx.briefVersion, feedback: ctx.writerMode === 'revise' ? ctx.review?.feedback ?? [] : [], sourcePack: ctx.writerMode === 'revise' ? ctx.sourcePack : null }, deps)
+      const output = await runWriter({ mode: ctx.writerMode ?? 'new', runId: ctx.runId, briefId: ctx.briefId, briefVersion: ctx.briefVersion, feedback: ctx.writerMode === 'revise' ? ctx.review?.feedback ?? [] : [], sourcePack: ctx.writerMode === 'revise' ? ctx.sourcePack : null, brief: ctx.brief, previousDraft: ctx.draft?.draft ? { ...ctx.draft.draft, version: ctx.draft.version, brief_version: ctx.draft.brief_version } : null }, deps)
       return { model: output.model_used ?? config.writer.model, output }
     },
     async strategist(ctx) {

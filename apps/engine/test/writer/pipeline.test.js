@@ -116,3 +116,32 @@ test('writer run mode through the API: 202, a draft for the latest brief version
     restore()
   }
 })
+
+test('DRY_RUN pipeline with fail_once: the Writer works from the in-memory brief and previous draft; nothing but run/run_log saved', async () => {
+  const restore = quiet()
+  const cfg = config({ DRY_RUN: 'true', REVIEWER_STUB_MODE: 'fail_once' })
+  const store = memoryStore({ dryRun: true })
+  const ai = fakeAi({ revise: draftAnswer({ revision_notes: [{ feedback_quote: 'q', what_changed: 'w' }] }) })
+  const manager = createRunManager({
+    config: cfg,
+    storeFactory: () => store,
+    notifierFactory: () => fakeNotifier(),
+    agentsFactory: (rc, { store: st, notifier: nt }) => ({
+      ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend: ai, urlChecker: okChecker(), now } }),
+      scout: stubAgents.scout,
+      async strategist(ctx) {
+        const b = brief({ brief_id: ctx.briefId })
+        const rec = await st.createRecord({ type: 'brief', briefId: ctx.briefId, payload: b, status: 'new', version: 1, topicGroup: 1 })
+        return { model: 'stub', output: { brief_id: ctx.briefId, brief_version: 1, record_id: rec.id, brief: b, title: b.titles[0], lead: b.lead, repairs_used: 0 } }
+      }
+    })
+  })
+  const { run_id } = await manager.startRun({ mode: 'full' })
+  const r = await manager.wait(run_id)
+  restore()
+  assert.equal(r.status, 'succeeded', r.run.result_summary)
+  assert.deepEqual(ai.requests.map((q) => q.call), ['new', 'revise'])
+  assert.match(ai.requests[1].message, /--- PREVIOUS DRAFT ---\n\{"summary":"Explains agent approval/)
+  assert.match(ai.requests[1].threadId, /-v2-revise-/)
+  assert.ok([...store.records.values()].every((x) => x.type === 'run' || x.type === 'run_log'))
+})

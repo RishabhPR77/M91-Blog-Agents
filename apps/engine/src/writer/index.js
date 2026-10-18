@@ -87,11 +87,14 @@ export async function runWriter(params = {}, deps = {}) {
   const calls = []
 
   // ---------- inputs ----------
-  const briefRecord = await loadBrief(store, params.briefId, params.briefVersion)
+  // DRY_RUN saves nothing, so the orchestrator hands the in-memory brief (and previous draft) over.
+  const briefRecord = (await loadBrief(store, params.briefId, params.briefVersion)) ??
+    (config.runtime.dryRun && params.brief ? { id: null, status: 'new', version: params.brief.brief_version ?? 1, payload: params.brief } : null)
   if (!briefRecord) throw new WriterError(`no brief ${params.briefId}${params.briefVersion ? ` v${params.briefVersion}` : ''}`)
   const brief = briefRecord.payload
   const briefVersion = brief.brief_version ?? briefRecord.version ?? 1
-  const version = params.version ?? (await nextDraftVersion(store, params.briefId))
+  const inMemoryPrev = config.runtime.dryRun && params.previousDraft ? params.previousDraft : null
+  const version = params.version ?? (inMemoryPrev ? (Number(inMemoryPrev.version) || 0) + 1 : await nextDraftVersion(store, params.briefId))
   const feedback = writerFeedback(params.feedback)
   if (mode === 'revise' && !feedback.length && !params.sourcePack) throw new WriterError('revise mode needs Reviewer feedback for the Writer (or a source pack)')
 
@@ -100,7 +103,8 @@ export async function runWriter(params = {}, deps = {}) {
   const allowed = allowedUrlSet(brief, { sourcePack: params.sourcePack, ctaUrl: config.m91.ctaUrl })
   const tone = await toneSection(store, brief, config)
   const drafts = await draftsOf(store, params.briefId)
-  const previous = drafts.find((d) => (d.version ?? d.payload?.version) < version) ?? null
+  const previous = drafts.find((d) => (d.version ?? d.payload?.version) < version) ??
+    (inMemoryPrev ? { version: inMemoryPrev.version, payload: inMemoryPrev } : null)
 
   const sections = {
     tone: tone.text,
