@@ -34,8 +34,8 @@ const draft = (md = GOOD, over = {}) => ({
   ...over
 })
 const allowed = new Set([CTA, ISSUE, LLMS].map(urlKey))
-const run = (md, { b = brief(), d, statuses, snippets, snippetErrors, schemaErrors } = {}) =>
-  runContentChecks({ draft: d ?? draft(md), brief: b, config, allowedUrls: allowed, snippets, snippetErrors, linkStatuses: statuses, schemaErrors })
+const run = (md, { b = brief(), d, statuses, snippets, snippetErrors, snippetRangeErrors, inserts, schemaErrors } = {}) =>
+  runContentChecks({ draft: d ?? draft(md), brief: b, config, allowedUrls: allowed, snippets, snippetErrors, snippetRangeErrors, inserts, linkStatuses: statuses, schemaErrors })
 const get = (r, id) => r.results.find((x) => x.id === id)
 
 test('the good fixture passes every hard check and the main soft checks', () => {
@@ -213,4 +213,15 @@ test('phrase lists match whole phrases, case-insensitive, with either apostrophe
   assert.deepEqual(findPhrases('Let’s Dive In now', BANNED_PHRASES), ["let's dive in"])
   assert.deepEqual(findPhrases('This leveraged nothing', BANNED_PHRASES), [])
   assert.deepEqual(findPhrases('At M91, we built it', FIRST_PERSON_PHRASES), ['at M91, we'])
+})
+
+test('snippet_range_invalid is hard; ai_written_code accepts an inserted line range and nothing else', () => {
+  const r = run(GOOD, { snippetRangeErrors: ['S1:L9-L12 is not a valid line range'] })
+  assert.equal(get(r, 'snippet_range_invalid').passed, false)
+  assert.equal(get(r, 'snippet_range_invalid').severity, 'hard')
+  const { snippets } = extractSnippets('=== SOURCE: https://m91.msg91.com/llms.txt ===\n```bash\nstep one\nstep two\nstep three\n```')
+  const withCode = (code) => GOOD.replace('## How do I start?\n', `## How do I start?\n\nThis runs it.\n\n\`\`\`bash\n${code}\n\`\`\`\n`)
+  assert.equal(get(run(withCode('step two\nstep three'), { snippets, inserts: [{ id: 'S1', from: 2, to: 3, code: 'step two\nstep three' }] }), 'ai_written_code').passed, true)
+  assert.equal(get(run(withCode('step two\nstep three'), { snippets }), 'ai_written_code').passed, false, 'a range that was not inserted')
+  assert.equal(get(run(withCode('step two\nstep 3'), { snippets, inserts: [{ id: 'S1', from: 2, to: 3, code: 'step two\nstep three' }] }), 'ai_written_code').passed, false)
 })

@@ -157,11 +157,13 @@ const sentenceCount = (p) => sentences(p.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
  * @param {Set<string>} args.allowedUrls  urlKey()s of allowed URLs
  * @param {object[]} [args.snippets]      code snippets from the sources: the only code a post may contain
  * @param {string[]} [args.snippetErrors] [[SNIPPET:Sn]] problems found while replacing tokens
+ * @param {string[]} [args.snippetRangeErrors] invalid [[SNIPPET:Sn:La-Lb]] line ranges
+ * @param {object[]} [args.inserts] the line ranges inserted ({ id, from, to, code }); their code is allowed too
  * @param {Map<string,string>} [args.linkStatuses]  urlKey → ok | blocked | dead | invalid (pre-checked)
  * @param {string[]} [args.schemaErrors]  validation errors from the schema check, if any
  * @returns {{ results: object[], hard_passed: boolean, word_count: number, reading: { intro_grade, post_grade }, parsed }}
  */
-export function runContentChecks({ draft, brief, config, allowedUrls, snippets = [], snippetErrors = [], linkStatuses = null, schemaErrors = [] }) {
+export function runContentChecks({ draft, brief, config, allowedUrls, snippets = [], snippetErrors = [], snippetRangeErrors = [], inserts = [], linkStatuses = null, schemaErrors = [] }) {
   const results = []
   const R = (id, passed, severity, value, detail = '') => results.push({ id, passed: Boolean(passed), severity, value, detail })
   const md = draft?.post_markdown ?? ''
@@ -294,7 +296,9 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
 
   // Code: only inserted snippets, never code the AI wrote (every post).
   R('snippet_unknown', snippetErrors.length === 0, 'hard', snippetErrors.length, snippetErrors.slice(0, 3).join('; ') || 'ok')
-  const snippetCode = new Set(snippets.map((s) => normaliseCode(s.code)))
+  R('snippet_range_invalid', snippetRangeErrors.length === 0, 'hard', snippetRangeErrors.length, snippetRangeErrors.slice(0, 3).join('; ') || 'ok')
+  // Allowed code: whole snippets and the exact line ranges that were inserted.
+  const snippetCode = new Set([...snippets.map((s) => s.code), ...inserts.map((x) => x.code)].map(normaliseCode))
   const written = p.code.map((b, i) => ({ i, code: normaliseCode(b.code) })).filter((b) => b.code && !snippetCode.has(b.code))
   R('ai_written_code', written.length === 0, 'hard', written.length, written.length ? `code block(s) ${written.map((b) => b.i + 1).join(', ')} are not snippets from CODE SNIPPETS: use [[SNIPPET:Sn]] lines or describe the step in words` : `${p.code.length} code block(s), all snippets`)
   const known = [JSON.stringify(brief ?? {}), ...snippets.map((s) => s.code)].join('\n').toLowerCase()

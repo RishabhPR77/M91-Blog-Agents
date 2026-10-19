@@ -300,8 +300,8 @@ test('tutorial: source text fetched, code given as CODE SNIPPETS, [[SNIPPET:Sn]]
   const msg = s.ai.requests[0].message
   // The source text keeps its prose, with each code block replaced by its token; the code travels in CODE SNIPPETS.
   assert.match(msg, /--- TUTORIAL SOURCE TEXT ---\n=== SOURCE: https:\/\/github\.com\/MSG91\/m91-skill ===\n# m91-skill\nInstall it:\n\n\[\[SNIPPET:S1\]\]/)
-  assert.match(msg, /--- CODE SNIPPETS ---\n\[S1\] language: bash · source: https:\/\/github\.com\/MSG91\/m91-skill\ncontext: # m91-skill Install it:\n```bash\nnpx skills add MSG91\/m91-skill\n```/)
-  assert.match(msg, /\[S2\] language: bash · source: https:\/\/github\.com\/MSG91\/m91-skill\/blob\/main\/scripts\/m91\.sh/)
+  assert.match(msg, /--- CODE SNIPPETS ---\n\[S1\] kind: block · language: bash · lines 1-1 · source: https:\/\/github\.com\/MSG91\/m91-skill\ncontext: # m91-skill Install it:\n```bash\n1\| npx skills add MSG91\/m91-skill\n```/)
+  assert.match(msg, /\[S2\] kind: file · language: bash · lines 1-2 · source: https:\/\/github\.com\/MSG91\/m91-skill\/blob\/main\/scripts\/m91\.sh/)
   assert.match(s.ai.requests[0].prompt, /NEVER write code or commands yourself, not even one line\./)
   const saved = drafts(s.store)[0].payload
   assert.ok(saved.post_markdown.includes(`\`\`\`bash\n#!/bin/sh\n${TUTORIAL_CODE}\n\`\`\`\n\nSource: [github.com: scripts/m91.sh](${SCRIPT})`), saved.post_markdown)
@@ -339,7 +339,7 @@ test('not a tutorial: cited M91 docs pages give snippets; an unloadable page is 
     : { ok: false, status: 404, text: async () => '' })
   const s = await setup({ fetch })
   await s.run()
-  assert.match(s.ai.requests[0].message, /--- CODE SNIPPETS ---\n\[S1\] language: bash · source: https:\/\/m91\.msg91\.com\/llms\.txt/)
+  assert.match(s.ai.requests[0].message, /--- CODE SNIPPETS ---\n\[S1\] kind: block · language: bash · lines 1-1 · source: https:\/\/m91\.msg91\.com\/llms\.txt/)
   assert.doesNotMatch(s.ai.requests[0].message, /--- TUTORIAL SOURCE TEXT ---/)
   const down = await setup({ fetch: async () => { throw new TypeError('fetch failed') } })
   const r = await down.run()
@@ -401,4 +401,23 @@ test('revise needs feedback or a source pack, and an earlier draft', async () =>
   await assert.rejects(runWriter({ mode: 'revise', briefId: BRIEF_ID }, s.deps), /needs Reviewer feedback/)
   await assert.rejects(runWriter({ mode: 'revise', briefId: BRIEF_ID, feedback: ['fix it'] }, s.deps), /no earlier draft/)
   await assert.rejects(runWriter({ mode: 'new', briefId: 'nope' }, s.deps), /no brief nope/)
+})
+
+test('tutorial: a line-range token inserts exactly those lines; the range is saved; a bad range gets a repair', async () => {
+  const restore = quiet()
+  const s = await setup({
+    briefOver: tutorialBrief,
+    fetch: tutorialFetch,
+    answers: { new: draftAnswer({ post_markdown: tutorialPost('[[SNIPPET:S2:L2-L9]]') }), repair: draftAnswer({ post_markdown: tutorialPost('[[SNIPPET:S2:L2-L2]]') }) }
+  })
+  const r = await s.run()
+  restore()
+  assert.deepEqual(s.ai.requests.map((q) => q.call), ['new', 'repair'])
+  assert.match(s.ai.requests[1].message, /- snippet_range_invalid: S2:L2-L9 is not a valid line range \(S2 has lines 1-2/)
+  const saved = drafts(s.store)[0].payload
+  assert.ok(saved.post_markdown.includes(`\`\`\`bash\n${TUTORIAL_CODE}\n\`\`\`\n\nSource: [github.com: scripts/m91.sh](${SCRIPT})`))
+  assert.ok(!saved.post_markdown.includes('#!/bin/sh'), 'only line 2')
+  assert.deepEqual(saved.snippet_inserts.map((x) => [x.id, x.from, x.to]), [['S2', 2, 2]])
+  assert.equal(saved.checks.results.find((x) => x.id === 'ai_written_code').passed, true)
+  assert.equal(r.hard_passed, true)
 })

@@ -1,7 +1,7 @@
 // Snippet extraction and [[SNIPPET:Sn]] replacement (Phase 5 brief, A1). No network.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { extractSnippets, replaceSnippetTokens, tokeniseSnippets, snippetLanguage, normaliseCode, sourceLabel } from '../../src/writer/snippets.js'
+import { extractSnippets, replaceSnippetTokens, tokeniseSnippets, snippetLanguage, normaliseCode, sourceLabel, snippetSection } from '../../src/writer/snippets.js'
 
 const DOCS = 'https://m91.msg91.com/api/public/quickstart.md'
 const API = 'https://m91.msg91.com/api/public/api.md'
@@ -80,4 +80,60 @@ test('replacement: a token line becomes the exact block plus a source line; unkn
   assert.ok(r.markdown.includes('```bash\ncurl -X POST "$SEND_LINK" \\\n  -d \'{"title":"Test"}\'\n```\n\nSource: [M91 Quickstart](https://m91.msg91.com/api/public/quickstart.md)'))
   assert.equal(tokeniseSnippets(r.markdown, snippets), md)
   assert.equal(sourceLabel({ source_url: 'https://github.com/MSG91/m91-skill/blob/main/scripts/m91.sh' }), 'github.com: scripts/m91.sh')
+})
+
+const SCRIPT_URL = 'https://github.com/MSG91/m91-skill/blob/main/scripts/m91.sh'
+const SCRIPT = [
+  '#!/usr/bin/env bash',
+  '#',
+  '# Raise and close M91 alerts.',
+  '#',
+  '#   ./m91.sh check',
+  '#   ./m91.sh send --title "..." [--severity HIGH]',
+  '#                 [--custom-id x] [--auto-close]',
+  '#',
+  '# Usage: m91.sh close --custom-id x',
+  'set -uo pipefail',
+  'echo done'
+].join('\n')
+
+test('usage snippets from # comments: calls of the script (with continuation lines) and "Usage:" lines, marker removed', () => {
+  const { snippets } = extractSnippets(`=== SOURCE: ${SCRIPT_URL} ===\n${SCRIPT}`)
+  assert.deepEqual(snippets.map((s) => [s.id, s.kind]), [['S1', 'file'], ['S2', 'usage_from_comment'], ['S3', 'usage_from_comment'], ['S4', 'usage_from_comment']])
+  assert.equal(snippets[1].code, './m91.sh check')
+  assert.equal(snippets[2].code, './m91.sh send --title "..." [--severity HIGH]\n              [--custom-id x] [--auto-close]')
+  assert.equal(snippets[3].code, 'm91.sh close --custom-id x')
+  assert.ok(snippets.every((s) => s.source_url === SCRIPT_URL))
+  assert.match(snippets[1].context, /usage from a comment in m91\.sh \(line 5\)/)
+})
+
+test('usage snippets from // comments (a JS file), including an "Example:" section', () => {
+  const js = ['// Send one alert.', '// Example:', '//   node alert.js --title "Deploy?"', '//   node alert.js --close x', '//', 'const a = 1'].join('\n')
+  const { snippets } = extractSnippets(`=== SOURCE: https://github.com/MSG91/m91-skill/blob/main/scripts/alert.js ===\n${js}`)
+  assert.deepEqual(snippets.filter((s) => s.kind === 'usage_from_comment').map((s) => s.code), ['node alert.js --title "Deploy?"', 'node alert.js --close x'])
+  assert.equal(snippets[0].language, 'js')
+})
+
+test('line ranges: valid range inserts exactly those lines; out of range and reversed ranges are errors; tokenise reverses ranges', () => {
+  const { snippets } = extractSnippets(`=== SOURCE: ${SCRIPT_URL} ===\n${SCRIPT}`)
+  const md = 'Run the check.\n\n[[SNIPPET:S1:L5-L7]]\n\nThen:\n\n[[SNIPPET:S1:L10-L11]]\n\n[[SNIPPET:S1:L9-L12]]\n\n[[SNIPPET:S1:L7-L5]]\n\n[[SNIPPET:S1:L0-L2]]\n\n[[SNIPPET:S1:L3]]\n'
+  const r = replaceSnippetTokens(md, snippets)
+  assert.deepEqual(r.inserts.map((x) => [x.id, x.from, x.to]), [['S1', 5, 7], ['S1', 10, 11]])
+  assert.equal(r.inserts[0].code, '#   ./m91.sh check\n#   ./m91.sh send --title "..." [--severity HIGH]\n#                 [--custom-id x] [--auto-close]')
+  assert.ok(r.markdown.includes('```bash\nset -uo pipefail\necho done\n```\n\nSource: [github.com: scripts/m91.sh](' + SCRIPT_URL + ')'))
+  assert.equal(r.rangeErrors.length, 3)
+  assert.match(r.rangeErrors[0], /S1:L9-L12 is not a valid line range \(S1 has lines 1-11/)
+  assert.match(r.rangeErrors[1], /S1:L7-L5/)
+  assert.match(r.rangeErrors[2], /S1:L0-L2/)
+  assert.deepEqual(r.errors, ['[[SNIPPET:S1:L3]] is not a valid token: use [[SNIPPET:Sn]] or [[SNIPPET:Sn:La-Lb]]'])
+  const back = tokeniseSnippets(r.markdown, snippets, r.inserts)
+  assert.ok(back.includes('[[SNIPPET:S1:L5-L7]]') && back.includes('[[SNIPPET:S1:L10-L11]]'))
+})
+
+test('CODE SNIPPETS shows kinds and numbered lines', () => {
+  const { snippets } = extractSnippets(`=== SOURCE: ${SCRIPT_URL} ===\n${SCRIPT}`)
+  const text = snippetSection(snippets)
+  assert.match(text, /^\[S1\] kind: file · language: bash · lines 1-11 · source: https:\/\/github\.com\/MSG91\/m91-skill\/blob\/main\/scripts\/m91\.sh\n/)
+  assert.match(text, /```bash\n 1\| #!\/usr\/bin\/env bash\n 2\| #\n/)
+  assert.match(text, /\[S3\] kind: usage_from_comment · language: bash · lines 1-2/)
 })

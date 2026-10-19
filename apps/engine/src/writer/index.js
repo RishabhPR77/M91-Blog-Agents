@@ -151,7 +151,7 @@ export async function runWriter(params = {}, deps = {}) {
     sections.briefRules = JSON.stringify(briefRules(brief))
     if (!previous) throw new WriterError(`revise mode: no earlier draft of brief ${params.briefId} to revise`)
     const prevCtx = JSON.stringify(previous.payload?.context ?? {})
-    sections.previousDraft = wc.revisionInput === 'full' && previous.payload?.post_markdown ? tokeniseSnippets(previous.payload.post_markdown, snippets) : prevCtx
+    sections.previousDraft = wc.revisionInput === 'full' && previous.payload?.post_markdown ? tokeniseSnippets(previous.payload.post_markdown, snippets, previous.payload.snippet_inserts ?? []) : prevCtx
     sections.previousContextFallback = prevCtx
     sections.feedback = JSON.stringify(feedback.map(({ area, quote, problem, fix, severity }) => ({ area, quote, problem, fix, severity })))
     const excerpts = feedback.filter((f) => f.quote).map((f) => `- "${f.quote}" → ${excerptFor(previous.payload?.post_markdown, f.quote) ?? '(not found in the previous draft)'}`)
@@ -218,7 +218,7 @@ export async function runWriter(params = {}, deps = {}) {
     throw new WriterError(`${callName}: no usable draft after ${attempts.length} attempt(s)${fallbackAiSend ? ' including the fallback model' : ''}: ${lastError?.message ?? 'unknown error'}`, { kind: lastError?.kind ?? 'schema' })
   }
 
-  async function check(draft, snippetErrors) {
+  async function check(draft, replaced) {
     throwIfCancelled()
     emit('step.started', { agent: 'writer', step: 'checks' })
     const fixes = autoFixDraft(draft, { config, brief })
@@ -226,7 +226,7 @@ export async function runWriter(params = {}, deps = {}) {
     const linkUrls = [...new Set(parseMarkdown(draft.post_markdown).links.map((l) => l.url))]
     const linkStatuses = new Map()
     await Promise.all(linkUrls.map(async (u) => linkStatuses.set(urlKey(u), await urlChecker.check(u))))
-    const res = runContentChecks({ draft, brief, config, allowedUrls: allowed.set, snippets, snippetErrors, linkStatuses })
+    const res = runContentChecks({ draft, brief, config, allowedUrls: allowed.set, snippets, snippetErrors: replaced.errors, snippetRangeErrors: replaced.rangeErrors, inserts: replaced.inserts, linkStatuses })
     const hardFails = res.results.filter((x) => x.severity === 'hard' && !x.passed).length
     const softFails = res.results.filter((x) => x.severity === 'soft' && !x.passed).length
     emit('step.finished', { agent: 'writer', step: 'checks', data: { hard_failures: hardFails, soft_warnings: softFails } })
@@ -240,6 +240,7 @@ export async function runWriter(params = {}, deps = {}) {
   let draft = null
   let checks = null
   let snippetsUsed = []
+  let snippetInserts = []
   for (;;) {
     if (answer.truncated) {
       if (repairs >= wc.maxRepairs) throw new WriterError(`the ${mode} answer was cut off (finish_reason "truncated") and no repairs are left`, { kind: 'truncated' })
@@ -252,11 +253,12 @@ export async function runWriter(params = {}, deps = {}) {
     const replaced = replaceSnippetTokens(draft.post_markdown, snippets)
     draft.post_markdown = replaced.markdown
     snippetsUsed = replaced.used
-    checks = await check(draft, replaced.errors)
+    snippetInserts = replaced.inserts
+    checks = await check(draft, replaced)
     if (checks.hard_passed || repairs >= wc.maxRepairs) break
     repairs++
     // The repair sees snippet tokens again, so it places them instead of copying code.
-    answer = await callModel('repair', repairTail({ ...draft, post_markdown: tokeniseSnippets(draft.post_markdown, snippets) }, hardProblems(checks.results)))
+    answer = await callModel('repair', repairTail({ ...draft, post_markdown: tokeniseSnippets(draft.post_markdown, snippets, snippetInserts) }, hardProblems(checks.results)))
   }
 
   // ---------- save ----------
@@ -267,7 +269,9 @@ export async function runWriter(params = {}, deps = {}) {
     word_count: checks.word_count, reading: checks.reading, model_used: answer.model, writer_mode: mode, repairs_used: repairs, auto_fixes: autoFixes,
     snippets_used: snippetsUsed, snippets_available: snippets.length,
     // The inserted snippets themselves, for the Reviewer (B3) and later re-checks.
-    snippets: snippets.filter((s) => snippetsUsed.includes(s.id))
+    snippets: snippets.filter((s) => snippetsUsed.includes(s.id)),
+    // Each inserted token (whole snippet or line range), so revisions and re-checks can rebuild it.
+    snippet_inserts: snippetInserts
   }
   const { record, status, warnings: saveWarnings } = await saveDraft(store, { briefId: params.briefId, briefRecord, version, briefVersion, topicGroup: brief.topic_group, payload, hardPassed: checks.hard_passed })
   warnings.push(...saveWarnings)

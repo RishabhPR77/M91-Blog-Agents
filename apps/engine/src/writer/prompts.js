@@ -36,7 +36,7 @@ STRUCTURE
 
 FORMAT FOR LATER INTERACTIVE BLOCKS
 - Steps: a numbered list, one action per item, starting with a verb; "what you should see" on the next line of the same item.
-- Code: a line containing only [[SNIPPET:S<n>]]; the exact block and its source are filled in for you.
+- Code: a line containing only [[SNIPPET:S<n>]] (the whole snippet) or [[SNIPPET:S<n>:L<a>-L<b>]] (only lines a to b, as numbered in CODE SNIPPETS); the exact block and its source are filled in for you.
 - Comparisons: a Markdown table with a header row.
 - The approval flow (software asks → phone rings → person decides → software continues): a short numbered sequence of moments, one per item.
 - Choices with different outcomes: one short paragraph per outcome, starting with the choice in bold.
