@@ -9,11 +9,9 @@ import { api, errorMessage, isApiError } from '../api/client'
 import { useSettings } from '../api/queries'
 import { ChecksTable, type CheckResult } from '../components/ChecksTable'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { FeedbackList, type FeedbackItem } from '../components/FeedbackList'
-import { GatesList, type Gate } from '../components/GatesList'
 import { MarkdownPreview } from '../components/MarkdownPreview'
 import { Card, EmptyState, PageHeader } from '../components/Page'
-import { ScoreCard, type Area } from '../components/ScoreCard'
+import { VerdictPanel, type Review } from '../components/VerdictPanel'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toasts'
 import { VersionDiff } from '../components/VersionDiff'
@@ -24,7 +22,6 @@ import { findExactQuote, NO_MATCH_MESSAGE } from '../quote'
 export const FEEDBACK_MIN = 5
 export const FEEDBACK_MAX = 2000
 
-type Review = { total: number | null; pass: boolean | null; gates?: Gate[]; areas?: Area[]; feedback?: FeedbackItem[]; summary?: string; sources_checked?: { url: string; claim?: string; verdict?: string }[] }
 type HumanFeedback = { text: string; quotes: string[]; at: string } | null
 export type ApprovalDetailData = {
   brief_id: string
@@ -267,22 +264,7 @@ export default function ApprovalDetail() {
 
           <Card title="Verdict" actions={!reviewed ? <span className="pill pill-amber">Not reviewed</span> : undefined}>
             {review ? (
-              <div className="space-y-4">
-                <ScoreCard total={review.total} pass={review.pass} passMin={settings.data?.gates.pass_score_min} areaMin={settings.data?.gates.pass_area_min} areas={review.areas ?? []} />
-                {review.summary && <p className="text-sm">{review.summary}</p>}
-                <div><h3 className="mb-1 text-xs font-semibold text-slate-500 uppercase">Gates</h3><GatesList gates={review.gates ?? []} /></div>
-                <div><h3 className="mb-1 text-xs font-semibold text-slate-500 uppercase">Feedback</h3><FeedbackList items={review.feedback ?? []} /></div>
-                {review.sources_checked?.length ? (
-                  <div>
-                    <h3 className="mb-1 text-xs font-semibold text-slate-500 uppercase">Sources the Reviewer checked</h3>
-                    <ul className="space-y-1 text-sm">
-                      {review.sources_checked.map((s, i) => (
-                        <li key={i}><span className={`pill ${s.verdict === 'supports' ? 'pill-green' : s.verdict === 'contradicts' ? 'pill-red' : 'pill-gray'}`}>{s.verdict ?? '?'}</span>{' '}<a href={s.url} target="_blank" rel="noopener noreferrer" className="break-all text-sky-700 underline dark:text-sky-300">{s.url}</a>{s.claim && <div className="text-xs text-slate-500">{s.claim}</div>}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
+              <VerdictPanel review={review} />
             ) : (
               <p className="text-sm text-slate-500">This version has no review. {waiting ? 'Use “Review this version” to ask the Reviewer.' : ''}</p>
             )}
