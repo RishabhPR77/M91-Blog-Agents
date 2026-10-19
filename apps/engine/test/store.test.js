@@ -152,6 +152,21 @@ test('Mem0 network blips are retried for safe calls (search), but a new-record a
   assert.equal(adds, 1)
 })
 
+test('the Mem0 retry window rides out a long blip: 5 retries, every wait at least half its cap (≥22 s in total)', async () => {
+  const { MEM0_RETRY } = await import('../src/store.js')
+  const { backoffDelay } = await import('../src/util/retry.js')
+  let gets = 0
+  const waits = []
+  const client = { async get() { if (++gets <= 5) throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } }); return { id: 'm1', metadata: { type: 'run' }, memory: '{}' } } }
+  const store = createStore({ config: fakeConfig(), clientFactory: async () => client, fetch: fakeFetch(() => ({})), sleepFn: async (ms) => { waits.push(ms) } })
+  assert.equal((await store.getRecord('m1')).id, 'm1')
+  assert.equal(gets, 6)
+  assert.equal(waits.length, 5)
+  const floor = [1, 2, 3, 4, 5].reduce((sum, n) => sum + backoffDelay(n, { ...MEM0_RETRY, random: () => 0.5 }), 0)
+  assert.ok(floor >= 22000, `minimum total wait ${floor} ms`)
+  assert.ok(waits.every((ms, i) => ms >= backoffDelay(i + 1, { ...MEM0_RETRY, random: () => 0.5 })))
+})
+
 test('versions come back as numbers even when Mem0 returns metadata as strings ("1" + 1 = 2, not "11")', async () => {
   const { toRecord } = await import('../src/store.js')
   assert.equal(toRecord({ id: 'a', memory: '{}', metadata: { type: 'draft', version: '1' } }).version, 1)

@@ -22,6 +22,9 @@ export const RECORD_SCHEMAS = Object.freeze(Object.fromEntries(RECORD_TYPES.map(
 
 const MEM0_HOST = 'https://api.mem0.ai'
 
+/** Retry window for repeat-safe Mem0 calls; random() in [0.5, 1) keeps every wait at least half its cap. */
+export const MEM0_RETRY = Object.freeze({ retries: 5, baseMs: 2000, maxMs: 15000, random: () => 0.5 + Math.random() / 2 })
+
 /** A failed connection (not an HTTP answer): fetch's "fetch failed", resets, timeouts, DNS. */
 export function isNetworkError(error) {
   if (!error) return false
@@ -99,15 +102,15 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
   const client = () => (clientPromise ??= clientFactory(apiKey))
 
   // Mem0 calls that are safe to repeat (reads, update/delete by id, event polls) retry network blips
-  // up to 2 times (seen live: one "fetch failed" ended a run). New-record writes are not retried,
-  // since a retry after a lost reply could save a second copy.
+  // (seen live: one "fetch failed" ended a run; another blip outlasted 3 tries in ~3 s). Up to 5
+  // retries with "equal jitter" (each wait is half to all of 2, 4, 8, 15, 15 s), so a blip of
+  // ~22–55 s is ridden out. New-record writes are not retried, since a retry after a lost reply
+  // could save a second copy.
   const net = (fn, what) => retry(fn, {
-    retries: 2,
-    baseMs: 1000,
-    maxMs: 4000,
+    ...MEM0_RETRY,
     sleepFn,
     shouldRetry: isNetworkError,
-    onRetry: (error, attempt) => log.warn('Mem0 network error; retrying', { what, attempt, error })
+    onRetry: (error, attempt, delay) => log.warn('Mem0 network error; retrying', { what, attempt, delay_ms: delay, error })
   })
 
   const entityFilters = (briefId) => (briefId ? { AND: [{ agent_id: agentId }, { run_id: briefId }] } : { agent_id: agentId })
