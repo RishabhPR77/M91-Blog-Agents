@@ -129,25 +129,13 @@ test('runPromo in DRY_RUN: uses the in-memory approved draft; nothing saved', as
   assert.equal(store.byType('promo_pack').length, 0)
 })
 
-test('approval: a failing promo pack never blocks it (warning); statuses approved; run summary "approved (v1, score 90)"', async () => {
-  const restore = quiet()
-  const store = memoryStore()
-  const agents = { ...stubAgents, reviewer: mockReviewer(), promo: async () => { throw new Error('promo model down') } }
-  const r = await runPipeline({ config: fakeConfig(), store, notifier: fakeNotifier(), agents })
-  restore()
-  assert.equal(r.state, 'approved')
-  assert.equal(r.summary, 'approved (v1, score 90)')
-  assert.ok(r.warnings.some((w) => /promo pack failed \(approval stands\): promo model down/.test(w)))
-  assert.equal(store.byType('brief')[0].status, 'approved')
-})
-
 test('pending flows: with empty webhook URLs the approval Slack lines and the failure alert are skipped and reported, nothing sent', async () => {
   const restore = quiet()
   const fetch = fakeFetch(() => ({ body: {} }))
   const cfg = fakeConfig({ SLACK_POST_WEBHOOK_URL: '', M91_ALERT_WEBHOOK_URL: '' })
   const notifier = createNotifier({ config: cfg, fetch })
   const ok = await runPipeline({ config: cfg, store: memoryStore(), notifier, agents: { ...stubAgents, reviewer: mockReviewer() } })
-  assert.equal(ok.state, 'approved')
+  assert.equal(ok.state, 'awaiting_human')
   assert.ok(ok.warnings.some((w) => /Slack message skipped: pending flows \(SLACK_POST_WEBHOOK_URL is empty\)/.test(w)))
   const failed = await runPipeline({ config: fakeConfig({ SLACK_POST_WEBHOOK_URL: '', M91_ALERT_WEBHOOK_URL: '', MAX_WRITER_REVISIONS: '0' }), store: memoryStore(), notifier: createNotifier({ config: fakeConfig({ SLACK_POST_WEBHOOK_URL: '', M91_ALERT_WEBHOOK_URL: '' }), fetch }), agents: { ...stubAgents, reviewer: mockReviewer(['fail']) } })
   restore()
@@ -156,19 +144,3 @@ test('pending flows: with empty webhook URLs the approval Slack lines and the fa
   assert.equal(fetch.calls.length, 0)
 })
 
-test('a real Reviewer pass in the loop runs the real promo step after it (fake AIs), and the promo step is in the run steps', async () => {
-  const restore = quiet()
-  const { defaultAgents } = await import('../../src/orchestrator.js')
-  const { reviewAnswer } = await import('../reviewer/fixtures.js')
-  const cfg = config({ DRY_RUN: 'true' })
-  const store = memoryStore({ dryRun: true })
-  const reviewerAi = fakeReviewerAi([reviewAnswer()])
-  const promoAi = fakePromoAi([goodPack()])
-  const aiSend = (opts) => (opts.agent === 'reviewer' ? reviewerAi(opts) : promoAi(opts))
-  const agents = { ...defaultAgents({ config: cfg, store, notifier: fakeNotifier(), agentDeps: { aiSend } }), scout: stubAgents.scout, strategist: stubAgents.strategist, writer: async () => ({ model: 'm', output: { record_id: 'dryrun-9', version: 1, brief_version: 1, title: 'T', draft: { ...draftAnswer(), checks: { hard_passed: true, results: [] } } } }) }
-  const r = await runPipeline({ config: cfg, store, notifier: fakeNotifier(), agents, briefId: BRIEF_ID })
-  restore()
-  assert.equal(r.state, 'approved', r.error)
-  assert.deepEqual(r.steps.map((x) => x.agent), ['scout', 'strategist', 'writer', 'reviewer', 'promo', 'orchestrator'])
-  assert.equal(promoAi.requests.length, 1)
-})

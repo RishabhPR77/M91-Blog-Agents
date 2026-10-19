@@ -10,7 +10,8 @@ import { mask, maskString, onLogLine } from './util/log.js'
 export const EVENT_TYPES = Object.freeze([
   'run.started', 'run.finished', 'run.failed', 'run.cancelled',
   'step.started', 'step.finished', 'step.failed', 'step.cancelled', 'step.output',
-  'ai.call', 'loop.route', 'log'
+  'ai.call', 'loop.route', 'log',
+  'approval.waiting', 'approval.approved', 'approval.changes_requested', 'approval.rejected'
 ])
 export const TERMINAL_TYPES = Object.freeze(['run.finished', 'run.failed', 'run.cancelled'])
 

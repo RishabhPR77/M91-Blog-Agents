@@ -41,20 +41,20 @@ function setup(env = {}, reviewer = mockReviewer()) {
   return { cfg, store, notifier, ai, manager }
 }
 
-test('reviewer passes: Strategist → Writer v1 → Reviewer → approved; run record has writer and checks steps', async () => {
+test('reviewer passes: Strategist → Writer v1 → Reviewer → awaiting_human; run record has writer and checks steps', async () => {
   const restore = quiet()
   const s = setup()
   const { run_id } = await s.manager.startRun({ mode: 'full' })
   const r = await s.manager.wait(run_id)
   restore()
   assert.equal(r.status, 'succeeded')
-  assert.deepEqual(r.run.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['checks', 'succeeded'], ['reviewer', 'succeeded'], ['promo', 'succeeded']])
+  assert.deepEqual(r.run.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['checks', 'succeeded'], ['reviewer', 'succeeded']])
   const writer = r.run.steps.find((x) => x.name === 'writer')
   assert.match(writer.summary, /^Draft v1: \d+ words · grade [\d.]+ · hard checks passed · repairs 0$/)
   assert.ok(writer.record_ids.length >= 1)
   assert.match(r.run.steps.find((x) => x.name === 'checks').summary, /soft warning\(s\), 0 hard failure\(s\)/)
-  assert.deepEqual(recordsOf(s.store, 'draft').map((d) => [d.version, d.status]), [[1, 'approved']])
-  assert.equal(recordsOf(s.store, 'brief')[0].status, 'approved')
+  assert.deepEqual(recordsOf(s.store, 'draft').map((d) => [d.version, d.status]), [[1, 'awaiting_human']])
+  assert.equal(recordsOf(s.store, 'brief')[0].status, 'awaiting_human')
 })
 
 test('reviewer fails once: Writer v1 → fail (must + should, quoted) → loop.route → Writer revise v2 → pass', async () => {
@@ -68,7 +68,7 @@ test('reviewer fails once: Writer v1 → fail (must + should, quoted) → loop.r
   const rev = s.ai.requests[1]
   assert.match(rev.message, /--- REVIEWER FEEDBACK ---\n\[\{"area":"simplicity","quote":"Agent approval means your software stops and asks a person before a risky step\."/)
   assert.match(rev.message, /--- QUOTED EXCERPTS ---\n- "Agent approval means/)
-  assert.deepEqual(recordsOf(s.store, 'draft').map((d) => [d.version, d.status]).sort(), [[1, 'superseded'], [2, 'approved']])
+  assert.deepEqual(recordsOf(s.store, 'draft').map((d) => [d.version, d.status]).sort(), [[1, 'superseded'], [2, 'awaiting_human']])
   const route = replay(run_id).find((e) => e.type === 'loop.route')
   assert.equal(route.data.send_to, 'writer')
   assert.equal(route.data.action, 'revise')

@@ -203,17 +203,17 @@ test('DRY_RUN pipeline: the Strategist plans from the Scout\'s in-memory records
   assert.equal(recordsOf(store, 'brief').length, 0)
 })
 
-test('orchestrator: Scout stub → real Strategist → Writer stub; approval marks the brief approved', async () => {
+test('orchestrator: Scout stub → real Strategist → Writer stub; a pass marks the brief awaiting_human', async () => {
   const cfg = config({ DRY_RUN: 'true' })
   const store = await seededStore()
   const notifier = fakeNotifier()
   const agents = { ...defaultAgents({ config: cfg, store, notifier, agentDeps: { aiSend: fakeAi(), now } }), scout: stubAgents.scout, writer: stubAgents.writer, reviewer: mockReviewer() }
   const r = await runPipeline({ config: cfg, store, notifier, agents, now, briefId: '261017-1405-ABCD' })
-  assert.equal(r.state, 'approved')
+  assert.equal(r.state, 'awaiting_human')
   assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 4), ['scout', 'strategist', 'writer', 'reviewer'])
   const brief = recordsOf(store, 'brief')
   assert.equal(brief.length, 1)
-  assert.equal(brief[0].status, 'approved')
+  assert.equal(brief[0].status, 'awaiting_human')
   assert.ok(recordsOf(store, 'run_log').some((l) => l.payload.agent === 'strategist' && l.payload.call === 'plan'))
 })
 
@@ -228,7 +228,7 @@ test('orchestrator: reviewer send_to strategist → re-brief version 2', async (
     reviewer: async () => ({ model: 'stub', output: n++ === 0 ? { pass: false, total: 60, feedback: [{ area: 'angle', quote: '', problem: 'weak angle', fix: 'sharper angle', severity: 'must', send_to: 'strategist', claims: [] }] } : { pass: true, total: 90, feedback: [] } })
   }
   const r = await runPipeline({ config: cfg, store, notifier: fakeNotifier(), agents, now, briefId: '261017-1405-ABCD' })
-  assert.equal(r.state, 'approved')
+  assert.equal(r.state, 'awaiting_human')
   const versions = recordsOf(store, 'brief').map((b) => [b.version, b.status]).sort()
-  assert.deepEqual(versions, [[1, 'superseded'], [2, 'approved']])
+  assert.deepEqual(versions, [[1, 'superseded'], [2, 'awaiting_human']])
 })

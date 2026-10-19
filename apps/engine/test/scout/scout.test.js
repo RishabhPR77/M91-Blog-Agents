@@ -247,7 +247,7 @@ test('orchestrator: the real Scout runs before the Strategist stub, which receiv
   // The real Strategist (Phase 3) has its own pipeline tests; here the stub stands in for it.
   const agents = { ...defaultAgents({ config, store, notifier, scoutDeps: { aiSend: ai, fetch: fakeWeb(), urlChecker: fakeChecker(), now: () => NOW } }), strategist: stubAgents.strategist, writer: stubAgents.writer, reviewer: mockReviewer() }
   const r = await runPipeline({ config, store, notifier, agents, now: () => NOW, briefId: RUN })
-  assert.equal(r.state, 'approved')
+  assert.equal(r.state, 'awaiting_human')
   assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 2), ['scout', 'strategist'])
   const scoutLogs = callLogs(store).filter((l) => l.agent === 'scout' && l.call)
   assert.equal(scoutLogs.length, 11)

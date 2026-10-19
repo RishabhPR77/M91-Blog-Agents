@@ -98,7 +98,7 @@ test('GET /api/runs and /api/runs/:run_id (with produced records); 404 for an un
     assert.equal(list.status, 200)
     assert.equal(list.json.runs[0].run_id, json.run_id)
     assert.equal(list.json.runs[0].status, 'succeeded')
-    assert.deepEqual(list.json.runs[0].steps.map((s) => s.name), ['scout', 'strategist', 'writer', 'reviewer', 'promo'])
+    assert.deepEqual(list.json.runs[0].steps.map((s) => s.name), ['scout', 'strategist', 'writer', 'reviewer'])
     const one = await call('GET', `/api/runs/${json.run_id}`)
     assert.equal(one.status, 200)
     assert.equal(one.json.run.run_id, json.run_id)

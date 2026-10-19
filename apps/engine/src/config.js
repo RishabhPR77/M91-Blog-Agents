@@ -53,6 +53,8 @@ const DEFAULTS = {
   // Phase 5: Reviewer, lessons, promo pack
   REVIEWER_MAX_SOURCE_CHECKS: '5', REVIEW_FEEDBACK_MAX_ITEMS: '8', LESSONS_PER_REVIEW_MAX: '3',
   SLACK_POST_APPROVED: 'true', PROMO_LINKEDIN_MAX_CHARS: '1300', PROMO_X_POST_MAX_CHARS: '270',
+  // Phase 5.5: human approval gate
+  MAX_HUMAN_REVISIONS: '5', REREVIEW_AFTER_HUMAN: 'true', M91_NOTIFY_ON_AWAITING: 'false',
   // Phase 3.5: dashboard API
   DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', PORT: '8080',
   // Designer (Phase 8) and blog + Embarko (Phase 7)
@@ -275,6 +277,11 @@ export function loadConfig(env = process.env) {
       docsUrl: url('M91_DOCS_URL', { required: true }),
       ctaUrl: url('M91_CTA_URL'),
       skillRepoUrl: url('M91_SKILL_REPO_URL', { required: true })
+    },
+    approval: {
+      maxHumanRevisions: int('MAX_HUMAN_REVISIONS', { max: 50 }),
+      rereviewAfterHuman: bool('REREVIEW_AFTER_HUMAN'),
+      notifyOnAwaiting: bool('M91_NOTIFY_ON_AWAITING')
     },
     gates: {
       passScoreMin: int('PASS_SCORE_MIN', { min: 0, max: 100 }),

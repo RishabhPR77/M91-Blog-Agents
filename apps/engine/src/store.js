@@ -14,7 +14,9 @@ export const RECORD_TYPES = Object.freeze([
 ])
 
 // Statuses used across record types. brief: new → superseded (re-brief) / approved (Reviewer pass).
-export const BRIEF_STATUSES = Object.freeze(['new', 'active', 'superseded', 'approved', 'published', 'failed'])
+export const BRIEF_STATUSES = Object.freeze(['new', 'active', 'drafted', 'awaiting_human', 'superseded', 'approved', 'rejected', 'published', 'failed'])
+// draft: drafted | drafted_with_issues → awaiting_human (Reviewer pass) → approved | changes_requested | rejected; failed_review; superseded.
+export const DRAFT_STATUSES = Object.freeze(['drafted', 'drafted_with_issues', 'awaiting_human', 'changes_requested', 'approved', 'rejected', 'failed_review', 'superseded'])
 export const LEAD_STATUSES = Object.freeze(['open', 'used', 'discarded', 'expired', 'cancelled'])
 
 // Payload schemas per type are filled in by later phases.

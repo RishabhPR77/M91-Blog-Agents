@@ -204,7 +204,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (mode === 'full') {
       const agents = agentsFactory?.(runConfig, { store, notifier }) ?? defaultAgents({ config: runConfig, store, notifier, agentDeps })
       const r = await runPipeline({ config: runConfig, store, notifier, agents, now, runId, briefId: params.brief_id ?? newBriefId(new Date(now())), lock: false, signal })
-      const status = r.state === 'approved' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
+      const status = r.state === 'awaiting_human' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
       return { status, brief_id: r.briefId, summary: r.error ?? r.summary ?? `pipeline ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
     }
     const agents = agentsFactory?.(runConfig, { store, notifier })
@@ -243,7 +243,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       // Review, then the routing loop (revise / re-brief / sources) until a pass or a limit.
       const fullAgents = agents ?? defaultAgents({ config: runConfig, store, notifier, agentDeps })
       const r = await runPipeline({ config: runConfig, store, notifier, agents: fullAgents, now, runId, briefId: params.brief_id, lock: false, signal, resume: { version: params.version, briefVersion: params.brief_version } })
-      const status = r.state === 'approved' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
+      const status = r.state === 'awaiting_human' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
       return { status, brief_id: params.brief_id, summary: r.error ?? r.summary ?? `review loop ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
     }
     if (mode === 'reviewer' || mode === 'promo') {
