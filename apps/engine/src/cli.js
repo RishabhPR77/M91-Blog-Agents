@@ -10,6 +10,8 @@
 // npm run draft -- --show <brief_id> [--version <n> [--brief-version <n>]]  |  --export <brief_id> [--version <n>] --out <file.md>
 // npm run cleanup -- --list | --delete <memory_id …> | --delete-listed   (asks you to type "yes")
 // npm run lessons -- --list | --delete <memory_id>
+// npm run reviewer -- --brief-id=<id> [--version=<n>] [--brief-version=<n>] [--route]
+// npm run promo -- --brief-id=<id> [--version=<n>]
 // npm run checks -- --file <post.md> --brief-id <id>
 // npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"] | --list | --cancel <pinned_id>
 
@@ -26,6 +28,7 @@ import { getStore, createStore } from './store.js'
 import { findCandidates, deleteIds, PROTECTED_TYPES } from './cleanup.js'
 import { extractSnippets } from './writer/snippets.js'
 import { lessonText } from './lessons.js'
+import { WEIGHTS } from './reviewer/decide.js'
 import { createNotifier } from './notify.js'
 import { createRunManager } from './runs.js'
 import { runScout } from './scout/index.js'
@@ -74,6 +77,42 @@ export async function pinCommand(args, { store }) {
   if (typeof args.topic !== 'string' || !DATE_RE.test(String(args.date))) throw new Error('usage: npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"]')
   const { pin, saved } = await addPin(store, { topic: args.topic, date: args.date, priority: args.priority === 'high' ? 'high' : undefined, notes: typeof args.notes === 'string' ? args.notes : undefined })
   console.log(saved ? `Pinned ${pin.pinned_id} for ${pin.target_date} (${pin.priority}).` : `DRY_RUN: not saved. Would pin ${pin.pinned_id} for ${pin.target_date}.`)
+}
+
+/** A review in full: gates and areas with evidence, total, feedback with quote_found, sources, lessons. */
+export function printReview(r, print = console.log) {
+  print(`--- review of ${r.brief_id} v${r.version} (brief v${r.brief_version}) · ${r.model_used} · ${r.ms} ms · repairs ${r.repairs_used} · record ${r.record_id} ---`)
+  print('GATES')
+  for (const g of r.gates) print(`  ${g.passed ? 'pass' : 'FAIL'}  ${g.id} (${g.source}): ${g.evidence}`)
+  print('AREAS')
+  for (const a of r.areas) print(`  ${String(a.score).padStart(2)}/10 ×${WEIGHTS[a.id]}  ${a.id}: ${a.evidence}`)
+  print(`TOTAL ${r.total}/100 · ${r.pass ? 'PASS' : 'FAIL'}${r.route_hint ? ` → ${r.route_hint}` : ''}`)
+  print(`FEEDBACK (${r.feedback.length})`)
+  for (const f of r.feedback) print(`  [${f.severity} → ${f.send_to}] ${f.area} · quote_found ${f.quote_found}\n    quote: "${f.quote}"\n    problem: ${f.problem}\n    fix: ${f.fix}${f.claims?.length ? `\n    claims: ${f.claims.join(' | ')}` : ''}`)
+  if (r.fixed_previous.length) {
+    print('FIXED FROM THE PREVIOUS REVIEW')
+    for (const x of r.fixed_previous) print(`  ${x.fixed ? 'fixed' : 'NOT fixed'}: "${x.previous_quote}" — ${x.note}`)
+  }
+  print(`SOURCES CHECKED (${r.sources_checked.length})`)
+  for (const s of r.sources_checked) print(`  ${s.verdict}: ${s.url} — ${s.claim}`)
+  print(`LESSONS (${r.lessons.length})`)
+  for (const l of r.lessons) print(`  - ${l}`)
+  print(`SUMMARY: ${r.summary}`)
+  for (const w of r.warnings ?? []) print(`WARNING: ${w}`)
+}
+
+/** A promo pack in full, with its checks. */
+export function printPromo(r, print = console.log) {
+  const p = r.pack
+  print(`--- promo pack for ${r.brief_id} v${r.version} · ${r.status} · ${r.model_used} · repairs ${r.repairs_used} · record ${r.record_id} ---`)
+  print(`LINKEDIN (${p.linkedin_post.length} chars)\n${p.linkedin_post}`)
+  print(`X THREAD (${p.x_thread.length} posts)`)
+  p.x_thread.forEach((t, i) => print(`  ${i + 1}. (${t.length}) ${t}`))
+  print(`NEWSLETTER (${p.newsletter_blurb.trim().split(/\s+/).length} words)\n${p.newsletter_blurb}`)
+  print('VIDEO SCRIPT')
+  p.video_script.forEach((s, i) => print(`  ${i + 1}. [${s.on_screen_text}] ${s.voiceover}`))
+  print(`COMMUNITY QUESTION\n${p.community_question}`)
+  print(r.problems.length ? `CHECKS: ${r.problems.length} problem(s)\n${r.problems.map((x) => `  - ${x}`).join('\n')}` : 'CHECKS: all passed')
 }
 
 /** Reads one line from the terminal. */
@@ -244,6 +283,25 @@ async function main() {
     const { calls, ...result } = await scoutCommand(args, { config, store, notifier })
     log.info('scout finished', result)
     console.table(calls.map((c) => ({ call: c.call, model: c.model, delivery: c.delivery, ms: c.ms, returned: c.items_returned, kept: c.items_kept, dropped: c.items_dropped, retries: c.retries, error: c.error ? c.error.slice(0, 60) : '' })))
+    return
+  }
+
+  if (args._[0] === 'reviewer' || args._[0] === 'promo') {
+    const mode = args._[0]
+    if (typeof args['brief-id'] !== 'string') throw new Error(`usage: npm run ${mode} -- --brief-id=<id> [--version=<n>] [--brief-version=<n>]${mode === 'reviewer' ? ' [--route]' : ''}`)
+    const params = {
+      brief_id: args['brief-id'],
+      ...(args.version && { version: Number(args.version) }),
+      ...(args['brief-version'] && { brief_version: Number(args['brief-version']) }),
+      ...(mode === 'reviewer' && { route: args.route === true })
+    }
+    const manager = createRunManager({ config })
+    const { run_id } = await manager.startRun({ mode, trigger: 'cli', params })
+    const result = await manager.wait(run_id)
+    if (result.output) (mode === 'reviewer' ? printReview : printPromo)(result.output)
+    else console.table((result.run?.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, summary: String(s.summary).slice(0, 70), error: s.error ? String(s.error).slice(0, 50) : '' })))
+    log.info('run finished', { run_id, status: result.status, summary: result.run?.result_summary, warnings: result.warnings?.length ?? 0 })
+    process.exitCode = result.status === 'succeeded' ? 0 : 1
     return
   }
 

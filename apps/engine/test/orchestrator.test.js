@@ -191,3 +191,16 @@ test('run lock: locks older than 30 min are cleared', async () => {
   assert.equal(locks[0].payload.owner, 'new')
   await lock.release()
 })
+
+test('resume (reviewer mode with route): the loop starts at the review of the saved draft; no Scout or Strategist', async () => {
+  const B = '261018-1400-ABCD'
+  const store = memoryStore()
+  await store.createRecord({ type: 'brief', briefId: B, payload: { brief_id: B, brief_version: 1, titles: ['T'] }, status: 'drafted', version: 1 })
+  await store.createRecord({ type: 'draft', briefId: B, payload: { title: 'T', version: 3, brief_version: 1, post_markdown: '# T\n\nAgent approval pauses a risky step until a person answers.' }, status: 'drafted', version: 3, meta: { brief_version: 1 } })
+  const s = scripted([fail('writer'), { pass: true, total: 88, feedback: [] }])
+  const r = await runPipeline({ config: fakeConfig({ DRY_RUN: 'true' }), store, notifier: fakeNotifier(), agents: s.agents, briefId: B, resume: {} })
+  assert.equal(r.state, 'approved')
+  assert.deepEqual(s.calls, ['reviewer', 'writer', 'reviewer'])
+  const missing = await runPipeline({ config: fakeConfig({ DRY_RUN: 'true' }), store: memoryStore(), notifier: fakeNotifier(), agents: s.agents, briefId: B, resume: {} })
+  assert.match(missing.error, /no brief 261018-1400-ABCD/)
+})

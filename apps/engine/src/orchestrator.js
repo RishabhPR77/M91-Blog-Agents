@@ -11,6 +11,9 @@ import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
 import { runReviewer } from './reviewer/index.js'
 import { runPromo } from './promo/index.js'
+import { loadBrief } from './writer/inputs.js'
+import { loadDraft } from './reviewer/inputs.js'
+import { draftVersion, draftBriefVersion } from './writer/save.js'
 import { emit, throwIfCancelled, CancelledError } from './events.js'
 
 /** Reviewer feedback items for the Strategist: strings become { area, problem }. */
@@ -198,9 +201,10 @@ export async function acquireLock(store, { owner, now = Date.now } = {}) {
 
 /**
  * Runs one pipeline.
+ * resume: { version?, briefVersion? } starts at the review of a saved draft of briefId (reviewer mode, route: true).
  * @param {{ config?, store, notifier, agents?, now?, onState? }} deps
  */
-export async function runPipeline({ config = getConfig(), store, notifier, agents, now = Date.now, briefId = newBriefId(new Date(now())), runId = briefId, lock: useLock = true, signal = null } = {}) {
+export async function runPipeline({ config = getConfig(), store, notifier, agents, now = Date.now, briefId = newBriefId(new Date(now())), runId = briefId, lock: useLock = true, signal = null, resume = null } = {}) {
   agents ??= defaultAgents({ config, store, notifier })
   const limits = config.limits
   const dryRun = config.runtime.dryRun
@@ -287,16 +291,33 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   }
 
   try {
-    await research()
-    await plan()
+    if (resume) {
+      // reviewer mode with route: start the loop at the review of a saved draft (no Scout, no Strategist).
+      const b = await loadBrief(store, briefId, resume.briefVersion)
+      if (!b) throw new Error(`no brief ${briefId}`)
+      brief = b.payload
+      briefVersion = b.payload?.brief_version ?? b.version ?? 1
+      briefRecord = { id: b.id, status: b.status }
+      const d = await loadDraft(store, briefId, { version: resume.version, briefVersion: resume.briefVersion ?? briefVersion })
+      if (!d) throw new Error(`no draft of brief ${briefId}${resume.version ? ` v${resume.version}` : ''}`)
+      draft = { record_id: d.id, version: draftVersion(d), brief_version: draftBriefVersion(d), title: d.payload?.title, draft: d.payload }
+      version = draft.version
+    } else {
+      await research()
+      await plan()
+    }
     setState('drafting')
 
+    let skipWriter = Boolean(resume)
     for (;;) {
-      version++
-      draft = await step('writer', ctx())
-      // The real Writer saves its own draft (and numbers it); a stub's draft is saved here.
-      if (draft?.record_id) version = draft.version
-      else await store.createRecord({ type: 'draft', briefId, payload: draft, status: 'drafted', version, topicGroup: brief?.topic_group ?? null })
+      if (skipWriter) skipWriter = false
+      else {
+        version++
+        draft = await step('writer', ctx())
+        // The real Writer saves its own draft (and numbers it); a stub's draft is saved here.
+        if (draft?.record_id) version = draft.version
+        else await store.createRecord({ type: 'draft', briefId, payload: draft, status: 'drafted', version, topicGroup: brief?.topic_group ?? null })
+      }
       setState('reviewing')
       review = await step('reviewer', ctx())
       reviews++

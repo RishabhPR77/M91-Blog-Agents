@@ -106,7 +106,7 @@ test('one run at a time (409); unknown and not-built modes are refused', async (
   release()
   await s.manager.wait(run_id)
   restore()
-  await assert.rejects(s.manager.startRun({ mode: 'reviewer' }), (e) => e.code === 'not_built' && /not built yet/.test(e.message))
+  await assert.rejects(s.manager.startRun({ mode: 'publish' }), (e) => e.code === 'not_built' && /not built yet/.test(e.message))
   await assert.rejects(s.manager.startRun({ mode: 'writer' }), (e) => e.code === 'bad_params' && /brief_id/.test(e.message))
   await assert.rejects(s.manager.startRun({ mode: 'writer', params: { brief_id: '261018-0700-ZZZZ' } }), (e) => e.code === 'unknown_brief' && e.status === 400)
   await assert.rejects(s.manager.startRun({ mode: 'everything' }), (e) => e.code === 'bad_mode')

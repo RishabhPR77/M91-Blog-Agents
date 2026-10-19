@@ -9,14 +9,17 @@ import { istIso } from './util/time.js'
 import { createStore } from './store.js'
 import { createNotifier } from './notify.js'
 import { withRun, emit, subscribe } from './events.js'
-import { runPipeline, defaultAgents, acquireLock, LockedError } from './orchestrator.js'
+import { runPipeline, defaultAgents, acquireLock, LockedError, summariseOutput } from './orchestrator.js'
+import { runReviewer } from './reviewer/index.js'
+import { loadDraft } from './reviewer/inputs.js'
+import { runPromo, approvedDraft } from './promo/index.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
 import { loadBrief } from './writer/inputs.js'
 
-export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'publish'])
-export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer'])
+export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'publish'])
+export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo'])
 export const TRIGGERS = Object.freeze(['manual', 'cron', 'api', 'cli'])
 const TOP_STEPS = ['scout', 'strategist', 'writer', 'checks', 'reviewer', 'promo', 'designer', 'publisher']
 
@@ -79,6 +82,8 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (dryRun !== undefined && typeof dryRun !== 'boolean') throw new RunError('bad_params', 'dry_run must be true or false')
     if (active) throw new RunError('run_in_progress', `run ${active.runId} is in progress`, 409)
     if (mode === 'writer') await checkWriterParams(params, configForRun(config, { dryRun, params }))
+    if (mode === 'reviewer') await checkReviewerParams(params, configForRun(config, { dryRun, params }))
+    if (mode === 'promo') await checkPromoParams(params, configForRun(config, { dryRun, params }))
 
     const runConfig = configForRun(config, { dryRun, params })
     const runId = newRunId(new Date(now()))
@@ -228,6 +233,33 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
         throw error
       }
     }
+    if (mode === 'reviewer' && params.route) {
+      // Review, then the routing loop (revise / re-brief / sources) until a pass or a limit.
+      const fullAgents = agents ?? defaultAgents({ config: runConfig, store, notifier, agentDeps })
+      const r = await runPipeline({ config: runConfig, store, notifier, agents: fullAgents, now, runId, briefId: params.brief_id, lock: false, signal, resume: { version: params.version, briefVersion: params.brief_version } })
+      const status = r.state === 'approved' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
+      return { status, brief_id: params.brief_id, summary: r.error ?? r.summary ?? `review loop ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
+    }
+    if (mode === 'reviewer' || mode === 'promo') {
+      const agent = mode
+      emit('step.started', { agent, step: agent })
+      try {
+        const deps = { config: runConfig, store }
+        const out = mode === 'reviewer'
+          ? (agents?.reviewer ? (await agents.reviewer({ runId, briefId: params.brief_id, draft: { version: params.version, brief_version: params.brief_version }, config: runConfig })).output : await runReviewer({ briefId: params.brief_id, version: params.version, briefVersion: params.brief_version, runId }, deps))
+          : (agents?.promo ? (await agents.promo({ runId, briefId: params.brief_id, draft: { version: params.version, brief_version: params.brief_version }, config: runConfig })).output : await runPromo({ briefId: params.brief_id, version: params.version, briefVersion: params.brief_version, runId }, deps))
+        emit('step.finished', { agent, step: agent })
+        const s = summariseOutput(agent, out)
+        if (s) emit('step.output', { agent, step: agent, ...s })
+        const summary = mode === 'reviewer'
+          ? `review of ${params.brief_id} ${which(out)}: ${out.summary_line ?? (out.pass ? 'pass' : 'fail')}`
+          : `promo pack ${out.status} for ${params.brief_id} ${which(out)}`
+        return { status: 'succeeded', brief_id: params.brief_id, summary, warnings: out.warnings, output: out }
+      } catch (error) {
+        emit('step.failed', { agent, step: agent, message: error.message })
+        throw error
+      }
+    }
     // strategist
     emit('step.started', { agent: 'strategist', step: 'strategist' })
     try {
@@ -251,6 +283,29 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (params.feedback !== undefined && !Array.isArray(params.feedback)) throw new RunError('bad_params', 'params.feedback must be a list of feedback items')
     const brief = await loadBrief(storeFactory(runConfig), params.brief_id, params.brief_version)
     if (!brief) throw new RunError('unknown_brief', `no brief ${params.brief_id}${params.brief_version ? ` v${params.brief_version}` : ''}`)
+  }
+
+  const positiveInt = (v) => Number.isInteger(v) && v >= 1
+  const which = (out) => (out.version ? `v${out.version}` : 'latest draft')
+  function checkDraftParams(params, mode) {
+    if (typeof params.brief_id !== 'string' || !params.brief_id.trim()) throw new RunError('bad_params', `${mode} mode needs params.brief_id`)
+    if (params.version !== undefined && !positiveInt(params.version)) throw new RunError('bad_params', 'params.version must be a whole number ≥ 1')
+    if (params.brief_version !== undefined && !positiveInt(params.brief_version)) throw new RunError('bad_params', 'params.brief_version must be a whole number ≥ 1')
+  }
+
+  /** reviewer mode: params.brief_id of a brief with a draft (params.version optional; params.route true|false). */
+  async function checkReviewerParams(params, runConfig) {
+    checkDraftParams(params, 'reviewer')
+    if (params.route !== undefined && typeof params.route !== 'boolean') throw new RunError('bad_params', 'params.route must be true or false')
+    const draft = await loadDraft(storeFactory(runConfig), params.brief_id, { version: params.version, briefVersion: params.brief_version })
+    if (!draft) throw new RunError('unknown_draft', `no draft of brief ${params.brief_id}${params.version ? ` v${params.version}` : ''}`)
+  }
+
+  /** promo mode: params.brief_id of a brief with an approved draft. */
+  async function checkPromoParams(params, runConfig) {
+    checkDraftParams(params, 'promo')
+    const draft = await approvedDraft(storeFactory(runConfig), params.brief_id, { version: params.version, briefVersion: params.brief_version })
+    if (!draft) throw new RunError('no_approved_draft', `brief ${params.brief_id} has no approved draft${params.version ? ` v${params.version}` : ''}`)
   }
 
   /** Cancels the active run (Task 4). Returns false if that run isn't running. */

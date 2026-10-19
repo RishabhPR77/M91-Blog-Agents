@@ -197,7 +197,22 @@ async function writer() {
   }
 }
 
-const TESTS = { S1: s1, S2: s2, S3: s3, S4: s4, S5: s5, SCOUT: scout, STRATEGIST: strategist, WRITER: writer }
+async function reviewer() {
+  const { reviewerSmoke } = await import('./reviewer.smoke.js')
+  try {
+    const r = await reviewerSmoke(config)
+    const t = r.tutorial
+    record('REVIEWER tutorial fix', t.awc?.passed && t.sourced === t.blocks ? 'PASS' : 'FAIL', '', t.result.model_used, `${t.blocks} code block(s), ${t.sourced} with a Source line; ${t.awc?.detail}`)
+    record('REVIEWER alone', 'DONE (read the review)', r.review.ms, r.review.model_used, `${r.review.total}/100 · ${r.review.pass ? 'pass' : 'fail'} · ${r.review.feedback.length} items · ${r.review.sources_checked.length} sources`)
+    const hardGate = r.strict.gates.find((g) => g.id === 'checks_hard_passed')
+    const strictOk = !r.strict.pass && hardGate?.passed === false && r.strict.feedback.some((f) => f.severity === 'must')
+    record('REVIEWER strictness', strictOk ? 'PASS' : 'CHECK', r.strict.ms, r.strict.model_used, `${r.strict.total}/100 · checks_hard_passed ${hardGate?.passed} · ${r.strict.feedback.filter((f) => f.severity === 'must').length} must items`)
+  } catch (e) {
+    record('REVIEWER', 'FAIL', '', config.reviewer.model, e.message.split('\n')[0])
+  }
+}
+
+const TESTS = { S1: s1, S2: s2, S3: s3, S4: s4, S5: s5, SCOUT: scout, STRATEGIST: strategist, WRITER: writer, REVIEWER: reviewer }
 for (const name of selected) {
   if (!TESTS[name]) {
     console.error(`Unknown smoke test ${name}`)
