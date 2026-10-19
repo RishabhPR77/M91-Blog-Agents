@@ -1,7 +1,7 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { createRunManager, configForRun, RUN_ID_RE, RunError } from '../src/runs.js'
-import { replay, resetEvents, withRun, CancelledError } from '../src/events.js'
+import { replay, resetEvents, withRun, CancelledError, throwIfCancelled } from '../src/events.js'
 import { stubAgents } from '../src/agents/stubs.js'
 import { createViaSocketClient } from '../src/viasocket.js'
 import { BRIEF_ID_RE } from '../src/util/ids.js'
@@ -155,6 +155,45 @@ test('cancel, then a network error inside the in-flight step: still cancelled, n
   assert.equal(replay(run_id).at(-1).type, 'run.cancelled')
   assert.equal(s.notifier.sent.m91.length, 0)
   assert.deepEqual(s.notifier.sent.slack, [`⏹️ Run ${run_id} cancelled`])
+})
+
+test('a step interrupted by a cancel is recorded as "cancelled", not "failed" (run record, event, run_log)', async () => {
+  const restore = quiet()
+  // As live: the in-flight Scout call finishes, then the next cancel check throws CancelledError inside the step.
+  let finishCall
+  const s = setup({ agents: { scout: async () => { await new Promise((r) => { finishCall = r }); throwIfCancelled(); return stubAgents.scout() } } })
+  const { run_id } = await s.manager.startRun({ mode: 'full' })
+  await new Promise((r) => setImmediate(r))
+  s.manager.cancelRun(run_id)
+  finishCall()
+  const r = await s.manager.wait(run_id)
+  restore()
+  assert.equal(r.status, 'cancelled')
+  assert.deepEqual(r.run.steps.map((x) => [x.name, x.status, x.error]), [['scout', 'cancelled', null]])
+  const ev = replay(run_id).find((e) => e.type === 'step.failed' && e.step === 'scout')
+  assert.equal(ev.data.cancelled, true)
+  assert.equal(ev.message, 'cancelled')
+  const log = recordsOf(s.store, 'run_log').find((l) => l.payload.agent === 'scout')
+  assert.deepEqual([log.payload.result, log.payload.error], ['cancelled', null])
+  // A real failure is still "failed".
+  const f = setup({ agents: { scout: async () => { throw new Error('scout down') } } })
+  const { run_id: id2 } = await f.manager.startRun({ mode: 'full' })
+  const r2 = await f.manager.wait(id2)
+  assert.deepEqual(r2.run.steps.map((x) => [x.name, x.status, x.error]), [['scout', 'failed', 'scout down']])
+})
+
+test('scout mode: a cancel inside the step is recorded as "cancelled"', async () => {
+  const restore = quiet()
+  let finishCall
+  const s = setup({ agents: { scout: async () => { await new Promise((r) => { finishCall = r }); throwIfCancelled(); return stubAgents.scout() } } })
+  const { run_id } = await s.manager.startRun({ mode: 'scout' })
+  await new Promise((r) => setImmediate(r))
+  s.manager.cancelRun(run_id)
+  finishCall()
+  const r = await s.manager.wait(run_id)
+  restore()
+  assert.equal(r.status, 'cancelled')
+  assert.deepEqual(r.run.steps.map((x) => [x.name, x.status]), [['scout', 'cancelled']])
 })
 
 test('scout and strategist modes run just that agent', async () => {

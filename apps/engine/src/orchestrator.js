@@ -14,7 +14,7 @@ import { runPromo } from './promo/index.js'
 import { loadBrief } from './writer/inputs.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { draftVersion, draftBriefVersion } from './writer/save.js'
-import { emit, throwIfCancelled, CancelledError } from './events.js'
+import { emit, throwIfCancelled, CancelledError, isCancel } from './events.js'
 
 /** Reviewer feedback items for the Strategist: strings become { area, problem }. */
 export function strategistFeedback(review) {
@@ -251,8 +251,10 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
       if (summary) emit('step.output', { agent, step: agent, ...summary })
       return output
     } catch (error) {
-      await runLog({ agent, model: null, ms: now() - started, result: 'error', error: error.message })
-      emit('step.failed', { agent, step: agent, message: error.message, data: { ms: now() - started } })
+      // A step interrupted by a cancel is "cancelled", not "failed" (also when a later error follows the cancel).
+      const cancelled = isCancel(error, signal)
+      await runLog({ agent, model: null, ms: now() - started, result: cancelled ? 'cancelled' : 'error', error: cancelled ? null : error.message })
+      emit('step.failed', { agent, step: agent, message: cancelled ? 'cancelled' : error.message, data: { ms: now() - started, ...(cancelled && { cancelled: true }) } })
       throw error
     }
   }

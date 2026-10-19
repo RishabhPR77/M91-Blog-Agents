@@ -39,6 +39,11 @@ export class CancelledError extends Error {
   }
 }
 
+/** Was this error caused by a cancel? (A CancelledError, or any error once the run's signal is aborted.) */
+export function isCancel(error, signal = currentSignal()) {
+  return error instanceof CancelledError || error?.name === 'CancelledError' || Boolean(signal?.aborted)
+}
+
 /** Throws CancelledError when the current run (or the given signal) has been cancelled. */
 export function throwIfCancelled(signal = currentSignal()) {
   if (signal?.aborted) throw new CancelledError()
