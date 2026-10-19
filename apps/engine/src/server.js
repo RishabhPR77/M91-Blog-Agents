@@ -9,12 +9,14 @@ import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { getConfig, ConfigError } from './config.js'
 import { log, mask, registerSecrets, setLevel } from './util/log.js'
-import { createRunManager, RunError, RUN_ID_RE } from './runs.js'
+import { createRunManager, RunError, RUN_ID_RE, BUILT_MODES, DECISION_MODES } from './runs.js'
 import { getStore, RECORD_TYPES } from './store.js'
 import { replay, subscribe, TERMINAL_TYPES } from './events.js'
 import { listPins, addPin, cancelPin, PinError } from './pins.js'
 import { draftsOf, draftVersion, draftBriefVersion } from './writer/save.js'
 import { BRIEF_ID_RE } from './util/ids.js'
+import { reviewOfDraft, hardChecksPassed } from './approval.js'
+import { lessonText } from './lessons.js'
 
 const VERSION = (() => {
   try {
@@ -71,7 +73,13 @@ export function publicSettings(config) {
       timezone: config.content.timezone, reading_grade_intro_max: config.content.readingGradeIntroMax, reading_grade_post_max: config.content.readingGradePostMax
     },
     runtime: { dry_run: config.runtime.dryRun, auto_publish: config.runtime.autoPublish, log_level: config.runtime.logLevel },
-    dashboard: { auth: Boolean(config.dashboard?.auth), port: config.dashboard?.port ?? null }
+    dashboard: { auth: Boolean(config.dashboard?.auth), port: config.dashboard?.port ?? null },
+    approval: config.approval && {
+      max_human_revisions: config.approval.maxHumanRevisions, rereview_after_human: config.approval.rereviewAfterHuman,
+      m91_notify_on_awaiting: config.approval.notifyOnAwaiting
+    },
+    built_modes: [...BUILT_MODES],
+    decision_modes: [...DECISION_MODES]
   }
 }
 
@@ -80,7 +88,9 @@ const KEY_ID_OF = (p = {}) => p.brief_id ?? p.cluster_id ?? p.story_id ?? p.tuto
 
 /** A record with its payload trimmed to key fields. */
 export function trimRecord(r) {
-  return { id: r.id, type: r.type, status: r.status ?? null, brief_id: r.briefId ?? null, date: r.date ?? null, topic_group: r.topicGroup ?? null, version: r.version ?? null, key_id: KEY_ID_OF(r.payload), title: TITLE_OF(r.payload) }
+  // A lesson is plain text, not JSON: its text is the title.
+  const title = r.type === 'lesson' ? lessonText(r).slice(0, 300) : TITLE_OF(r.payload ?? {})
+  return { id: r.id, type: r.type, status: r.status ?? null, brief_id: r.briefId ?? null, date: r.date ?? null, topic_group: r.topicGroup ?? null, version: r.version ?? null, key_id: KEY_ID_OF(r.payload ?? {}), title }
 }
 
 const runSummary = (r) => {
@@ -127,18 +137,23 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     const [d, ...earlier] = drafts
     const p = d.payload ?? {}
     const review = reviewOf(d)
+    // reviewed: the newest review of this version is a pass (the approve rule, Phase 5.5).
+    const reviewed = (await reviewOfDraft(store, d))?.payload?.pass === true
     return {
       brief_id: briefId,
       draft: {
         record_id: d.id, version: draftVersion(d), brief_version: draftBriefVersion(d), status: d.status, waiting_since: d.metadata?.awaiting_since ?? null,
         title: p.title, tldr: p.tldr, seo: p.seo, post_markdown: p.post_markdown, word_count: p.word_count, reading: p.reading,
-        revision_notes: p.revision_notes ?? [], model_used: p.model_used ?? null
+        revision_notes: p.revision_notes ?? [], model_used: p.model_used ?? null,
+        reviewed, hard_passed: hardChecksPassed(d), approved_unreviewed: d.metadata?.approved_unreviewed ?? null
       },
       review: review && { total: review.total, pass: review.pass, gates: review.gates, areas: review.areas, feedback: review.feedback, summary: review.summary, sources_checked: review.sources_checked },
       checks: p.checks?.results ?? [],
       earlier: earlier.map((e) => ({
         version: draftVersion(e), brief_version: draftBriefVersion(e), status: e.status, title: e.payload?.title ?? '',
-        score: reviewOf(e)?.total ?? e.metadata?.review_total ?? null, human_feedback: e.payload?.human_feedback ?? null
+        // score and total are the same number (total is the dashboard's name; score kept for older callers).
+        ...(() => { const t = reviewOf(e)?.total ?? e.metadata?.review_total ?? null; return { score: t, total: t } })(),
+        human_feedback: e.payload?.human_feedback ?? null, record_id: e.id
       }))
     }
   }
@@ -335,6 +350,14 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
 
     // Settings
     if (path === '/api/settings' && method === 'GET') return send(res, 200, publicSettings(config))
+
+    // Lessons (Phase 6): the dashboard can delete one; only lesson records.
+    if (seg[1] === 'lessons' && seg[2] && seg.length === 3 && method === 'DELETE') {
+      const r = await store.getRecord(seg[2])
+      if (!r || r.type !== 'lesson') return fail(res, 404, 'not_found', `no lesson ${seg[2]}`)
+      await store.deleteRecord(r.id)
+      return send(res, 200, { deleted: r.id })
+    }
 
     // Pinned topics
     if (path === '/api/pinned' && method === 'GET') return send(res, 200, { pinned: await listPins(store) })

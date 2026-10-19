@@ -300,7 +300,7 @@ test('approval API: list, detail, approve / revise / reject (202), and the 400 /
     assert.equal(detail.review.total, 91)
     assert.equal(detail.review.summary, 'Good.')
     assert.deepEqual(detail.checks.map((c) => c.id), ['cta_exact'])
-    assert.deepEqual(detail.earlier, [{ version: 1, brief_version: 1, status: 'changes_requested', title: 'Old T', score: 86, human_feedback: { text: 'Shorter.', quotes: [], at: 't0' } }])
+    assert.deepEqual(detail.earlier, [{ version: 1, brief_version: 1, status: 'changes_requested', title: 'Old T', score: 86, total: 86, human_feedback: { text: 'Shorter.', quotes: [], at: 't0' }, record_id: v1.id }])
     assert.equal((await call('GET', '/api/approvals/not-a-brief')).status, 400)
     assert.equal((await call('GET', '/api/approvals/261018-1400-ZZZZ')).status, 404)
 
@@ -367,5 +367,47 @@ test('approval API: approve refuses an unreviewed version (409), force_unreviewe
     // Hard checks failed: never approvable, not even with force_unreviewed.
     const hard = await call('POST', `/api/approvals/${H}/approve`, { force_unreviewed: true })
     assert.deepEqual([hard.status, hard.json.error.code], [409, 'hard_checks_failed'])
+  })
+})
+
+test('Phase 6: settings list built and decision modes and the approval settings (no secrets)', async () => {
+  await withApi({ env: { MAX_HUMAN_REVISIONS: '4', REREVIEW_AFTER_HUMAN: 'false' } }, async ({ call }) => {
+    const s = (await call('GET', '/api/settings')).json
+    assert.ok(s.built_modes.includes('full') && s.built_modes.includes('approval_review'))
+    assert.ok(!s.built_modes.includes('publish'))
+    assert.deepEqual(s.decision_modes, ['approve', 'human_revise', 'reject_topic', 'approval_review'])
+    assert.deepEqual(s.approval, { max_human_revisions: 4, rereview_after_human: false, m91_notify_on_awaiting: false })
+  })
+})
+
+test('Phase 6: approval detail has reviewed, hard_passed, and per earlier version total (= score) and record_id', async () => {
+  const B = '261018-1600-RRRR'
+  await withApi({}, async ({ call, store }) => {
+    await store.createRecord({ type: 'brief', briefId: B, payload: { brief_id: B, brief_version: 1, titles: ['T'] }, status: 'awaiting_human', version: 1 })
+    const v1 = await store.createRecord({ type: 'draft', briefId: B, payload: { title: 'Old', version: 1, brief_version: 1, post_markdown: '# Old' }, status: 'changes_requested', version: 1, meta: { brief_version: 1 } })
+    await store.createRecord({ type: 'review', briefId: B, payload: { version: 1, brief_version: 1, total: 81, pass: true }, status: 'pass', version: 1, meta: { brief_version: 1 } })
+    await store.createRecord({ type: 'draft', briefId: B, payload: { title: 'T', version: 2, brief_version: 1, post_markdown: '# T', checks: { hard_passed: false, results: [] } }, status: 'awaiting_human', version: 2, meta: { brief_version: 1 } })
+    const d = (await call('GET', `/api/approvals/${B}`)).json
+    assert.equal(d.draft.reviewed, false)
+    assert.equal(d.draft.hard_passed, false)
+    assert.deepEqual(d.earlier.map(({ version, score, total, record_id }) => ({ version, score, total, record_id })), [{ version: 1, score: 81, total: 81, record_id: v1.id }])
+    await store.createRecord({ type: 'review', briefId: B, payload: { version: 2, brief_version: 1, total: 90, pass: true }, status: 'pass', version: 2, meta: { brief_version: 1 } })
+    assert.equal((await call('GET', `/api/approvals/${B}`)).json.draft.reviewed, true)
+  })
+})
+
+test('Phase 6: lessons are listed with their text as title and can be deleted; other records 404', async () => {
+  await withApi({}, async ({ call, store }) => {
+    const lesson = await store.createRecord({ type: 'lesson', payload: 'Explain jargon in plain words the first time it appears.', status: null })
+    const brief = await store.createRecord({ type: 'brief', briefId: 'B-2', payload: { brief_id: 'B-2', titles: ['x'] } })
+    const list = (await call('GET', '/api/records?type=lesson')).json.records
+    assert.equal(list[0].title, 'Explain jargon in plain words the first time it appears.')
+    assert.equal((await call('GET', '/api/records?type=source_pack')).status, 200)
+    assert.equal((await call('DELETE', `/api/lessons/${brief.id}`)).status, 404)
+    assert.equal((await call('DELETE', '/api/lessons/mem-nope')).status, 404)
+    const del = await call('DELETE', `/api/lessons/${lesson.id}`)
+    assert.deepEqual([del.status, del.json.deleted], [200, lesson.id])
+    assert.equal((await call('GET', '/api/records?type=lesson')).json.records.length, 0)
+    assert.ok(store.records.has(brief.id))
   })
 })
