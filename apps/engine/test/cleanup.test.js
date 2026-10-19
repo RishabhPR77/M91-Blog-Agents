@@ -94,3 +94,19 @@ test('cleanup command: --delete removes only the given ids (any type); --delete-
   assert.equal(store.records.size, 0, 'explicit ids are deleted, protected or not')
   await assert.rejects(cleanupCommand({ _: ['cleanup'] }, { store, ...io }), /usage: npm run cleanup/)
 })
+
+test('lessons command: --list shows lessons; --delete only deletes a lesson memory', async () => {
+  const { lessonsCommand } = await import('../src/cli.js')
+  const out = []
+  const rows = []
+  const store = memoryStore()
+  await store.addLesson('Explain webhook the first time.', { source: 'reviewer', brief_id: B })
+  const other = await draft(store, 1)
+  await lessonsCommand({ _: ['lessons'], list: true }, { store, print: (s) => out.push(s), table: (t) => rows.push(...t) })
+  assert.equal(rows[0].lesson, 'Explain webhook the first time.')
+  assert.equal(rows[0].source, 'reviewer')
+  const id = rows[0].id
+  await assert.rejects(lessonsCommand({ _: ['lessons'], delete: other.id }, { store, print: () => {} }), /not a lesson memory/)
+  await lessonsCommand({ _: ['lessons'], delete: id }, { store, print: (s) => out.push(s) })
+  assert.ok(!store.records.has(id) && store.records.has(other.id))
+})

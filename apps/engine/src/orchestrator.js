@@ -9,6 +9,7 @@ import { stubAgents } from './agents/stubs.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
+import { runReviewer } from './reviewer/index.js'
 import { emit, throwIfCancelled, CancelledError } from './events.js'
 
 /** Reviewer feedback items for the Strategist: strings become { area, problem }. */
@@ -18,20 +19,33 @@ export function strategistFeedback(review) {
     .filter((f) => !f.send_to || f.send_to === 'strategist')
 }
 
-/** Agents for a real run: the Scout (Phase 2), the Strategist (Phase 3) and the remaining stubs. */
+/** The Writer's last draft as one object (with its version and brief version), or null. */
+const inMemoryDraft = (ctx) => (ctx.draft?.draft ? { ...ctx.draft.draft, version: ctx.draft.version, brief_version: ctx.draft.brief_version } : null)
+
+/** Agents for a real run: Scout, Strategist, Writer and Reviewer (the promo pack is a step of its own). */
 export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = {} }) {
   const deps = { config, store, notifier, ...(agentDeps ?? scoutDeps) }
   return {
     ...stubAgents,
     async scout(ctx) {
       const output = ctx.scoutMode === 'sources'
-        ? await runScout({ mode: 'sources', briefId: ctx.briefId, version: ctx.version, claims: ctx.review?.claims ?? ctx.review?.feedback ?? [], reviewerNote: ctx.review?.note }, deps)
+        ? await runScout({ mode: 'sources', briefId: ctx.briefId, version: ctx.version, claims: ctx.routeClaims ?? ctx.review?.claims ?? [], reviewerNote: ctx.review?.summary }, deps)
         : await runScout({ mode: 'research', runId: ctx.runId }, deps)
       return { model: config.scout.model, output }
     },
     async writer(ctx) {
-      const output = await runWriter({ mode: ctx.writerMode ?? 'new', runId: ctx.runId, briefId: ctx.briefId, briefVersion: ctx.briefVersion, feedback: ctx.writerMode === 'revise' ? ctx.review?.feedback ?? [] : [], sourcePack: ctx.writerMode === 'revise' ? ctx.sourcePack : null, brief: ctx.brief, previousDraft: ctx.draft?.draft ? { ...ctx.draft.draft, version: ctx.draft.version, brief_version: ctx.draft.brief_version } : null }, deps)
+      const output = await runWriter({ mode: ctx.writerMode ?? 'new', runId: ctx.runId, briefId: ctx.briefId, briefVersion: ctx.briefVersion, feedback: ctx.writerMode === 'revise' ? ctx.routeFeedback ?? ctx.review?.feedback ?? [] : [], sourcePack: ctx.writerMode === 'revise' ? ctx.sourcePack : null, brief: ctx.brief, previousDraft: inMemoryDraft(ctx) }, deps)
       return { model: output.model_used ?? config.writer.model, output }
+    },
+    async reviewer(ctx) {
+      // DRY_RUN saves nothing: hand over the in-memory draft, brief, previous review and the Scout's facts.
+      const dry = config.runtime.dryRun
+      const facts = (ctx.leads?.dry_run_records?.m91_facts ?? []).find((r) => r.status === 'current')?.payload
+      const output = await runReviewer({
+        briefId: ctx.briefId, runId: ctx.runId, version: ctx.draft?.version, briefVersion: ctx.draft?.brief_version ?? ctx.briefVersion,
+        draft: dry ? inMemoryDraft(ctx) : null, brief: ctx.brief, previousReview: dry ? ctx.review : null, facts, sourcePack: ctx.sourcePack
+      }, deps)
+      return { model: output.model_used ?? config.reviewer.model, output }
     },
     async strategist(ctx) {
       const output = ctx.strategistMode === 'rebrief'
@@ -77,7 +91,12 @@ export function summariseOutput(agent, out) {
   if (agent === 'strategist' && out.brief_id) {
     return { message: `brief ${out.brief_id} v${out.brief_version}: "${out.title}"`, data: { brief_id: out.brief_id, brief_version: out.brief_version, record_id: out.record_id, lead: out.lead, repairs_used: out.repairs_used } }
   }
-  if (agent === 'reviewer') return { message: out.pass ? `pass (${out.score})` : `fail (${out.score}) → ${out.send_to ?? 'writer'}`, data: { pass: out.pass, score: out.score, send_to: out.send_to ?? null } }
+  if (agent === 'reviewer') {
+    return {
+      message: out.summary_line ?? (out.pass ? `pass (${out.total ?? out.score})` : `fail (${out.total ?? out.score})`),
+      data: { record_id: out.record_id ?? null, pass: out.pass, total: out.total ?? out.score ?? null, route_hint: out.route_hint ?? null }
+    }
+  }
   if (agent === 'writer' && out.record_id) {
     return {
       message: `Draft v${out.version}: ${Number(out.word_count).toLocaleString('en-US')} words · grade ${out.reading?.post_grade} · hard checks ${out.hard_passed ? 'passed' : 'failed'} · repairs ${out.repairs_used}`,
@@ -93,32 +112,48 @@ export function assertTransition(from, to) {
   return to
 }
 
+export const UNVERIFIED_FIX = 'Remove this claim, or say plainly that it could not be verified.'
+
+/** Feedback for the Writer: every "must" item, then "should" items up to maxItems in total. send_to becomes "writer". */
+function writerItems(must, should, maxItems) {
+  const items = [...must, ...should.slice(0, Math.max(0, maxItems - must.length))]
+  return items.map((f) => ({ ...f, send_to: 'writer' }))
+}
+
 /**
- * What to do after a review. counters: { writerRevisions, rebriefs, scoutRetries, rounds }.
- * Returns { action: 'approve' | 'revise' | 'rebrief' | 'rescout' | 'fail', reason? }.
+ * What to do after a review (Phase 5 brief, C1), from the review's "must" items, in this order:
+ * strategist (re-brief) → scout (sources for claims) → writer (revise) → fail. Fallbacks: strategist
+ * items with no re-briefs left go to the Writer as "must" items; scout items with no retries left go
+ * to the Writer with UNVERIFIED_FIX. Every route is one round towards MAX_AI_ROUNDS_PER_POST.
+ * counters: { writerRevisions, rebriefs, scoutRetries, rounds }; limits: config.limits + feedbackMaxItems.
+ * Returns { action: 'approve'|'rebrief'|'rescout'|'revise'|'fail', send_to, reason, feedback?, claims? }.
  */
 export function decideAfterReview(review, counters, limits) {
-  if (review?.pass === true) return { action: 'approve' }
+  if (review?.pass === true) return { action: 'approve', send_to: null, reason: `pass (${review.total ?? review.score ?? '?'})` }
   if (counters.rounds >= limits.maxAiRoundsPerPost) {
-    return { action: 'fail', reason: `hit MAX_AI_ROUNDS_PER_POST (${limits.maxAiRoundsPerPost})` }
+    return { action: 'fail', send_to: null, reason: `hit MAX_AI_ROUNDS_PER_POST (${limits.maxAiRoundsPerPost})` }
   }
-  const route = review?.send_to ?? 'writer'
-  if (route === 'writer') {
-    return counters.writerRevisions < limits.maxWriterRevisions
-      ? { action: 'revise' }
-      : { action: 'fail', reason: `hit MAX_WRITER_REVISIONS (${limits.maxWriterRevisions})` }
+  const feedback = (review?.feedback ?? []).map((f) => (typeof f === 'string' ? { area: 'general', quote: '', problem: f, fix: '', severity: 'must', send_to: 'writer', claims: [] } : f))
+  const must = feedback.filter((f) => f.severity === 'must')
+  const should = feedback.filter((f) => f.severity !== 'must')
+  const maxItems = limits.feedbackMaxItems ?? 8
+  const strat = must.filter((f) => f.send_to === 'strategist')
+  const scout = must.filter((f) => f.send_to === 'scout' && f.claims?.length)
+  const why = (items) => items.map((f) => f.problem).filter(Boolean).slice(0, 2).join('; ')
+
+  if (strat.length && counters.rebriefs < limits.maxStrategistRebriefs) {
+    return { action: 'rebrief', send_to: 'strategist', reason: why(strat), feedback: strat }
   }
-  if (route === 'strategist') {
-    return counters.rebriefs < limits.maxStrategistRebriefs
-      ? { action: 'rebrief' }
-      : { action: 'fail', reason: `hit MAX_STRATEGIST_REBRIEFS (${limits.maxStrategistRebriefs})` }
+  if (scout.length && counters.scoutRetries < limits.maxScoutRetries) {
+    return { action: 'rescout', send_to: 'scout', reason: why(scout), claims: [...new Set(scout.flatMap((f) => f.claims))], feedback: writerItems(must, should, maxItems) }
   }
-  if (route === 'scout') {
-    return counters.scoutRetries < limits.maxScoutRetries
-      ? { action: 'rescout' }
-      : { action: 'fail', reason: `hit MAX_SCOUT_RETRIES (${limits.maxScoutRetries})` }
+  if (counters.writerRevisions < limits.maxWriterRevisions) {
+    // Limits reached upstream: those items go to the Writer instead.
+    const fallback = must.map((f) => (f.send_to === 'scout' ? { ...f, fix: [f.fix, UNVERIFIED_FIX].filter(Boolean).join(' ') } : f))
+    const notes = [strat.length && 'strategist items to the Writer (no re-briefs left)', scout.length && 'unsourced claims to the Writer (no Scout retries left)'].filter(Boolean)
+    return { action: 'revise', send_to: 'writer', reason: [why(must) || 'score below the pass mark', ...notes].join(' · '), feedback: writerItems(fallback, should, maxItems) }
   }
-  return { action: 'fail', reason: `reviewer send_to "${route}" is not writer | strategist | scout` }
+  return { action: 'fail', send_to: null, reason: `hit MAX_WRITER_REVISIONS (${limits.maxWriterRevisions})` }
 }
 
 /** Takes the single run lock in the store. Stale locks (expired or older than 30 min) are cleared. */
@@ -166,7 +201,10 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   let strategistMode = 'plan'
   let writerMode = 'new'
   let briefVersion = 0
-  const ctx = () => ({ runId, briefId, version, round: counters.rounds, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, writerMode, config })
+  let routeFeedback = null
+  let routeClaims = null
+  let best = null
+  const ctx = () => ({ runId, briefId, version, round: counters.rounds, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, writerMode, routeFeedback, routeClaims, config })
 
   const setState = (to) => {
     state = assertTransition(state, to)
@@ -241,25 +279,34 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
 
     for (;;) {
       version++
-      counters.rounds++
       draft = await step('writer', ctx())
-      // The real Writer saves its own draft (and numbers it); the stub's draft is saved here.
+      // The real Writer saves its own draft (and numbers it); a stub's draft is saved here.
       if (draft?.record_id) version = draft.version
       else await store.createRecord({ type: 'draft', briefId, payload: draft, status: 'drafted', version, topicGroup: brief?.topic_group ?? null })
       setState('reviewing')
       review = await step('reviewer', ctx())
-      await store.createRecord({ type: 'review', briefId, payload: review, status: review?.pass ? 'pass' : 'fail', version })
+      // The real Reviewer saves its own review record; a mock's review is saved here.
+      if (!review?.record_id) await store.createRecord({ type: 'review', briefId, payload: review, status: review?.pass ? 'pass' : 'fail', version })
+      const total = review?.total ?? review?.score
+      if (typeof total === 'number') best = best === null || total > best.total ? { total, version, review } : best
 
-      const decision = decideAfterReview(review, counters, limits)
+      throwIfCancelled(signal)
+      const decision = decideAfterReview(review, counters, { ...limits, feedbackMaxItems: config.reviewer.feedbackMaxItems })
+      emit('loop.route', {
+        agent: 'orchestrator',
+        message: decision.action === 'approve' ? `approve: ${decision.reason}` : decision.action === 'fail' ? `stop: ${decision.reason}` : `send_to ${decision.send_to}: ${decision.reason}`,
+        data: { send_to: decision.send_to, action: decision.action, reason: decision.reason, total: total ?? null, version, counters: { ...counters } }
+      })
       if (decision.action === 'approve') {
         setState('approved')
         if (briefRecord?.id) await store.updateRecord(briefRecord.id, undefined, { status: 'approved' })
         break
       }
-      const reason = (review?.feedback ?? []).map((f) => (typeof f === 'string' ? f : f.problem)).filter(Boolean).slice(0, 2).join('; ')
-      emit('loop.route', { agent: 'reviewer', message: decision.action === 'fail' ? `stop: ${decision.reason}` : `send_to ${review?.send_to ?? 'writer'}${reason ? `: ${reason}` : ''}`, data: { send_to: review?.send_to ?? 'writer', action: decision.action, score: review?.score ?? null, round: counters.rounds } })
       if (decision.action === 'fail') throw Object.assign(new Error(decision.reason), { routing: true })
 
+      counters.rounds++
+      routeFeedback = decision.feedback ?? null
+      routeClaims = decision.claims ?? null
       setState('revising')
       if (decision.action === 'revise') {
         counters.writerRevisions++

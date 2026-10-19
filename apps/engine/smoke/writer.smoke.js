@@ -5,7 +5,7 @@
 //   2. check table, words, grades, ms, model    3. first 40 lines of the draft
 //   4. revise with 2 feedback items quoting real sentences: v2, revision notes, H2 lists compared
 //   5. tutorial brief: every code block passed ai_written_code
-// About 6 Writer calls (+ repairs). Steps 6–7 of the brief (pipeline fail_once, API run) are commands.
+// About 6 Writer calls (+ repairs). The pipeline and API runs (Phase 4 steps 6–7) are commands; Phase 5 uses the real Reviewer.
 
 import { runWriter } from '../src/writer/index.js'
 import { draftsOf } from '../src/writer/save.js'

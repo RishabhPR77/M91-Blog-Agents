@@ -29,7 +29,8 @@
     "writer:dry": "cross-env DRY_RUN=true node --env-file=../../.env src/cli.js writer",
     "draft": "node --env-file=../../.env src/cli.js draft",
     "checks": "node --env-file=../../.env src/cli.js checks",
-    "cleanup": "node --env-file=../../.env src/cli.js cleanup"
+    "cleanup": "node --env-file=../../.env src/cli.js cleanup",
+    "lessons": "node --env-file=../../.env src/cli.js lessons"
   },
   "dependencies": {
     "@m91/content": "0.1.0",

@@ -228,14 +228,17 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     return results.map((m) => ({ ...toRecord(m), score: m.score ?? null })).filter((r) => matches(r, filters))
   }
 
-  /** A free-text lesson; Mem0 extracts the facts (infer=true). Returns the add event. */
-  async function addLesson(text) {
+  /**
+   * A free-text lesson; Mem0 extracts the facts and merges similar lessons (infer=true). Returns the add event.
+   * meta: extra metadata, e.g. { source: 'reviewer', brief_id } (Phase 5 C3); type and date are always set.
+   */
+  async function addLesson(text, meta = {}) {
     if (dryRun) {
-      log.info('DRY_RUN: lesson not stored')
+      log.info('DRY_RUN: lesson not stored', { lesson: text, ...meta })
       return { eventId: null, status: 'DRY_RUN' }
     }
     const c = await client()
-    const added = await c.add([{ role: 'user', content: text }], { agentId, metadata: { type: 'lesson', date: istDate() }, infer: true })
+    const added = await c.add([{ role: 'user', content: text }], { agentId, metadata: { ...meta, ...(testTag && { test: true }), type: 'lesson', date: istDate() }, infer: true })
     return { eventId: added?.eventId ?? added?.event_id ?? null, status: added?.status ?? null }
   }
 

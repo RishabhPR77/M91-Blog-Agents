@@ -6,7 +6,7 @@ import { runPipeline, defaultAgents } from '../../src/orchestrator.js'
 import { stubAgents } from '../../src/agents/stubs.js'
 import { createNotifier } from '../../src/notify.js'
 import { AiError } from '../../src/viasocket.js'
-import { fakeConfig, memoryStore, fakeNotifier, fakeFetch } from '../helpers.js'
+import { fakeConfig, memoryStore, fakeNotifier, fakeFetch, mockReviewer } from '../helpers.js'
 import { fakeAi, fakeWeb, fakeChecker, VALID, INVALID, truncated, fatal } from './fixtures.js'
 
 const NOW = Date.parse('2026-10-17T08:35:00Z') // 14:05 IST
@@ -245,7 +245,7 @@ test('orchestrator: the real Scout runs before the Strategist stub, which receiv
   const notifier = fakeNotifier()
   const ai = fakeAi()
   // The real Strategist (Phase 3) has its own pipeline tests; here the stub stands in for it.
-  const agents = { ...defaultAgents({ config, store, notifier, scoutDeps: { aiSend: ai, fetch: fakeWeb(), urlChecker: fakeChecker(), now: () => NOW } }), strategist: stubAgents.strategist, writer: stubAgents.writer }
+  const agents = { ...defaultAgents({ config, store, notifier, scoutDeps: { aiSend: ai, fetch: fakeWeb(), urlChecker: fakeChecker(), now: () => NOW } }), strategist: stubAgents.strategist, writer: stubAgents.writer, reviewer: mockReviewer() }
   const r = await runPipeline({ config, store, notifier, agents, now: () => NOW, briefId: RUN })
   assert.equal(r.state, 'approved')
   assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 2), ['scout', 'strategist'])

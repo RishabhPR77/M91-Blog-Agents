@@ -6,7 +6,7 @@ import { runPipeline, defaultAgents } from '../../src/orchestrator.js'
 import { stubAgents } from '../../src/agents/stubs.js'
 import { createNotifier } from '../../src/notify.js'
 import { AiError, TruncatedError } from '../../src/viasocket.js'
-import { fakeNotifier, fakeFetch, memoryStore } from '../helpers.js'
+import { fakeNotifier, fakeFetch, memoryStore, mockReviewer } from '../helpers.js'
 import { NOW, config, seededStore, validBrief, fakeAi } from './fixtures.js'
 import { STANDING_CLAIMS } from '../../src/strategist/prompts.js'
 
@@ -207,7 +207,7 @@ test('orchestrator: Scout stub → real Strategist → Writer stub; approval mar
   const cfg = config({ DRY_RUN: 'true' })
   const store = await seededStore()
   const notifier = fakeNotifier()
-  const agents = { ...defaultAgents({ config: cfg, store, notifier, agentDeps: { aiSend: fakeAi(), now } }), scout: stubAgents.scout, writer: stubAgents.writer }
+  const agents = { ...defaultAgents({ config: cfg, store, notifier, agentDeps: { aiSend: fakeAi(), now } }), scout: stubAgents.scout, writer: stubAgents.writer, reviewer: mockReviewer() }
   const r = await runPipeline({ config: cfg, store, notifier, agents, now, briefId: '261017-1405-ABCD' })
   assert.equal(r.state, 'approved')
   assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 4), ['scout', 'strategist', 'writer', 'reviewer'])
@@ -225,7 +225,7 @@ test('orchestrator: reviewer send_to strategist → re-brief version 2', async (
     ...defaultAgents({ config: cfg, store, notifier: fakeNotifier(), agentDeps: { aiSend: fakeAi(), now } }),
     scout: stubAgents.scout,
     writer: stubAgents.writer,
-    reviewer: async () => ({ model: 'stub', output: n++ === 0 ? { pass: false, score: 60, feedback: [{ area: 'angle', problem: 'weak angle', send_to: 'strategist' }], send_to: 'strategist' } : { pass: true, score: 90, feedback: [] } })
+    reviewer: async () => ({ model: 'stub', output: n++ === 0 ? { pass: false, total: 60, feedback: [{ area: 'angle', quote: '', problem: 'weak angle', fix: 'sharper angle', severity: 'must', send_to: 'strategist', claims: [] }] } : { pass: true, total: 90, feedback: [] } })
   }
   const r = await runPipeline({ config: cfg, store, notifier: fakeNotifier(), agents, now, briefId: '261017-1405-ABCD' })
   assert.equal(r.state, 'approved')

@@ -1,4 +1,4 @@
-// The Writer in the pipeline: Strategist → Writer → Reviewer stub, with REVIEWER_STUB_MODE.
+// The Writer in the pipeline: Strategist → Writer → Reviewer (an injected mock, or the real one with a fake AI).
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { createRunManager } from '../../src/runs.js'
@@ -7,7 +7,8 @@ import { stubAgents } from '../../src/agents/stubs.js'
 import { replay, resetEvents } from '../../src/events.js'
 import { setSink } from '../../src/util/log.js'
 import { createServer } from '../../src/server.js'
-import { memoryStore, fakeNotifier } from '../helpers.js'
+import { memoryStore, fakeNotifier, mockReviewer } from '../helpers.js'
+import { reviewAnswer, fakeReviewerAi } from '../reviewer/fixtures.js'
 import { NOW, config, brief, draftAnswer, fakeAi, okChecker, BRIEF_ID } from './fixtures.js'
 
 beforeEach(() => resetEvents())
@@ -16,7 +17,7 @@ const quiet = () => setSink(() => {})
 const recordsOf = (store, type) => [...store.records.values()].filter((r) => r.type === type)
 
 /** A run manager whose Strategist saves a real-shaped brief (so the real Writer can load it). */
-function setup(env = {}) {
+function setup(env = {}, reviewer = mockReviewer()) {
   const cfg = config(env)
   const store = memoryStore()
   const notifier = fakeNotifier()
@@ -28,6 +29,7 @@ function setup(env = {}) {
     agentsFactory: (rc, { store: st, notifier: nt }) => ({
       ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend: ai, urlChecker: okChecker(), now } }),
       scout: stubAgents.scout,
+      reviewer,
       async strategist(ctx) {
         const b = brief({ brief_id: ctx.briefId })
         const rec = await st.createRecord({ type: 'brief', briefId: ctx.briefId, payload: b, status: 'new', version: 1, topicGroup: 1 })
@@ -38,7 +40,7 @@ function setup(env = {}) {
   return { cfg, store, notifier, ai, manager }
 }
 
-test('REVIEWER_STUB_MODE=pass: Strategist → Writer v1 → Reviewer → approved; run record has writer and checks steps', async () => {
+test('reviewer passes: Strategist → Writer v1 → Reviewer → approved; run record has writer and checks steps', async () => {
   const restore = quiet()
   const s = setup()
   const { run_id } = await s.manager.startRun({ mode: 'full' })
@@ -54,16 +56,16 @@ test('REVIEWER_STUB_MODE=pass: Strategist → Writer v1 → Reviewer → approve
   assert.equal(recordsOf(s.store, 'brief')[0].status, 'approved')
 })
 
-test('REVIEWER_STUB_MODE=fail_once: Writer v1 → stub fail (2 quoted items) → loop.route → Writer revise v2 → pass', async () => {
+test('reviewer fails once: Writer v1 → fail (must + should, quoted) → loop.route → Writer revise v2 → pass', async () => {
   const restore = quiet()
-  const s = setup({ REVIEWER_STUB_MODE: 'fail_once' })
+  const s = setup({}, mockReviewer(['fail', 'pass']))
   const { run_id } = await s.manager.startRun({ mode: 'full' })
   const r = await s.manager.wait(run_id)
   restore()
   assert.equal(r.status, 'succeeded')
   assert.deepEqual(s.ai.requests.map((q) => q.call), ['new', 'revise'])
   const rev = s.ai.requests[1]
-  assert.match(rev.message, /--- REVIEWER FEEDBACK ---\n\[\{"area":"clarity","quote":"Agent approval means your software stops and asks a person before a risky step\."/)
+  assert.match(rev.message, /--- REVIEWER FEEDBACK ---\n\[\{"area":"simplicity","quote":"Agent approval means your software stops and asks a person before a risky step\."/)
   assert.match(rev.message, /--- QUOTED EXCERPTS ---\n- "Agent approval means/)
   assert.deepEqual(recordsOf(s.store, 'draft').map((d) => [d.version, d.status]).sort(), [[1, 'superseded'], [2, 'drafted']])
   const route = replay(run_id).find((e) => e.type === 'loop.route')
@@ -74,9 +76,9 @@ test('REVIEWER_STUB_MODE=fail_once: Writer v1 → stub fail (2 quoted items) →
   assert.deepEqual(logs.filter((l) => l.agent === 'writer' && l.call).map((l) => l.call), ['new', 'revise'])
 })
 
-test('REVIEWER_STUB_MODE=fail_always: stops at MAX_WRITER_REVISIONS, run failed, LOW alert', async () => {
+test('reviewer always fails: stops at MAX_WRITER_REVISIONS, run failed, LOW alert', async () => {
   const restore = quiet()
-  const s = setup({ REVIEWER_STUB_MODE: 'fail_always', MAX_WRITER_REVISIONS: '2' })
+  const s = setup({ MAX_WRITER_REVISIONS: '2' }, mockReviewer(['fail']))
   const { run_id } = await s.manager.startRun({ mode: 'full' })
   const r = await s.manager.wait(run_id)
   restore()
@@ -119,7 +121,7 @@ test('writer run mode through the API: 202, a draft for the latest brief version
 
 test('DRY_RUN pipeline with fail_once: the Writer works from the in-memory brief and previous draft; nothing but run/run_log saved', async () => {
   const restore = quiet()
-  const cfg = config({ DRY_RUN: 'true', REVIEWER_STUB_MODE: 'fail_once' })
+  const cfg = config({ DRY_RUN: 'true' })
   const store = memoryStore({ dryRun: true })
   const ai = fakeAi({ revise: draftAnswer({ revision_notes: [{ feedback_quote: 'q', what_changed: 'w' }] }) })
   const manager = createRunManager({
@@ -129,6 +131,7 @@ test('DRY_RUN pipeline with fail_once: the Writer works from the in-memory brief
     agentsFactory: (rc, { store: st, notifier: nt }) => ({
       ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend: ai, urlChecker: okChecker(), now } }),
       scout: stubAgents.scout,
+      reviewer: mockReviewer(['fail', 'pass']),
       async strategist(ctx) {
         const b = brief({ brief_id: ctx.briefId })
         const rec = await st.createRecord({ type: 'brief', briefId: ctx.briefId, payload: b, status: 'new', version: 1, topicGroup: 1 })
@@ -144,4 +147,54 @@ test('DRY_RUN pipeline with fail_once: the Writer works from the in-memory brief
   assert.match(ai.requests[1].message, /--- PREVIOUS DRAFT ---\n\{"summary":"Explains agent approval/)
   assert.match(ai.requests[1].threadId, /-v2-revise-/)
   assert.ok([...store.records.values()].every((x) => x.type === 'run' || x.type === 'run_log'))
+})
+
+test('the real Reviewer in the loop (DRY_RUN): fail with a quoted "must" item → loop.route → revise → pass; reviews and lessons not saved', async () => {
+  const restore = quiet()
+  const cfg = config({ DRY_RUN: 'true' })
+  const store = memoryStore({ dryRun: true })
+  const writerAi = fakeAi({ revise: draftAnswer({ revision_notes: [{ feedback_quote: 'A ringing phone gets attention fast.', what_changed: 'w' }] }) })
+  const must = { area: 'simplicity', quote: 'A ringing phone gets attention fast.', problem: 'p', fix: 'f', severity: 'must', send_to: 'writer', claims: [] }
+  const reviewerAi = fakeReviewerAi([reviewAnswer({ scores: { simplicity: 5 }, feedback: [must], lessons: ['Explain jargon.'] }), reviewAnswer({ lessons: ['Short intros.'] })])
+  const aiSend = (opts) => (opts.agent === 'reviewer' ? reviewerAi(opts) : writerAi(opts))
+  const manager = createRunManager({
+    config: cfg,
+    storeFactory: () => store,
+    notifierFactory: () => fakeNotifier(),
+    agentsFactory: (rc, { store: st, notifier: nt }) => ({
+      ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend, urlChecker: okChecker(), now } }),
+      scout: stubAgents.scout,
+      async strategist(ctx) {
+        const b = brief({ brief_id: ctx.briefId })
+        return { model: 'stub', output: { brief_id: ctx.briefId, brief_version: 1, record_id: 'dryrun-1', brief: b, title: b.titles[0], lead: b.lead, repairs_used: 0 } }
+      }
+    })
+  })
+  const { run_id } = await manager.startRun({ mode: 'full' })
+  const r = await manager.wait(run_id)
+  restore()
+  assert.equal(r.status, 'succeeded', r.run.result_summary)
+  assert.deepEqual(reviewerAi.requests.map((q) => q.call), ['review', 'review'])
+  assert.match(reviewerAi.requests[1].message, /--- PREVIOUS REVIEW ---\n\{"feedback":\[\{"area":"simplicity","quote":"A ringing phone gets attention fast\."/)
+  assert.match(writerAi.requests[1].message, /--- REVIEWER FEEDBACK ---\n\[\{"area":"simplicity","quote":"A ringing phone gets attention fast\."/)
+  const reviewSteps = r.run.steps.filter((x) => x.name === 'reviewer')
+  assert.match(reviewSteps[0].summary, /^Score \d+(\.\d)?\/100 · fail · simplicity 5 → writer$/)
+  assert.match(reviewSteps[1].summary, /^Score 90\/100 · pass · gates 10\/10 · 0 should-fix items$/)
+  const routes = replay(run_id).filter((e) => e.type === 'loop.route').map((e) => e.data.action)
+  assert.deepEqual(routes, ['revise', 'approve'])
+  assert.ok([...store.records.values()].every((x) => x.type === 'run' || x.type === 'run_log'))
+  assert.equal(store.lessons.length, 0)
+})
+
+test('lessons: saved per review (at most LESSONS_PER_REVIEW_MAX) with source and brief_id', async () => {
+  const restore = quiet()
+  const { runReviewer } = await import('../../src/reviewer/index.js')
+  const store = memoryStore()
+  const cfg = config({ LESSONS_PER_REVIEW_MAX: '2' })
+  await store.createRecord({ type: 'brief', briefId: BRIEF_ID, payload: brief(), status: 'drafted', version: 1 })
+  const d = { ...draftAnswer(), checks: { hard_passed: true, results: [] }, brief_id: BRIEF_ID, version: 1, brief_version: 1 }
+  await store.createRecord({ type: 'draft', briefId: BRIEF_ID, payload: d, status: 'drafted', version: 1, meta: { brief_version: 1 } })
+  await runReviewer({ briefId: BRIEF_ID }, { config: cfg, store, aiSend: fakeReviewerAi([reviewAnswer({ lessons: ['One.', 'Two.', 'Three.'] })]) })
+  restore()
+  assert.deepEqual(store.lessons, [{ text: 'One.', meta: { source: 'reviewer', brief_id: BRIEF_ID } }, { text: 'Two.', meta: { source: 'reviewer', brief_id: BRIEF_ID } }])
 })

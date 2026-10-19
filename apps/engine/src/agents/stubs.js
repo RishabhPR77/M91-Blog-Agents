@@ -1,4 +1,5 @@
-// Phase 1 placeholder agents: fixed, schema-shaped outputs, no AI calls.
+// Phase 1 placeholder agents: fixed, schema-shaped outputs, no AI calls (tests use them).
+// The Reviewer stub is gone (Phase 5): tests inject a mock reviewer instead (test/helpers.js).
 // Each takes the pipeline context and returns { output, model, ms }.
 
 /** Up to n real sentences (6+ words) from a post's prose lines, for stub feedback quotes. */
@@ -75,21 +76,5 @@ export const stubAgents = {
         context: { version, words: 9 }
       }
     }
-  },
-
-  /**
-   * Reviewer stub (until Phase 5). REVIEWER_STUB_MODE: pass (default) | fail_once (fails the first
-   * draft of the run with 2 feedback items quoting real sentences, then passes) | fail_always.
-   */
-  async reviewer(ctx = {}) {
-    const mode = ctx.config?.reviewer?.stubMode ?? 'pass'
-    const fail = mode === 'fail_always' || (mode === 'fail_once' && (ctx.round ?? 1) <= 1)
-    if (!fail) return { model: STUB_MODEL, output: { pass: true, score: 90, feedback: [], send_to: null } }
-    const quotes = sampleSentences(ctx.draft?.draft?.post_markdown ?? ctx.draft?.post_markdown ?? '', 2)
-    const feedback = [
-      { area: 'clarity', quote: quotes[0] ?? '', problem: 'This sentence is harder to follow than it needs to be.', fix: 'Say it in shorter, plainer words.', severity: 'must', send_to: 'writer' },
-      { area: 'answer_first', quote: quotes[1] ?? '', problem: 'The point comes too late in this part.', fix: 'Put the direct answer first.', severity: 'should', send_to: 'writer' }
-    ]
-    return { model: STUB_MODEL, output: { pass: false, score: 70, feedback, send_to: 'writer' } }
   }
 }

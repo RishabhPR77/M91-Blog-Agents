@@ -6,7 +6,7 @@ import { stubAgents } from '../src/agents/stubs.js'
 import { createViaSocketClient } from '../src/viasocket.js'
 import { BRIEF_ID_RE } from '../src/util/ids.js'
 import { setSink } from '../src/util/log.js'
-import { fakeConfig, memoryStore, fakeNotifier, fakeFetch } from './helpers.js'
+import { fakeConfig, memoryStore, fakeNotifier, fakeFetch, mockReviewer } from './helpers.js'
 
 beforeEach(() => resetEvents())
 const recordsOf = (store, type) => [...store.records.values()].filter((r) => r.type === type)
@@ -18,7 +18,7 @@ function setup({ env = {}, agents = {}, store } = {}) {
   const updates = []
   const update = store.updateRecord.bind(store)
   store.updateRecord = async (id, payload, md) => { if (md?.type === 'run') updates.push(payload.status); return update(id, payload, md) }
-  const manager = createRunManager({ config, storeFactory: () => store, notifierFactory: () => notifier, agentsFactory: () => ({ ...stubAgents, ...agents }) })
+  const manager = createRunManager({ config, storeFactory: () => store, notifierFactory: () => notifier, agentsFactory: () => ({ ...stubAgents, reviewer: mockReviewer(), ...agents }) })
   return { config, store, notifier, manager, updates }
 }
 const quiet = () => setSink(() => {})

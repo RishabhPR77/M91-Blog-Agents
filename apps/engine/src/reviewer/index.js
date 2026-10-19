@@ -131,6 +131,15 @@ export async function runReviewer(params = {}, deps = {}) {
   const record = await store.createRecord({ type: 'review', briefId: params.briefId, payload, status: d.pass ? 'pass' : 'fail', version, date: istDate(), meta: { brief_version: briefVersion, pass: d.pass, total: d.total } })
   if (dry) log.info('DRY_RUN: review not saved', { review: payload })
 
+  // C3: each lesson goes to Mem0 with inference on, so similar lessons merge. DRY_RUN logs them instead.
+  for (const text of d.lessons) {
+    try {
+      await store.addLesson(text, { source: 'reviewer', brief_id: params.briefId })
+    } catch (error) {
+      warnings.push(`lesson not saved (${error.message}): ${text}`)
+    }
+  }
+
   const result = { ...payload, record_id: record.id, route_hint: d.route_hint, low_areas: d.low_areas, warnings, draft_record_id: draftRec.id ?? null }
   result.summary_line = reviewSummaryLine(result)
   return { ...result, calls }

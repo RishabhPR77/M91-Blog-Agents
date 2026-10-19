@@ -5,7 +5,7 @@ import { createRunManager } from '../src/runs.js'
 import { resetEvents } from '../src/events.js'
 import { stubAgents } from '../src/agents/stubs.js'
 import { setSink } from '../src/util/log.js'
-import { fakeConfig, fakeEnv, memoryStore, fakeNotifier } from './helpers.js'
+import { fakeConfig, fakeEnv, memoryStore, fakeNotifier, mockReviewer } from './helpers.js'
 
 beforeEach(() => resetEvents())
 const TRIGGER = 'fake-trigger-key-0123456789'
@@ -21,7 +21,7 @@ async function withApi({ env = {}, agents = {}, keepAliveMs } = {}, fn) {
   const restoreLog = setSink(() => {})
   const config = fakeConfig(env)
   const store = memoryStore()
-  const manager = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => ({ ...stubAgents, ...agents }) })
+  const manager = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => ({ ...stubAgents, reviewer: mockReviewer(), ...agents }) })
   const server = createServer({ triggerKey: TRIGGER, manager, store, config, keepAliveMs })
   await new Promise((r) => server.listen(0, '127.0.0.1', r))
   const base = `http://127.0.0.1:${server.address().port}`

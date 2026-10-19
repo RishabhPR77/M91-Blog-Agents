@@ -9,6 +9,7 @@
 // npm run writer -- --brief-id=<id> [--brief-version=<n>] [--mode=revise --feedback-file=<path.json>]
 // npm run draft -- --show <brief_id> [--version <n> [--brief-version <n>]]  |  --export <brief_id> [--version <n>] --out <file.md>
 // npm run cleanup -- --list | --delete <memory_id …> | --delete-listed   (asks you to type "yes")
+// npm run lessons -- --list | --delete <memory_id>
 // npm run checks -- --file <post.md> --brief-id <id>
 // npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"] | --list | --cancel <pinned_id>
 
@@ -24,6 +25,7 @@ import { log, registerSecrets, setLevel } from './util/log.js'
 import { getStore, createStore } from './store.js'
 import { findCandidates, deleteIds, PROTECTED_TYPES } from './cleanup.js'
 import { extractSnippets } from './writer/snippets.js'
+import { lessonText } from './lessons.js'
 import { createNotifier } from './notify.js'
 import { createRunManager } from './runs.js'
 import { runScout } from './scout/index.js'
@@ -110,6 +112,23 @@ export async function cleanupCommand(args, { store, confirm = ask, print = conso
   throw new Error('usage: npm run cleanup -- --list | --delete <memory_id …> | --delete-listed')
 }
 
+/** npm run lessons -- --list | --delete <memory_id> */
+export async function lessonsCommand(args, { store, print = console.log, table = console.table }) {
+  if (args.list) {
+    const list = (await store.getRecords({ type: 'lesson' })).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    if (!list.length) return print('No lessons yet.')
+    table(list.map((l) => ({ id: l.id, date: l.date ?? '', source: l.metadata?.source ?? '', brief_id: l.metadata?.brief_id ?? '', lesson: lessonText(l).slice(0, 100) })))
+    return print(`${list.length} lesson(s). The Strategist and the Writer get the latest LESSONS_LIMIT of them.`)
+  }
+  if (typeof args.delete === 'string') {
+    const rec = await store.getRecord(args.delete)
+    if (!rec || rec.type !== 'lesson') throw new Error(`${args.delete} is not a lesson memory; nothing deleted`)
+    await store.deleteRecord(args.delete)
+    return print(`Deleted lesson ${args.delete}.`)
+  }
+  throw new Error('usage: npm run lessons -- --list | --delete <memory_id>')
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   let config
@@ -129,6 +148,7 @@ async function main() {
 
   // Clean-up deletes for real even when DRY_RUN=true: it only removes ids you list or confirm.
   if (args._[0] === 'cleanup') return cleanupCommand(args, { store: createStore({ config, dryRun: false }) })
+  if (args._[0] === 'lessons') return lessonsCommand(args, { store: createStore({ config, dryRun: false }) })
 
   if (args._[0] === 'strategist') {
     let scoutResult

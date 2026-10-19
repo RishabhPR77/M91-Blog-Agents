@@ -50,8 +50,6 @@ const DEFAULTS = {
   // Phase 4: Writer
   WRITER_MAX_REPAIRS: '1', WRITER_REVISION_INPUT: 'context', TUTORIAL_SOURCE_MAX_CHARS: '40000', SLACK_POST_DRAFTS: 'false',
   READING_GRADE_HARD_MARGIN: '2', WORDS_HARD_MARGIN_PCT: '20', SLACK_CHUNK_CHARS: '2800',
-  // Temporary until the real Reviewer (Phase 5): pass | fail_once | fail_always
-  REVIEWER_STUB_MODE: 'pass',
   // Phase 5: Reviewer, lessons, promo pack
   REVIEWER_MAX_SOURCE_CHECKS: '5', REVIEW_FEEDBACK_MAX_ITEMS: '8', LESSONS_PER_REVIEW_MAX: '3',
   // Phase 3.5: dashboard API
@@ -248,7 +246,6 @@ export function loadConfig(env = process.env) {
     },
     reviewer: {
       ...agent('reviewer'),
-      stubMode: oneOf('REVIEWER_STUB_MODE', ['pass', 'fail_once', 'fail_always']),
       maxSourceChecks: int('REVIEWER_MAX_SOURCE_CHECKS', { max: 20 }),
       feedbackMaxItems: int('REVIEW_FEEDBACK_MAX_ITEMS', { min: 1, max: 30 }),
       lessonsPerReviewMax: int('LESSONS_PER_REVIEW_MAX', { max: 10 })

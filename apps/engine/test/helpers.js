@@ -1,6 +1,7 @@
 // Shared fixtures for unit tests. All values are fake.
 
 import { loadConfig } from '../src/config.js'
+import { sampleSentences } from '../src/agents/stubs.js'
 
 // Unit tests never touch the network: the real fetch only reaches local test servers.
 const realFetch = globalThis.fetch
@@ -68,6 +69,14 @@ export function memoryStore({ similarity, dryRun = false } = {}) {
       if (metadata.status) r.status = metadata.status
       return r
     },
+    lessons: [],
+    async addLesson(text, meta = {}) {
+      if (dryRun) return { eventId: null, status: 'DRY_RUN' }
+      this.lessons.push({ text, meta })
+      const id = `mem-${++seq}`
+      records.set(id, { id, type: 'lesson', payload: text, briefId: null, status: null, version: null, date: '2026-10-19', metadata: { ...meta, type: 'lesson' } })
+      return { eventId: `evt-${id}`, status: 'PENDING' }
+    },
     async searchSimilar(text, filters = {}) {
       return [...records.values()].filter((r) => matches(r, { type: filters.type })).map((r) => ({ ...r, score: score(text, r) }))
     },
@@ -87,6 +96,31 @@ export function memoryStore({ similarity, dryRun = false } = {}) {
       return [...records.values()].filter((r) => r.type === type)
     }
   }
+}
+
+/**
+ * An injected reviewer for unit tests (the env-controlled stub is gone, Phase 5 C2).
+ * script: entries used in order, the last one repeating: 'pass' | 'fail' | a review object | (ctx, n) => entry.
+ * 'fail' quotes two real sentences of the draft: one "must" and one "should" item for the Writer.
+ */
+export function mockReviewer(script = ['pass']) {
+  let n = 0
+  const fn = async (ctx = {}) => {
+    let s = script[Math.min(n++, script.length - 1)]
+    if (typeof s === 'function') s = s(ctx, n)
+    if (s === 'pass') return { model: 'mock', output: { pass: true, total: 90, feedback: [], summary_line: 'Score 90/100 · pass · gates 10/10 · 0 should-fix items' } }
+    if (s === 'fail') {
+      const quotes = sampleSentences(ctx.draft?.draft?.post_markdown ?? ctx.draft?.post_markdown ?? '', 2)
+      const feedback = [
+        { area: 'simplicity', quote: quotes[0] ?? '', problem: 'This sentence is harder to follow than it needs to be.', fix: 'Say it in shorter, plainer words.', severity: 'must', send_to: 'writer', claims: [] },
+        { area: 'answers_question', quote: quotes[1] ?? '', problem: 'The point comes too late in this part.', fix: 'Put the direct answer first.', severity: 'should', send_to: 'writer', claims: [] }
+      ]
+      return { model: 'mock', output: { pass: false, total: 70, feedback, summary: 'Not yet.', summary_line: 'Score 70/100 · fail · simplicity 6 → writer' } }
+    }
+    return { model: 'mock', output: s }
+  }
+  fn.count = () => n
+  return fn
 }
 
 export function fakeNotifier() {
