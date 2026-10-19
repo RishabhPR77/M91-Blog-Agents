@@ -52,6 +52,7 @@ const DEFAULTS = {
   READING_GRADE_HARD_MARGIN: '2', WORDS_HARD_MARGIN_PCT: '20', SLACK_CHUNK_CHARS: '2800',
   // Phase 5: Reviewer, lessons, promo pack
   REVIEWER_MAX_SOURCE_CHECKS: '5', REVIEW_FEEDBACK_MAX_ITEMS: '8', LESSONS_PER_REVIEW_MAX: '3',
+  SLACK_POST_APPROVED: 'true', PROMO_LINKEDIN_MAX_CHARS: '1300', PROMO_X_POST_MAX_CHARS: '270',
   // Phase 3.5: dashboard API
   DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', PORT: '8080',
   // Designer (Phase 8) and blog + Embarko (Phase 7)
@@ -250,7 +251,11 @@ export function loadConfig(env = process.env) {
       feedbackMaxItems: int('REVIEW_FEEDBACK_MAX_ITEMS', { min: 1, max: 30 }),
       lessonsPerReviewMax: int('LESSONS_PER_REVIEW_MAX', { max: 10 })
     },
-    promo: agent('promo'),
+    promo: {
+      ...agent('promo'),
+      linkedinMaxChars: int('PROMO_LINKEDIN_MAX_CHARS', { min: 100, max: 3000 }),
+      xPostMaxChars: int('PROMO_X_POST_MAX_CHARS', { min: 50, max: 280 })
+    },
     mem0: {
       apiKey: str('MEM0_API_KEY', { required: true }),
       // Not used by the v3 SDK (the API key is project-scoped); kept for reference.
@@ -263,7 +268,8 @@ export function loadConfig(env = process.env) {
       slackWebhookUrl: url('SLACK_POST_WEBHOOK_URL'),
       m91WebhookUrl: url('M91_ALERT_WEBHOOK_URL'),
       sharedKey: str('WEBHOOK_SHARED_KEY'),
-      chunkChars: int('SLACK_CHUNK_CHARS', { min: 500, max: 3900 })
+      chunkChars: int('SLACK_CHUNK_CHARS', { min: 500, max: 3900 }),
+      postApproved: bool('SLACK_POST_APPROVED')
     },
     m91: {
       docsUrl: url('M91_DOCS_URL', { required: true }),

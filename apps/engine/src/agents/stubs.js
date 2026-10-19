@@ -76,5 +76,24 @@ export const stubAgents = {
         context: { version, words: 9 }
       }
     }
+  },
+
+  // Phase 5: a fixed promo pack (tests), shaped like runPromo's output.
+  async promo() {
+    const u = '{{POST_URL}}'
+    return {
+      model: STUB_MODEL,
+      output: {
+        status: 'ok', record_id: null, problems: [], repairs_used: 0, warnings: [],
+        pack: {
+          linkedin_post: `Software can ring a phone when it needs a yes or no.
+${u}`,
+          x_thread: ['A risky step can wait for a person.', 'The phone rings until someone answers.', `Read more: ${u}`],
+          newsletter_blurb: `How a phone call can approve a risky step. ${u}`,
+          video_script: [{ on_screen_text: 'Risky step?', voiceover: 'Pause it.' }, { on_screen_text: 'Phone rings', voiceover: 'A person answers.' }, { on_screen_text: `Read: ${u}`, voiceover: 'Read the post.' }],
+          community_question: 'When should an agent ask a person first?'
+        }
+      }
+    }
   }
 }

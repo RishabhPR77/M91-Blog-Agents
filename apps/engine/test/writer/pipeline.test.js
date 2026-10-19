@@ -29,6 +29,7 @@ function setup(env = {}, reviewer = mockReviewer()) {
     agentsFactory: (rc, { store: st, notifier: nt }) => ({
       ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend: ai, urlChecker: okChecker(), now } }),
       scout: stubAgents.scout,
+      promo: stubAgents.promo,
       reviewer,
       async strategist(ctx) {
         const b = brief({ brief_id: ctx.briefId })
@@ -47,12 +48,12 @@ test('reviewer passes: Strategist → Writer v1 → Reviewer → approved; run r
   const r = await s.manager.wait(run_id)
   restore()
   assert.equal(r.status, 'succeeded')
-  assert.deepEqual(r.run.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['checks', 'succeeded'], ['reviewer', 'succeeded']])
+  assert.deepEqual(r.run.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['checks', 'succeeded'], ['reviewer', 'succeeded'], ['promo', 'succeeded']])
   const writer = r.run.steps.find((x) => x.name === 'writer')
   assert.match(writer.summary, /^Draft v1: \d+ words · grade [\d.]+ · hard checks passed · repairs 0$/)
   assert.ok(writer.record_ids.length >= 1)
   assert.match(r.run.steps.find((x) => x.name === 'checks').summary, /soft warning\(s\), 0 hard failure\(s\)/)
-  assert.deepEqual(recordsOf(s.store, 'draft').map((d) => [d.version, d.status]), [[1, 'drafted']])
+  assert.deepEqual(recordsOf(s.store, 'draft').map((d) => [d.version, d.status]), [[1, 'approved']])
   assert.equal(recordsOf(s.store, 'brief')[0].status, 'approved')
 })
 
@@ -67,7 +68,7 @@ test('reviewer fails once: Writer v1 → fail (must + should, quoted) → loop.r
   const rev = s.ai.requests[1]
   assert.match(rev.message, /--- REVIEWER FEEDBACK ---\n\[\{"area":"simplicity","quote":"Agent approval means your software stops and asks a person before a risky step\."/)
   assert.match(rev.message, /--- QUOTED EXCERPTS ---\n- "Agent approval means/)
-  assert.deepEqual(recordsOf(s.store, 'draft').map((d) => [d.version, d.status]).sort(), [[1, 'superseded'], [2, 'drafted']])
+  assert.deepEqual(recordsOf(s.store, 'draft').map((d) => [d.version, d.status]).sort(), [[1, 'superseded'], [2, 'approved']])
   const route = replay(run_id).find((e) => e.type === 'loop.route')
   assert.equal(route.data.send_to, 'writer')
   assert.equal(route.data.action, 'revise')
@@ -85,8 +86,15 @@ test('reviewer always fails: stops at MAX_WRITER_REVISIONS, run failed, LOW aler
   assert.equal(r.status, 'failed')
   assert.match(r.run.result_summary, /MAX_WRITER_REVISIONS/)
   assert.deepEqual(recordsOf(s.store, 'draft').map((d) => d.version).sort(), [1, 2, 3])
-  assert.equal(s.notifier.sent.m91[0].severity, 'LOW')
   assert.ok(replay(run_id).some((e) => e.type === 'loop.route' && /stop: hit MAX_WRITER_REVISIONS/.test(e.message)))
+  // D3: statuses, the Slack text with the best score and top "must" items, and the LOW M91 alert.
+  const drafts = recordsOf(s.store, 'draft').sort((a, b) => a.version - b.version)
+  assert.equal(drafts[2].status, 'failed_review')
+  assert.equal(recordsOf(s.store, 'brief')[0].status, 'failed')
+  const slack = s.notifier.sent.slack.find((t) => t.startsWith('❌'))
+  assert.match(slack, /^❌ Not approved: \*How agent approval works with a phone call\* after 3 rounds · best score 70\/100\nStopped: hit MAX_WRITER_REVISIONS \(2\)\nNot yet\.\n1\. This sentence is harder to follow than it needs to be\. \("Agent approval means/)
+  assert.deepEqual(s.notifier.sent.m91, [{ title: 'Blog post failed review', description: 'How agent approval works with a phone call — best score 70/100. See Slack.', severity: 'LOW' }])
+  assert.ok(!r.run.steps.some((x) => x.name === 'promo'), 'no promo pack without a pass')
 })
 
 test('writer run mode through the API: 202, a draft for the latest brief version; feedback → revise', async () => {
@@ -131,6 +139,7 @@ test('DRY_RUN pipeline with fail_once: the Writer works from the in-memory brief
     agentsFactory: (rc, { store: st, notifier: nt }) => ({
       ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend: ai, urlChecker: okChecker(), now } }),
       scout: stubAgents.scout,
+      promo: stubAgents.promo,
       reviewer: mockReviewer(['fail', 'pass']),
       async strategist(ctx) {
         const b = brief({ brief_id: ctx.briefId })

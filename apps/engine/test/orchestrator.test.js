@@ -67,7 +67,7 @@ test('decideAfterReview: "must" items choose the route in order strategist → s
   assert.equal(decideAfterReview(fail('editor'), counters(), limits).action, 'revise', 'unknown send_to → the Writer')
 })
 
-test('happy path with stubs: approved, run_log per step, records written, lock released, nothing sent', async () => {
+test('happy path with stubs: approved, run_log per step, records written, lock released, approval line to the notifier', async () => {
   const store = memoryStore()
   const notifier = fakeNotifier()
   const r = await runPipeline({ config: fakeConfig({ DRY_RUN: 'true' }), store, notifier, agents: stubs() })
@@ -75,7 +75,7 @@ test('happy path with stubs: approved, run_log per step, records written, lock r
   assert.equal(r.version, 1)
   assert.equal(store.byType('brief')[0].status, 'approved')
   const logs = store.byType('run_log')
-  assert.deepEqual(logs.map((l) => l.payload.agent), ['scout', 'strategist', 'writer', 'reviewer', 'orchestrator'])
+  assert.deepEqual(logs.map((l) => l.payload.agent), ['scout', 'strategist', 'writer', 'reviewer', 'promo', 'orchestrator'])
   for (const l of logs) {
     for (const k of ['time', 'agent', 'model', 'ms', 'result', 'error']) assert.ok(k in l.payload, `run_log has ${k}`)
     assert.equal(l.briefId, r.briefId)
@@ -84,7 +84,11 @@ test('happy path with stubs: approved, run_log per step, records written, lock r
   assert.equal(store.byType('draft').length, 1)
   assert.equal(store.byType('review').length, 1)
   assert.equal(store.byType('lock').length, 0)
-  assert.equal(notifier.sent.slack.length, 0)
+  // The notifier gets the approval line, the post and the promo preview (the real one only logs them in DRY_RUN).
+  assert.match(notifier.sent.slack[0], /^✅ Approved: \*.+\* · score 90\/100 · v1 · brief /)
+  assert.match(notifier.sent.slack.at(-1), /^Promo pack preview \(ok\):\n\nLinkedIn:\n/)
+  assert.equal(notifier.sent.m91.length, 0)
+  assert.equal(r.summary, 'approved (v1, score 90)')
 })
 
 test('writer revisions up to MAX_WRITER_REVISIONS, then fail + notify', async () => {

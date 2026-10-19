@@ -194,7 +194,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       const agents = agentsFactory?.(runConfig, { store, notifier }) ?? defaultAgents({ config: runConfig, store, notifier, agentDeps })
       const r = await runPipeline({ config: runConfig, store, notifier, agents, now, runId, briefId: params.brief_id ?? newBriefId(new Date(now())), lock: false, signal })
       const status = r.state === 'approved' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
-      return { status, brief_id: r.briefId, summary: r.error ?? `pipeline ${r.state} (version ${r.version ?? 0})`, error: r.error }
+      return { status, brief_id: r.briefId, summary: r.error ?? r.summary ?? `pipeline ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
     }
     const agents = agentsFactory?.(runConfig, { store, notifier })
     if (mode === 'scout') {

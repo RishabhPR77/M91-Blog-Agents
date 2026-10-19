@@ -52,11 +52,11 @@ test('a flow body reporting a failed step is an error', async () => {
   await assert.rejects(createNotifier({ config: fakeConfig(), fetch }).slack('x'), /failed step/)
 })
 
-test('a real send with no webhook URL fails clearly, naming the key', async () => {
+test('a real send with no webhook URL is skipped as "pending flows", naming the key (Phase 5 A4)', async () => {
   const fetch = fakeFetch(() => ({ body: {} }))
   const n = createNotifier({ config: fakeConfig({ SLACK_POST_WEBHOOK_URL: '', M91_ALERT_WEBHOOK_URL: '' }), fetch })
-  await assert.rejects(n.slack('x'), /SLACK_POST_WEBHOOK_URL/)
-  await assert.rejects(n.m91Alert({ title: 'T' }), /M91_ALERT_WEBHOOK_URL/)
+  assert.deepEqual(await n.slack('x'), { skipped: 'pending_flows', key: 'SLACK_POST_WEBHOOK_URL', parts: 1 })
+  assert.deepEqual(await n.m91Alert({ title: 'T' }), { skipped: 'pending_flows', key: 'M91_ALERT_WEBHOOK_URL' })
   assert.equal(fetch.calls.length, 0)
 })
 

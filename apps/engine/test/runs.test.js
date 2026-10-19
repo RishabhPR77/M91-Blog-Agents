@@ -44,7 +44,7 @@ test('full run: run_id format, separate brief_id, run record lifecycle, events, 
   assert.equal(p.mode, 'full')
   assert.equal(p.dry_run, false)
   assert.ok(p.finished_at && p.ms >= 0)
-  assert.deepEqual(p.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['reviewer', 'succeeded']])
+  assert.deepEqual(p.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['reviewer', 'succeeded'], ['promo', 'succeeded']])
   assert.match(p.brief_id, BRIEF_ID_RE)
   assert.notEqual(p.brief_id, run_id)
   assert.ok(s.updates.length >= 8, `updated at step boundaries (${s.updates.length})`)

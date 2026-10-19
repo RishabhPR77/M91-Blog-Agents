@@ -74,12 +74,20 @@ export function createNotifier({ config = getConfig(), fetch = globalThis.fetch 
     return payload
   }
 
+  // Phase 5 A4: until the two viaSocket flows exist, a send with an empty webhook URL is skipped
+  // and reported as "pending flows" instead of failing the run.
+  const pendingFlows = (key, what) => {
+    log.warn(`pending flows: ${key} is empty, ${what} skipped`)
+    return { skipped: 'pending_flows', key }
+  }
+
   async function slack(text) {
     const parts = chunkText(text, config.notify.chunkChars ?? SLACK_PART_MAX)
     if (dryRun) {
       log.info('DRY_RUN: would post to Slack', { parts: parts.length, preview: parts.map((p) => p.slice(0, 200)) })
       return { dryRun: true, parts: parts.length }
     }
+    if (!slackWebhookUrl) return { ...pendingFlows('SLACK_POST_WEBHOOK_URL', `Slack message (${parts.length} part(s))`), parts: parts.length }
     for (const part of parts) await post(slackWebhookUrl, { key: sharedKey, text: part }, 'Slack')
     log.info('slack sent', { parts: parts.length })
     return { dryRun: false, parts: parts.length }
@@ -94,6 +102,7 @@ export function createNotifier({ config = getConfig(), fetch = globalThis.fetch 
       log.info('DRY_RUN: would send M91 alert', { title, severity: level, description: body.description.slice(0, 300) })
       return { dryRun: true }
     }
+    if (!m91WebhookUrl) return pendingFlows('M91_ALERT_WEBHOOK_URL', `M91 alert "${title}"`)
     await post(m91WebhookUrl, body, 'M91')
     log.info('m91 alert sent', { title, severity: level })
     return { dryRun: false }

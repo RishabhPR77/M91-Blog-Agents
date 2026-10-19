@@ -10,6 +10,7 @@ import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
 import { runReviewer } from './reviewer/index.js'
+import { runPromo } from './promo/index.js'
 import { emit, throwIfCancelled, CancelledError } from './events.js'
 
 /** Reviewer feedback items for the Strategist: strings become { area, problem }. */
@@ -46,6 +47,11 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
         draft: dry ? inMemoryDraft(ctx) : null, brief: ctx.brief, previousReview: dry ? ctx.review : null, facts, sourcePack: ctx.sourcePack
       }, deps)
       return { model: output.model_used ?? config.reviewer.model, output }
+    },
+    async promo(ctx) {
+      const dry = config.runtime.dryRun
+      const output = await runPromo({ briefId: ctx.briefId, runId: ctx.runId, version: ctx.draft?.version, briefVersion: ctx.draft?.brief_version ?? ctx.briefVersion, draft: dry ? inMemoryDraft(ctx) : null, brief: ctx.brief }, deps)
+      return { model: output.model_used ?? config.promo.model, output }
     },
     async strategist(ctx) {
       const output = ctx.strategistMode === 'rebrief'
@@ -95,6 +101,12 @@ export function summariseOutput(agent, out) {
     return {
       message: out.summary_line ?? (out.pass ? `pass (${out.total ?? out.score})` : `fail (${out.total ?? out.score})`),
       data: { record_id: out.record_id ?? null, pass: out.pass, total: out.total ?? out.score ?? null, route_hint: out.route_hint ?? null }
+    }
+  }
+  if (agent === 'promo' && out.pack) {
+    return {
+      message: `Promo pack ${out.status}: LinkedIn ${out.pack.linkedin_post.length} chars · X thread ${out.pack.x_thread.length} posts · ${out.pack.video_script.length} video scenes · ${out.problems?.length ?? 0} issue(s)`,
+      data: { record_id: out.record_id ?? null, status: out.status, problems: out.problems?.length ?? 0, repairs_used: out.repairs_used ?? 0 }
     }
   }
   if (agent === 'writer' && out.record_id) {
@@ -204,6 +216,8 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   let routeFeedback = null
   let routeClaims = null
   let best = null
+  let reviews = 0
+  const warnings = []
   const ctx = () => ({ runId, briefId, version, round: counters.rounds, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, writerMode, routeFeedback, routeClaims, config })
 
   const setState = (to) => {
@@ -285,6 +299,7 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
       else await store.createRecord({ type: 'draft', briefId, payload: draft, status: 'drafted', version, topicGroup: brief?.topic_group ?? null })
       setState('reviewing')
       review = await step('reviewer', ctx())
+      reviews++
       // The real Reviewer saves its own review record; a mock's review is saved here.
       if (!review?.record_id) await store.createRecord({ type: 'review', briefId, payload: review, status: review?.pass ? 'pass' : 'fail', version })
       const total = review?.total ?? review?.score
@@ -299,7 +314,6 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
       })
       if (decision.action === 'approve') {
         setState('approved')
-        if (briefRecord?.id) await store.updateRecord(briefRecord.id, undefined, { status: 'approved' })
         break
       }
       if (decision.action === 'fail') throw Object.assign(new Error(decision.reason), { routing: true })
@@ -325,9 +339,10 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
       setState('drafting')
     }
 
+    const summary = await approve()
     await publish()
     await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'approved', error: null })
-    return { briefId, state, version, counters, steps }
+    return { briefId, state, version, counters, steps, summary, warnings }
   } catch (error) {
     // Once a run is cancelled, a later error (e.g. a network failure mid-step) still ends it as cancelled: no failure alert.
     if (error instanceof CancelledError || signal?.aborted) {
@@ -339,10 +354,77 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     if (state !== 'failed') state = 'failed'
     await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'failed', error: error.message })
     log.error('pipeline failed', { briefId, error, counters })
-    await alertFailure(error)
-    return { briefId, state, version, counters, steps, error: error.message }
+    if (error.routing) await failReview(error)
+    else await alertFailure(error)
+    return { briefId, state, version, counters, steps, error: error.message, warnings }
   } finally {
     await lock.release().catch((error) => log.error('could not release run lock', { error }))
+  }
+
+  /** Status update that never fails the run (a warning instead). */
+  async function setStatus(id, status, what) {
+    if (!id) return
+    try {
+      await store.updateRecord(id, undefined, { status })
+    } catch (error) {
+      warnings.push(`could not mark the ${what} ${status}: ${error.message}`)
+    }
+  }
+
+  /** Slack or M91 send that never fails the run; "pending flows" and errors become warnings. */
+  async function send(kind, args) {
+    try {
+      const r = kind === 'slack' ? await notifier.slack(args) : await notifier.m91Alert(args)
+      if (r?.skipped === 'pending_flows') warnings.push(`${kind === 'slack' ? 'Slack message' : 'M91 alert'} skipped: pending flows (${r.key} is empty)`)
+    } catch (error) {
+      warnings.push(`${kind === 'slack' ? 'Slack message' : 'M91 alert'} not sent: ${error.message}`)
+    }
+  }
+
+  function titleOf() {
+    return draft?.title ?? draft?.draft?.title ?? brief?.titles?.[0] ?? briefId
+  }
+
+  // D2: a pass. Statuses → approved, then the promo pack (a promo problem never blocks approval), then Slack.
+  async function approve() {
+    const total = review?.total ?? review?.score ?? null
+    await setStatus(draft?.record_id && !String(draft.record_id).startsWith('dryrun-') ? draft.record_id : null, 'approved', 'draft')
+    await setStatus(briefRecord?.id, 'approved', 'brief')
+    let promo = null
+    if (agents.promo) {
+      try {
+        promo = await step('promo', ctx())
+        if (promo?.status === 'with_issues') warnings.push(...(promo.warnings ?? []))
+      } catch (error) {
+        if (error instanceof CancelledError || signal?.aborted) throw error
+        warnings.push(`promo pack failed (approval stands): ${error.message}`)
+      }
+    }
+    const title = titleOf()
+    await send('slack', `✅ Approved: *${title}* · score ${total}/100 · v${version} · brief ${briefId}`)
+    const markdown = draft?.draft?.post_markdown ?? draft?.post_markdown
+    // DRY_RUN would only log a preview of each part, and log lines become events: no post text in events (E1).
+    if (config.notify.postApproved && markdown && dryRun) log.info('DRY_RUN: approved post not posted to Slack', { chars: markdown.length })
+    else if (config.notify.postApproved && markdown) await send('slack', markdown)
+    if (promo?.pack) await send('slack', `Promo pack preview (${promo.status}):\n\nLinkedIn:\n${promo.pack.linkedin_post}\n\nNewsletter:\n${promo.pack.newsletter_blurb}`)
+    return `approved (v${version}, score ${total})`
+  }
+
+  // D3: limits reached without a pass. Statuses → failed_review / failed, Slack with the best score, LOW M91 alert.
+  async function failReview(error) {
+    await setStatus(draft?.record_id && !String(draft.record_id).startsWith('dryrun-') ? draft.record_id : null, 'failed_review', 'draft')
+    await setStatus(briefRecord?.id, 'failed', 'brief')
+    const title = titleOf()
+    const bestTotal = best?.total ?? '?'
+    const must = (review?.feedback ?? []).filter((f) => typeof f === 'object' && f.severity === 'must').slice(0, 3)
+    const lines = [
+      `❌ Not approved: *${title}* after ${reviews} rounds · best score ${bestTotal}/100`,
+      `Stopped: ${error.message}`,
+      ...(review?.summary ? [review.summary] : []),
+      ...must.map((f, i) => `${i + 1}. ${f.problem}${f.quote ? ` ("${f.quote}")` : ''} → ${f.fix ?? ''}`)
+    ]
+    await send('slack', lines.join('\n'))
+    await send('m91', { title: 'Blog post failed review', description: `${title} — best score ${bestTotal}/100. See Slack.`, severity: 'LOW' })
   }
 
   // Phase 1: publishing is a placeholder. AUTO_PUBLISH=false (or DRY_RUN) means never publish.
@@ -354,10 +436,10 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     log.info('publish placeholder: nothing to publish in Phase 1', { briefId })
   }
 
-  // LOW: the post failed all its retries (a routing limit). MEDIUM: the pipeline crashed.
+  // MEDIUM: the pipeline crashed (a failed review is failReview's LOW alert).
   async function alertFailure(error) {
-    const severity = error.routing ? 'LOW' : 'MEDIUM'
-    const what = error.routing ? 'post failed all retries' : 'pipeline crashed'
+    const severity = 'MEDIUM'
+    const what = 'pipeline crashed'
     const text = `M91 blog pipeline: ${what}\nbrief_id: ${briefId}\nversion: ${version}\nwhen: ${istHuman(new Date(now()))}\nreason: ${error.message}`
     try {
       await notifier.slack(text)
