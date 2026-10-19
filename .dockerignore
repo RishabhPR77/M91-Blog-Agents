@@ -14,7 +14,11 @@ CLAUDE.md
 **/test
 **/smoke
 **/docs
-apps/blog
+apps/blog/dist
+apps/blog/.astro
+apps/blog/samples
+apps/blog/README.md
+apps/blog/src/content/posts/*.json
 apps/engine/viasocket-check.mjs
 **/Dockerfile
 .dockerignore

@@ -39,4 +39,5 @@ The dashboard and the blog are separate npm projects (not workspaces), so each n
 | Engine + dashboard dev servers | `npm run dev:engine` |
 | Blog dev server (http://localhost:4321, sample posts when there are none) | `npm run dev:blog` |
 | Blog production build (into `apps/blog/dist`) | `npm run build:blog` |
+| Publish, unpublish, set-index, rebuild-blog, blog:sync (no AI; see [PUBLISHING.md](apps/engine/docs/PUBLISHING.md)) | `npm run publish --workspace @m91/engine -- --brief-id=<id>` |
 | Any engine script | `npm run <script> --workspace @m91/engine` (e.g. `pipeline:lite`, `scout`, `strategist`, `pin`) |
