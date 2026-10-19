@@ -150,3 +150,20 @@ test('if Mem0 refuses metadata filters, lists fall back to agent/run filters (fi
   assert.ok(!JSON.stringify(lastFilters(s.mem0)).includes('metadata'), 'not tried again')
   restore()
 })
+
+test('a quota or rate limit (429) is thrown as is: filters stay on and no unfiltered retry is sent', async () => {
+  const restore = setSink(() => {})
+  const s = setup({ ttl: 0 })
+  await s.store.createRecord({ type: 'draft', briefId: 'b', payload: {}, version: 1 })
+  const getAll = s.mem0.getAll
+  s.mem0.getAll = async (opts) => {
+    s.mem0.calls.push(['getAll', opts.filters])
+    throw Object.assign(new Error('Usage quota exceeded for this billing period'), { name: 'RateLimitError', errorCode: 'HTTP_429' })
+  }
+  await assert.rejects(s.store.getRecords({ type: 'draft' }), /quota exceeded/)
+  assert.ok(s.mem0.calls.filter((c) => c[0] === 'getAll').every((c) => JSON.stringify(c[1]).includes('metadata')), 'never retried without the metadata filters')
+  s.mem0.getAll = getAll
+  await s.store.getRecords({ type: 'draft' })
+  assert.ok(JSON.stringify(lastFilters(s.mem0)).includes('"metadata"'), 'filters still on afterwards')
+  restore()
+})

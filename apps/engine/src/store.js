@@ -38,6 +38,13 @@ export function isNetworkError(error) {
     error.name === 'TimeoutError' || /socket hang up|network error/i.test(error.message ?? '')
 }
 
+/** Mem0 rejected the request itself (400/422, e.g. a filter it does not support). mem0ai sets errorCode "HTTP_<status>". */
+export function isFilterRefusal(error) {
+  if (!error || isNetworkError(error)) return false
+  const status = Number(error.status ?? error.statusCode ?? String(error.errorCode ?? '').replace(/^HTTP_/, ''))
+  return status === 400 || status === 422
+}
+
 export class StoreError extends Error {
   constructor(message, details) {
     super(message)
@@ -205,7 +212,9 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     try {
       value = await fetchAll(serverFilters(briefId, f))
     } catch (error) {
-      if (isNetworkError(error) || !cache.metadataFilters || !(f.type || f.status)) throw error
+      // Only a refused filter (400/422) falls back; a quota or rate limit (429), auth or server error is thrown
+      // as is, so it never turns the filters off or costs a second request.
+      if (!isFilterRefusal(error) || !cache.metadataFilters || !(f.type || f.status)) throw error
       // Mem0 refused the metadata filter: fall back to agent/run filters (filtered in code) for this process.
       log.warn('Mem0 metadata filters refused; listing without them', { error })
       cache.metadataFilters = false
