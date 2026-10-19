@@ -25,11 +25,19 @@ export class ApprovalError extends Error {
   }
 }
 
-/** The brief's newest draft; throws 409 unless it is awaiting_human. */
-export async function requireAwaiting(store, briefId) {
+/**
+ * The brief's newest draft; throws 409 unless it is awaiting_human.
+ * allowApproved (counter prompts only): an approved draft that is not published may be reopened. A published
+ * draft has the status "published" (the Publisher sets it), so it is refused: unpublish it first.
+ */
+export async function requireAwaiting(store, briefId, { allowApproved = false } = {}) {
   const d = await loadDraft(store, briefId)
   if (!d) throw new ApprovalError('unknown_draft', `no draft of brief ${briefId}`, 404)
-  if (d.status !== 'awaiting_human') throw new ApprovalError('not_awaiting_human', `the latest draft of ${briefId} (v${draftVersion(d)}) is ${d.status ?? 'unknown'}, not awaiting_human`, 409)
+  if (allowApproved && d.status === 'approved') return d
+  if (allowApproved && d.status === 'published') {
+    throw new ApprovalError('published', `the latest draft of ${briefId} (v${draftVersion(d)}) is live on the blog: unpublish it first, then send a counter prompt`, 409)
+  }
+  if (d.status !== 'awaiting_human') throw new ApprovalError('not_awaiting_human', `the latest draft of ${briefId} (v${draftVersion(d)}) is ${d.status ?? 'unknown'}, not awaiting_human${allowApproved ? ' or approved' : ''}`, 409)
   return d
 }
 
@@ -80,7 +88,7 @@ export async function checkDecision(mode, params, { store, config }) {
   if (mode === 'reject_topic' && params.reason !== undefined && (typeof params.reason !== 'string' || params.reason.length > FEEDBACK_MAX_CHARS)) {
     throw new ApprovalError('bad_params', `reason must be text of at most ${FEEDBACK_MAX_CHARS.toLocaleString('en-US')} characters`)
   }
-  const d = await requireAwaiting(store, params.brief_id)
+  const d = await requireAwaiting(store, params.brief_id, { allowApproved: mode === 'human_revise' })
   if (mode === 'human_revise') {
     const missing = (params.quotes ?? []).filter((q) => !quoteFound(d.payload?.post_markdown, q))
     if (missing.length) throw new ApprovalError('quote_not_found', `quote(s) not found in the draft: ${missing.map((q) => `"${q.slice(0, 80)}"`).join(', ')}`)
@@ -220,8 +228,16 @@ export async function runHumanRevise({ briefId, runId, params, config, store, no
   const at = istIso(new Date(now()))
   const quotes = params.quotes ?? []
   const used = await humanRevisionsUsed(store, briefId)
-  await store.updateRecord(d.id, { ...d.payload, human_feedback: { text: params.feedback, quotes, at } }, { status: 'changes_requested', human_feedback_at: at })
-  emit('approval.changes_requested', { agent: 'human', message: `changes requested on v${version}`, data: { brief_id: briefId, version, human_revisions_used: used + 1, max: config.approval.maxHumanRevisions } })
+  // A counter prompt on an approved (not published) draft reopens it: the approval no longer stands, and the
+  // brief waits for the human again until the new version is approved. Who and when are kept on both records.
+  const reopened = d.status === 'approved'
+  const reopen = reopened ? { reopened_by: 'human', reopened_at: at, reopened_from: 'approved' } : {}
+  await store.updateRecord(d.id, { ...d.payload, human_feedback: { text: params.feedback, quotes, at } }, { status: 'changes_requested', human_feedback_at: at, ...reopen })
+  if (reopened) {
+    const briefRec = await loadBrief(store, briefId, briefVersion)
+    if (briefRec?.id) await store.updateRecord(briefRec.id, undefined, { status: 'awaiting_human', ...reopen })
+  }
+  emit('approval.changes_requested', { agent: 'human', message: `changes requested on v${version}${reopened ? ' (reopened from approved)' : ''}`, data: { brief_id: briefId, version, human_revisions_used: used + 1, max: config.approval.maxHumanRevisions, reopened } })
   const r = await runPipeline({
     config, store, notifier, agents, now, runId, briefId, lock: false, signal,
     resume: { version, briefVersion, startAt: 'writer', feedback: humanFeedbackItems(params.feedback, quotes), skipReview: !config.approval.rereviewAfterHuman }

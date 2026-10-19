@@ -137,3 +137,40 @@ test('CODE SNIPPETS shows kinds and numbered lines', () => {
   assert.match(text, /```bash\n 1\| #!\/usr\/bin\/env bash\n 2\| #\n/)
   assert.match(text, /\[S3\] kind: usage_from_comment · language: bash · lines 1-2/)
 })
+
+test('a JSON line range never cuts the example into invalid JSON: the whole snippet goes in instead (S10:L1-L11 from fields.md)', async () => {
+  const { rangeBreaksJson } = await import('../../src/writer/snippets.js')
+  const code = [
+    '{',
+    '  "event": "answered",',
+    '  "at": "2026-10-01T12:14:09.535Z",',
+    '  "alert": { "id": "…", "customId": "deploy-4821", "title": "Deploy 4821 needs approval" },',
+    '  "response": {',
+    '    "label": "Approve", "effect": "SHARED",',
+    '    "by": { "id": "…", "name": "Aryan" },',
+    '    "at": "2026-10-01T12:13:58.000Z",',
+    '    "note": "checked the migration, go ahead",',
+    '    "attachments": []',
+    '  },',
+    '  "idempotencyKey": "<alertId>-<userId>-<generation>"',
+    '}'
+  ].join('\n')
+  const s10 = { id: 'S10', kind: 'block', language: 'json', code, source_url: 'https://m91.msg91.com/api/public/fields.md', source_title: 'Fields' }
+  const bashSnippet = { id: 'S11', kind: 'block', language: 'bash', code: 'a\nb\nc', source_url: 'https://example.com/x.md', source_title: 'X' }
+  const r = replaceSnippetTokens('Here is the answered event:\n[[SNIPPET:S10:L1-L11]]\n\n[[SNIPPET:S10:L5-L11]]\n\n[[SNIPPET:S11:L1-L2]]', [s10, bashSnippet])
+  // L1-L11 and L5-L11 would both be invalid JSON: whole snippet, recorded as widened, no range errors.
+  assert.deepEqual(r.rangeErrors, [])
+  assert.equal(r.widened.length, 2)
+  assert.match(r.widened[0], /^S10:L1-L11 would cut the JSON example into invalid JSON: the whole snippet \(lines 1-13\) was inserted instead$/)
+  assert.deepEqual(r.inserts.map((i) => [i.id, i.from, i.to]), [['S10', null, null], ['S10', null, null], ['S11', 1, 2]])
+  for (const block of [...r.markdown.matchAll(/```json\n([\s\S]*?)```/g)]) assert.doesNotThrow(() => JSON.parse(block[1]))
+  // Non-JSON ranges are untouched; a range that is valid JSON on its own stays a range.
+  assert.equal(rangeBreaksJson(bashSnippet, 1, 2), false)
+  const valid = { ...s10, code: '[\n  1,\n  2\n]' }
+  assert.equal(rangeBreaksJson(valid, 1, 4), false)
+  // A JSON snippet that is not valid JSON as a whole (e.g. with comments) cannot be checked: the range stays.
+  const commented = { ...s10, code: '{\n  // note\n  "a": 1\n}' }
+  assert.equal(rangeBreaksJson(commented, 1, 2), false)
+  // Tokenising for a revision gives back the whole-snippet token.
+  assert.match(tokeniseSnippets(r.markdown, [s10, bashSnippet], r.inserts), /^\[\[SNIPPET:S10\]\]$/m)
+})

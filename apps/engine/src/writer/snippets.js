@@ -205,14 +205,33 @@ export function sourceLabel(s) {
 /** The exact code a token inserts: the whole snippet, or lines from..to (1-based, inclusive), unchanged. */
 export const insertedCode = (s, from, to) => (from ? s.code.split('\n').slice(from - 1, to).join('\n') : s.code)
 
+const isValidJson = (text) => {
+  try {
+    JSON.parse(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * True when a line range would cut a JSON snippet into invalid JSON (the whole snippet parses, the lines don't).
+ * YAML is not checked: there is no YAML parser in the engine.
+ */
+export function rangeBreaksJson(s, from, to) {
+  if (!from || !/^json$/i.test(String(s.language ?? ''))) return false
+  return isValidJson(s.code) && !isValidJson(insertedCode(s, from, to))
+}
+
 const blockFor = (s, from, to) => ['```' + s.language, insertedCode(s, from, to), '```', '', `Source: [${sourceLabel(s)}](${s.source_url})`]
 const tokenFor = (id, from, to) => (from ? `[[SNIPPET:${id}:L${from}-L${to}]]` : `[[SNIPPET:${id}]]`)
 
 /**
  * Replaces each line holding only [[SNIPPET:Sn]] or [[SNIPPET:Sn:La-Lb]] with the exact fenced block
  * (the whole snippet, or lines a..b) and its source line.
- * @returns {{ markdown, used: string[], inserts: {id, from, to, code}[], errors: string[], rangeErrors: string[] }}
- *   errors: unknown ids and tokens not alone on a line; rangeErrors: invalid line ranges.
+ * @returns {{ markdown, used: string[], inserts: {id, from, to, code}[], errors: string[], rangeErrors: string[], widened: string[] }}
+ *   errors: unknown ids and tokens not alone on a line; rangeErrors: invalid line ranges;
+ *   widened: JSON line ranges that would have been invalid JSON, inserted as the whole snippet instead.
  */
 export function replaceSnippetTokens(markdown, snippets) {
   const byId = new Map(snippets.map((s) => [s.id, s]))
@@ -220,6 +239,7 @@ export function replaceSnippetTokens(markdown, snippets) {
   const inserts = []
   const errors = []
   const rangeErrors = []
+  const widened = []
   const out = []
   for (const line of String(markdown ?? '').split('\n')) {
     const m = line.match(TOKEN_LINE)
@@ -230,13 +250,19 @@ export function replaceSnippetTokens(markdown, snippets) {
         out.push(line)
         continue
       }
-      const from = m[2] ? Number(m[2]) : null
-      const to = m[3] ? Number(m[3]) : null
+      let from = m[2] ? Number(m[2]) : null
+      let to = m[3] ? Number(m[3]) : null
       const length = s.code.split('\n').length
       if (from !== null && !(from >= 1 && to >= from && to <= length)) {
         rangeErrors.push(`${m[1]}:L${from}-L${to} is not a valid line range (${m[1]} has lines 1-${length}; the first line must be ≤ the last)`)
         out.push(line)
         continue
+      }
+      // A range must never cut a JSON example into invalid syntax: the whole snippet (still exact) goes in instead.
+      if (rangeBreaksJson(s, from, to)) {
+        widened.push(`${m[1]}:L${from}-L${to} would cut the JSON example into invalid JSON: the whole snippet (lines 1-${length}) was inserted instead`)
+        from = null
+        to = null
       }
       if (!used.includes(s.id)) used.push(s.id)
       inserts.push({ id: s.id, from, to, code: insertedCode(s, from, to) })
@@ -247,7 +273,7 @@ export function replaceSnippetTokens(markdown, snippets) {
     else for (const t of line.matchAll(TOKEN_ANY)) errors.push(`[[SNIPPET:${t[1]}]] must be alone on its own line`)
     out.push(line)
   }
-  return { markdown: out.join('\n'), used, inserts, errors, rangeErrors }
+  return { markdown: out.join('\n'), used, inserts, errors, rangeErrors, widened }
 }
 
 /**

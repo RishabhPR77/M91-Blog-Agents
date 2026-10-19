@@ -18,7 +18,8 @@
 // npm run approvals -- --list
 // npm run approve -- --brief-id=<id> [--force-unreviewed]
 // npm run review -- --brief-id=<id>   one Reviewer call on the waiting version (no routing)
-// npm run revise -- --brief-id=<id> --feedback "<text>" [--quote "<exact sentence>"] …
+// npm run revise -- --brief-id=<id> --feedback "<text>" [--quote "<exact sentence>"] … [--no-rereview]
+//   (also reopens an approved, unpublished draft; --no-rereview skips the Reviewer for this run)
 // npm run reject -- --brief-id=<id> [--reason "<text>"]
 // npm run checks -- --file <post.md> --brief-id <id>
 // npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"] | --list | --cancel <pinned_id>
@@ -346,6 +347,7 @@ async function main() {
       params.feedback = typeof args.feedback === 'string' ? args.feedback : ''
       const quotes = process.argv.slice(2).flatMap((a, i, all) => (a === '--quote' ? [all[i + 1]] : a.startsWith('--quote=') ? [a.slice(8)] : [])).filter(Boolean)
       if (quotes.length) params.quotes = quotes
+      if (args['no-rereview']) params.rereview_after_human = false
     }
     if (mode === 'reject_topic' && typeof args.reason === 'string') params.reason = args.reason
     if (mode === 'approve' && args['force-unreviewed']) params.force_unreviewed = true

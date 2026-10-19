@@ -101,7 +101,7 @@ test('human_revise: draft → changes_requested with human_feedback; Writer revi
   assert.equal(v2.status, 'awaiting_human')
   assert.deepEqual(v2.payload.revision_notes, [{ feedback_quote: 'A ringing phone gets attention fast.', what_changed: 'shortened the first paragraph' }])
   const ev = replay(r.run_id)
-  assert.deepEqual(ev.find((e) => e.type === 'approval.changes_requested').data, { brief_id: BRIEF_ID, version: 1, human_revisions_used: 1, max: 5 })
+  assert.deepEqual(ev.find((e) => e.type === 'approval.changes_requested').data, { brief_id: BRIEF_ID, version: 1, human_revisions_used: 1, max: 5, reopened: false })
   assert.deepEqual(ev.find((e) => e.type === 'approval.waiting').data, { brief_id: BRIEF_ID, version: 2, total: 90 })
 })
 
@@ -153,12 +153,14 @@ test('reject_topic: brief and draft rejected, the lead discarded, the reason sav
   assert.deepEqual(replay(r.run_id).find((e) => e.type === 'approval.rejected').data, { brief_id: BRIEF_ID, version: 1, lead: { kind: 'cluster', id: 'C-1' }, lesson_saved: true })
 })
 
-test('every decision needs a draft that is awaiting_human: otherwise 409', async () => {
+test('every decision needs a draft that is awaiting_human: otherwise 409 (a counter prompt also accepts approved)', async () => {
   const restore = quiet()
   const s = await setup({ draftStatus: 'approved' })
-  for (const [mode, params] of [['approve', {}], ['human_revise', { feedback: 'Shorter please.' }], ['reject_topic', {}]]) {
+  for (const [mode, params] of [['approve', {}], ['reject_topic', {}], ['approval_review', {}]]) {
     await assert.rejects(s.run(mode, params), (e) => e.code === 'not_awaiting_human' && e.status === 409, mode)
   }
+  const c = await setup({ draftStatus: 'changes_requested' })
+  await assert.rejects(c.run('human_revise', { feedback: 'Shorter please.' }), (e) => e.code === 'not_awaiting_human' && e.status === 409)
   restore()
   assert.deepEqual(humanFeedbackItems('t'), [{ source: 'human', area: 'human', quote: '', problem: 't', fix: 't', severity: 'must' }])
   assert.ok(GOOD_MD.includes('A ringing phone gets attention fast.'))
@@ -271,5 +273,39 @@ test('hard content checks must pass in every case: force_unreviewed, a passing r
     await assert.rejects(s.run('approve', params), (e) => e.code === 'hard_checks_failed' && e.status === 409 && /force_unreviewed does not override/.test(e.message), JSON.stringify([opts, params]))
     assert.equal(s.store.records.get(s.draft.id).status, 'awaiting_human')
   }
+  restore()
+})
+
+test('a counter prompt reopens an approved, unpublished draft: reopened_by/at on draft and brief, new version waits for the human', async () => {
+  const restore = quiet()
+  const reviewer = mockReviewer(['pass'])
+  const s = await setup({ draftStatus: 'approved', reviewer, writerAnswers: { revise: draftAnswer({ revision_notes: [{ feedback_quote: '', what_changed: 'Fixed the example.' }] }) } })
+  const briefRec = recordsOf(s.store, 'brief')[0]
+  await s.store.updateRecord(briefRec.id, undefined, { status: 'approved' })
+  const r = await s.run('human_revise', { feedback: 'Fix the broken JSON example.', rereview_after_human: false })
+  restore()
+  assert.equal(r.status, 'succeeded')
+  assert.equal(r.run.result_summary, 'awaiting human approval (v2, not re-reviewed)')
+  const old = s.store.records.get(s.draft.id)
+  assert.equal(old.status, 'changes_requested')
+  assert.equal(old.metadata.reopened_by, 'human')
+  assert.ok(old.metadata.reopened_at)
+  assert.equal(old.metadata.reopened_from, 'approved')
+  assert.equal(old.payload.human_feedback.text, 'Fix the broken JSON example.')
+  const brief = s.store.records.get(briefRec.id)
+  assert.equal(brief.status, 'awaiting_human')
+  assert.equal(brief.metadata.reopened_by, 'human')
+  const v2 = recordsOf(s.store, 'draft').find((d) => d.version === 2)
+  assert.equal(v2.status, 'awaiting_human')
+  assert.equal(reviewer.count(), 0, 'no Reviewer call with rereview_after_human: false')
+  assert.equal(s.ai.requests.length, 1, 'one Writer call')
+  assert.equal(replay(r.run_id).find((e) => e.type === 'approval.changes_requested').data.reopened, true)
+})
+
+test('a counter prompt never reopens a published draft (unpublish first); approve and reject still need awaiting_human', async () => {
+  const restore = quiet()
+  const s = await setup({ draftStatus: 'published' })
+  await assert.rejects(s.run('human_revise', { feedback: 'Shorter please.' }), (e) => e.code === 'published' && e.status === 409 && /unpublish it first/.test(e.message))
+  assert.equal(s.ai.requests.length, 0)
   restore()
 })

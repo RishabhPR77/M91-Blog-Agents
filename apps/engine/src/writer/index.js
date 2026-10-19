@@ -253,6 +253,7 @@ export async function runWriter(params = {}, deps = {}) {
     autoFixes.push(...answer.fixes)
     draft = answer.draft
     const replaced = replaceSnippetTokens(draft.post_markdown, snippets)
+    autoFixes.push(...replaced.widened)
     draft.post_markdown = replaced.markdown
     snippetsUsed = replaced.used
     snippetInserts = replaced.inserts
