@@ -171,7 +171,7 @@ export const fullBriefForWriter = (brief) => Object.fromEntries(Object.entries(b
  */
 export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
   const order = [
-    ['brief', 'BRIEF'], ['briefRules', 'BRIEF RULES'], ['tone', 'TONE'], ['allowedUrls', 'ALLOWED URLS'],
+    ['brief', 'BRIEF'], ['briefRules', 'BRIEF RULES'], ['tone', 'TONE'], ['lessons', 'LESSONS'], ['allowedUrls', 'ALLOWED URLS'],
     ['internalLinks', 'INTERNAL LINKS'], ['interactiveIdeas', 'INTERACTIVE IDEAS'], ['tutorialText', 'TUTORIAL SOURCE TEXT'], ['snippets', 'CODE SNIPPETS'],
     ['previousContext', 'PREVIOUS CONTEXT'], ['previousDraft', 'PREVIOUS DRAFT'], ['feedback', 'REVIEWER FEEDBACK'],
     ['excerpts', 'QUOTED EXCERPTS'], ['sourcePack', 'SOURCE PACK']

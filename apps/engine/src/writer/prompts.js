@@ -19,6 +19,7 @@ TO THE POINT
 SIMPLE
 - A 10-year-old should be able to follow the main idea.
 - Short sentences: about 15 words or fewer on average. One idea per sentence.
+- Before you answer, re-read every sentence: split any sentence over 20 words; replace any long or rare word with a common one; keep one idea per sentence.
 - Paragraphs of at most 3 sentences.
 - Common words. Explain every technical word the first time it appears, in a few plain words.
 - Use an everyday comparison only where it really helps understanding, at most one per section.
@@ -55,6 +56,7 @@ TONE
 === HONESTY RULES (never break these) ===
 - Facts about M91 only from BRIEF m91_facts_to_use. Never say anything listed in BRIEF claims_to_avoid.
 - Link every outside fact with a Markdown link, using ONLY URLs from ALLOWED URLS. Never invent or change a URL.
+- Link text must say what the source is, e.g. "the M91 quickstart" or "Help Net Security's report". Never use "[Source]", "[here]", "[link]", "[this]", "[click here]" or a bare URL as link text.
 - Stories: only the story in the brief, credited exactly as its attribution line says. Never write as if M91 or "we" experienced it. Never write "we've seen", "our customers", "at M91 we" or similar.
 - News: only as "reported by <outlet>", never as established fact.
 - Tutorials: only the steps in the brief. NEVER write code or commands yourself, not even one line. To show code, put a line containing only [[SNIPPET:S<n>]] where it belongs, choosing from CODE SNIPPETS. If no snippet fits a step, describe the step in words. Say plainly what the docs do not cover (the gaps); never fill a gap with a guess.
@@ -72,6 +74,8 @@ export const NEW = `Task: write the first draft of the blog post described in BR
 Follow the outline, keyword plan, tone, word target and reading level in BRIEF.
 {{previous_context_rule}}
 Leave "revision_notes" as an empty list.`
+
+export const LESSONS_LINE = 'Apply the LESSONS from past reviews.'
 
 export const PREVIOUS_CONTEXT_RULE = 'PREVIOUS CONTEXT describes an earlier draft for this topic. Keep what still fits the new brief; follow the new brief where they differ.'
 
@@ -98,7 +102,7 @@ export function repairTail(previousAnswer, problems) {
 export const truncatedProblem = (maxWords) => `Your previous answer was cut off: return the same post, at most ${maxWords} words.`
 
 /** prompt = WRITER_BASE + blank line + the mode prompt, placeholders filled. */
-export function buildWriterPrompt(config, brief, mode, { previousContext = false } = {}) {
+export function buildWriterPrompt(config, brief, mode, { previousContext = false, lessons = false } = {}) {
   const c = config.content
   const base = fill(WRITER_BASE, {
     words_min: brief.word_target?.min ?? c.targetWordsMin,
@@ -111,5 +115,5 @@ export function buildWriterPrompt(config, brief, mode, { previousContext = false
     banned_phrases: BANNED_PHRASES.map((p) => `"${p}"`).join(', ')
   })
   const task = mode === 'revise' ? REVISE : fill(NEW, { previous_context_rule: previousContext ? PREVIOUS_CONTEXT_RULE : '' })
-  return `${base}\n\n${task}`
+  return `${base}\n\n${task}${lessons ? `\n${LESSONS_LINE}` : ''}`
 }

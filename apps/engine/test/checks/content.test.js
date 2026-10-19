@@ -42,7 +42,7 @@ test('the good fixture passes every hard check and the main soft checks', () => 
   const r = run(GOOD, { statuses: new Map([[urlKey(ISSUE), 'ok'], [urlKey(LLMS), 'ok'], [urlKey(CTA), 'blocked']]) })
   assert.deepEqual(hardProblems(r.results), [])
   assert.equal(r.hard_passed, true)
-  for (const id of ['outline_match', 'words_target', 'reading_post', 'sentence_length', 'paragraph_length', 'answer_first', 'links_count', 'keyword_first_100', 'keyword_title_h1_slug', 'keyword_count', 'exclamations', 'legal_framing', 'claims_soft', 'block_code_lang', 'block_no_html', 'block_approval_sequence', 'block_choices_bold']) {
+  for (const id of ['outline_match', 'words_target', 'reading_post', 'sentence_length', 'paragraph_length', 'answer_first', 'links_count', 'keyword_first_100', 'keyword_title_h1_slug', 'keyword_count', 'exclamations', 'legal_framing', 'claims_soft', 'block_code_lang', 'inline_code_known', 'block_approval_sequence', 'block_choices_bold']) {
     assert.equal(get(r, id)?.passed, true, `${id}: ${JSON.stringify(get(r, id))}`)
   }
   assert.ok(r.word_count >= 180 && r.word_count <= 500, `words ${r.word_count}`)
@@ -60,7 +60,15 @@ const hardCases = [
   ['reading_post_hard', (md) => md.replace('Agent approval is a pause before a risky action. The agent waits for a person to decide.', 'Asynchronous authorization orchestration necessitates deterministic correlation of heterogeneous infrastructural confirmations, comprehensively guaranteeing unambiguous accountability characteristics throughout administrative organizational hierarchies. '.repeat(14)), {}],
   ['links_allowed', (md) => md.replace(ISSUE, 'https://made-up.example.com/page'), {}],
   ['links_alive', (md) => md, { statuses: new Map([[urlKey(ISSUE), 'dead']]) }],
-  ['cta', (md) => md.replace('(https://m91.msg91.com/signup)', '(https://m91.msg91.com/llms.txt)'), {}],
+  ['cta_exact', (md) => md.replace('(https://m91.msg91.com/signup)', '(https://m91.msg91.com/llms.txt)'), {}],
+  ['cta_exact', (md) => md.replace('(https://m91.msg91.com/signup)', '(https://m91.msg91.com/signup/)'), {}],
+  ['cta_exact', (md) => md + '\n## One more section\n\nNothing here.\n', {}],
+  ['link_text', (md) => md.replace('[one framework handles it]', '[Source]'), {}],
+  ['link_text', (md) => md.replace('[one framework handles it]', '[click here]'), {}],
+  ['link_text', (md) => md.replace('[one framework handles it](https://github.com/example/agents/issues/1)', 'https://github.com/example/agents/issues/1'), {}],
+  ['link_text', (md) => md.replace('[one framework handles it]', '[https://github.com/example/agents/issues/1]'), {}],
+  ['raw_html', (md) => md.replace('Your software then decides what to do.', 'Your software then <b>decides</b> what to do.'), {}],
+  ['raw_html', (md) => md.replace('Your software then decides what to do.', 'Your software then decides.<br/>'), {}],
   ['banned_phrases', (md) => md.replace('A pause keeps', 'Let\'s dive in: a pause keeps'), {}],
   ['first_person', (md) => md.replace('A ringing phone', "We've seen that a ringing phone"), {}],
   ['claims_hard', (md) => md.replace('M91 only carries the answer.', 'M91 executes the step for you.'), {}],
@@ -100,7 +108,6 @@ const softCases = [
   ['keyword_count', (md) => md + '\nagent approval, agent approval, agent approval, agent approval, agent approval.\n'],
   ['exclamations', (md) => md.replace('Try it on one action today.', 'Try it on one action today!')],
   ['legal_framing', (md) => md.replace('Test it with your own phone first.', 'This is not legal advice. Test it first.')],
-  ['block_no_html', (md) => md.replace('Your software then decides what to do.', 'Your software then <b>decides</b> what to do.')],
   ['block_approval_sequence', (md) => md.replace(/1\. Your software asks.*?4\. Your software continues\./s, 'Your software asks, the phone rings, a person decides.')],
   ['block_choices_bold', (md) => md.replace('**If you approve**', 'If you approve')]
 ]
@@ -142,6 +149,15 @@ test('ai_written_code (every post): snippet code passes, a changed parameter fai
   assert.equal(get(run(withCode('./scripts/m91.sh --title "Deploy?" --respond'), { b: tb, snippets }), 'tutorial_gaps').passed, true)
   assert.equal(get(run(GOOD, { b: tb, snippets }), 'tutorial_gaps').passed, false)
   assert.equal(get(run(withCode('./scripts/m91.sh --title "Deploy?" --respond'), { b: tb, snippets }), 'block_steps_numbered').passed, true)
+})
+
+test('raw HTML inside a code block is fine; descriptive link text passes', () => {
+  const { snippets } = extractSnippets('=== SOURCE: https://m91.msg91.com/llms.txt ===\n```text\n<b>bold</b>\n```')
+  const md = GOOD.replace('## How do I start?\n', '## How do I start?\n\nThis shows the tag.\n\n```text\n<b>bold</b>\n```\n')
+  const r = run(md, { snippets })
+  assert.equal(get(r, 'raw_html').passed, true)
+  assert.equal(get(r, 'link_text').passed, true)
+  assert.equal(get(run(GOOD.replace('[one framework handles it]', "[Help Net Security's report]")), 'link_text').passed, true)
 })
 
 test('snippet_unknown is hard; inline_code_known is soft and accepts words from the brief or snippets', () => {

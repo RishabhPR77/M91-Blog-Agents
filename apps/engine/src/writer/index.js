@@ -7,7 +7,8 @@ import { randomCode } from '../util/ids.js'
 import { createViaSocketClient, TruncatedError } from '../viasocket.js'
 import { emit, throwIfCancelled, CancelledError } from '../events.js'
 import { createUrlChecker } from '../scout/checks.js'
-import { runContentChecks, hardProblems, urlKey, parseMarkdown } from '../checks/content.js'
+import { runContentChecks, hardProblems, urlKey, parseMarkdown, ctaVariantKey } from '../checks/content.js'
+import { latestLessons } from '../lessons.js'
 import { DEFAULT_CTA_TEXT } from '../strategist/prompts.js'
 import { writer_draft, draftSchemaErrors } from './schemas.js'
 import { buildWriterPrompt, repairTail, truncatedProblem } from './prompts.js'
@@ -45,6 +46,17 @@ export function autoFixDraft(draft, { config, brief }) {
     fixes.push('added the missing H1 title')
   }
   const ctaUrl = config.m91.ctaUrl
+  // A link to the CTA page that differs only in http/https, host case or a trailing slash becomes exactly M91_CTA_URL.
+  const ctaKey = ctaVariantKey(ctaUrl)
+  if (ctaKey) {
+    let n = 0
+    md = md.replace(/\]\((\S+?)\)/g, (all, u) => {
+      if (u === ctaUrl || ctaVariantKey(u) !== ctaKey) return all
+      n++
+      return `](${ctaUrl})`
+    })
+    if (n) fixes.push(`rewrote ${n} CTA link(s) to exactly M91_CTA_URL`)
+  }
   if (ctaUrl && !/^##\s+what to do next/im.test(md)) {
     md = `${md.trimEnd()}\n\n## What to do next\n\n[${brief.cta?.text || DEFAULT_CTA_TEXT}](${ctaUrl})\n`
     fixes.push('appended the missing "What to do next" CTA section')
@@ -106,12 +118,14 @@ export async function runWriter(params = {}, deps = {}) {
   const { snippets, text: tokenisedSource } = extractSnippets(snippetSource)
   const allowed = allowedUrlSet(brief, { sourcePack: params.sourcePack, ctaUrl: config.m91.ctaUrl, snippets })
   const tone = await toneSection(store, brief, config)
+  const lessons = await latestLessons(store, config.strategist.lessonsLimit)
   const drafts = await draftsOf(store, params.briefId)
   const previous = drafts.find((d) => (d.version ?? d.payload?.version) < version) ??
     (inMemoryPrev ? { version: inMemoryPrev.version, payload: inMemoryPrev } : null)
 
   const sections = {
     tone: tone.text,
+    lessons: lessons.length ? lessons.map((l) => `- ${l}`).join('\n') : null,
     allowedUrls: allowed.list.map((u) => `- ${u}`).join('\n'),
     internalLinks: brief.internal_links?.length ? JSON.stringify(brief.internal_links.map(({ url, anchor_text }) => ({ url, anchor_text }))) : null,
     interactiveIdeas: brief.interactive_ideas?.length ? JSON.stringify(brief.interactive_ideas) : null,
@@ -140,7 +154,7 @@ export async function runWriter(params = {}, deps = {}) {
     sections.sourcePack = pack.length ? JSON.stringify(pack) : null
   }
 
-  const prompt = buildWriterPrompt(config, brief, mode, { previousContext })
+  const prompt = buildWriterPrompt(config, brief, mode, { previousContext, lessons: lessons.length > 0 })
 
   // ---------- AI calls ----------
   async function runLog(entry) {

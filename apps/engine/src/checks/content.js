@@ -8,6 +8,21 @@ import { normaliseCode } from '../writer/snippets.js'
 
 export const urlKey = (u) => String(u ?? '').trim().replace(/\/+$/, '').toLowerCase()
 const norm = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9?]+/g, ' ').trim()
+// Link text that says nothing about the source (Phase 5 A2.3).
+export const VAGUE_LINK_TEXT = Object.freeze(['source', 'sources', 'here', 'link', 'this', 'click here', 'read more'])
+// Raw HTML tags in Markdown prose (autolinks like <https://…> are not HTML).
+const htmlTags = (text) => (String(text).match(/<\/?[a-z][a-z0-9]*(\s[^>]*)?\/?>/gi) ?? []).filter((t) => !/^<https?:/i.test(t))
+
+/** URL key for the CTA auto-fix: ignores http/https, the host's letter case and a trailing slash. */
+export function ctaVariantKey(u) {
+  try {
+    const x = new URL(String(u ?? '').trim())
+    return `${x.hostname.toLowerCase()}${x.port ? ':' + x.port : ''}${x.pathname.replace(/\/+$/, '')}${x.search}${x.hash}`
+  } catch {
+    return null
+  }
+}
+
 const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'are', 'not', 'does', 'how', 'what', 'your', 'you', 'its', 'into', 'about', 'docs', 'explain', 'there', 'their', 'which'])
 
 // ---------- Markdown parsing ----------
@@ -225,8 +240,17 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
     }
   })
   R('links_count', outside.length >= 2 || docsOnly, 'soft', outside.length, docsOnly ? 'tutorial relying on M91 docs' : 'distinct outside sources')
-  const ctaOk = Boolean(ctaUrl) && Boolean(p.cta) && p.cta.lines.some((l) => [...l.matchAll(/\]\((\S+?)\)/g)].some((m) => urlKey(m[1]) === urlKey(ctaUrl)))
-  R('cta', ctaOk, 'hard', ctaOk ? 1 : 0, p.cta ? (ctaUrl ? 'CTA link in "What to do next"' : 'M91_CTA_URL is not set') : 'no "What to do next" section')
+  // The last section must link to exactly M91_CTA_URL (near misses are fixed before the checks run).
+  const last = p.sections[p.sections.length - 1]
+  const ctaOk = Boolean(ctaUrl) && Boolean(last) && last.lines.some((l) => [...l.matchAll(/\]\((\S+?)\)/g)].some((m) => m[1] === ctaUrl))
+  R('cta_exact', ctaOk, 'hard', ctaOk ? 1 : 0, !ctaUrl ? 'M91_CTA_URL is not set' : !last ? 'no H2 sections' : ctaOk ? `CTA link in "${last.heading}"` : `the last section ("${last.heading}") has no link to exactly M91_CTA_URL`)
+  const vague = p.links.filter((l) => {
+    const t = l.text.trim().toLowerCase().replace(/[.:!]+$/, '')
+    return !t || VAGUE_LINK_TEXT.includes(t) || /^(https?:\/\/|www\.)/.test(t) || t === l.url.toLowerCase()
+  })
+  R('link_text', vague.length === 0, 'hard', vague.length, vague.length ? `link text must name the source: ${vague.slice(0, 3).map((l) => (l.text ? `[${l.text}](${l.url})` : `bare URL ${l.url}`)).join(', ')}` : 'ok')
+  const html = htmlTags(p.rawText)
+  R('raw_html', html.length === 0, 'hard', html.length, html.length ? `raw HTML outside code: ${html.slice(0, 3).join(' ')}` : 'ok')
 
   // Phrases and claims (prose + headings, never code)
   const phraseText = [p.rawText, ...p.h1, ...p.h2.map((h) => h.text), ...p.h3].join('\n')
@@ -311,8 +335,6 @@ export function blockFriendly(p, md, brief, isTutorial) {
   const ideas = (brief?.interactive_ideas ?? []).map((i) => i.block_type)
   const untagged = p.code.filter((b) => !b.lang).length
   out.push({ id: 'block_code_lang', passed: untagged === 0, value: untagged, detail: `${p.code.length} code block(s), ${untagged} without a language tag` })
-  const html = (p.rawText.match(/<\/?[a-z][a-z0-9]*(\s[^>]*)?>/gi) ?? []).filter((t) => !/^<https?:/i.test(t))
-  out.push({ id: 'block_no_html', passed: html.length === 0, value: html.length, detail: html.slice(0, 3).join(' ') || 'ok' })
   if (isTutorial || ideas.includes('steps_checklist')) out.push({ id: 'block_steps_numbered', passed: p.numberedLists > 0, value: p.numberedLists, detail: 'steps as a numbered list' })
   if (brief?.format === 'comparison' || ideas.includes('comparison_table') || brief?.topic_group === 5) out.push({ id: 'block_comparison_table', passed: p.tables > 0, value: p.tables, detail: 'comparison as a Markdown table' })
   if (ideas.some((i) => ['phone_ring_sim', 'escalation_timeline', 'agent_terminal_replay'].includes(i))) out.push({ id: 'block_approval_sequence', passed: p.numberedLists > 0, value: p.numberedLists, detail: 'approval flow as a numbered sequence of moments' })

@@ -101,6 +101,40 @@ test('automatic fixes: fenced JSON string, missing H1, missing CTA, http→https
   assert.equal(notes.length, 4)
 })
 
+test('CTA auto-fix: a near-miss CTA URL (slash, host case, http) becomes exactly M91_CTA_URL; another URL is left alone', () => {
+  for (const near of ['https://m91.msg91.com/signup/', 'https://M91.MSG91.com/signup', 'http://m91.msg91.com/signup']) {
+    const d = { title: 'T', post_markdown: `# T\n\nIntro.\n\n## What to do next\n\n[Try M91](${near})\n` }
+    const notes = autoFixDraft(d, { config: config(), brief: brief() })
+    assert.ok(d.post_markdown.includes(`[Try M91](${CTA})`), `${near} → ${d.post_markdown}`)
+    // (http on an M91 docs host is already fixed by the docs-host rewrite.)
+    assert.ok(notes.some((n) => /rewrote 1 CTA link\(s\) to exactly M91_CTA_URL|rewrote http:\/\/m91\.msg91\.com links to https/.test(n)), notes.join(' | '))
+  }
+  const other = { title: 'T', post_markdown: '# T\n\nIntro.\n\n## What to do next\n\n[Try M91](http://M91-site.example.com/start/)\n' }
+  autoFixDraft(other, { config: config({ M91_CTA_URL: 'https://m91-site.example.com/start' }), brief: brief() })
+  assert.ok(other.post_markdown.includes('[Try M91](https://m91-site.example.com/start)'), other.post_markdown)
+  const d = { title: 'T', post_markdown: `# T\n\nIntro.\n\n## What to do next\n\n[Try M91](https://m91.msg91.com/SIGNUP)\n` }
+  autoFixDraft(d, { config: config(), brief: brief() })
+  assert.ok(d.post_markdown.includes('(https://m91.msg91.com/SIGNUP)'), 'path case is not a near miss')
+})
+
+test('prompt has the simplicity re-read and link-text rules; LESSONS section and line only when lessons exist', async () => {
+  const restore = quiet()
+  const none = await setup()
+  await none.run()
+  const q0 = none.ai.requests[0]
+  assert.match(q0.prompt, /Before you answer, re-read every sentence: split any sentence over 20 words;/)
+  assert.match(q0.prompt, /Never use "\[Source\]", "\[here\]", "\[link\]", "\[this\]", "\[click here\]" or a bare URL as link text\./)
+  assert.doesNotMatch(q0.prompt, /Apply the LESSONS/)
+  assert.doesNotMatch(q0.message, /--- LESSONS ---/)
+  const store = await seededStore()
+  for (const [text, date] of [['Explain webhook the first time.', '2026-10-01'], ['Keep intros to two sentences.', '2026-10-15']]) await store.createRecord({ type: 'lesson', payload: text, date })
+  const s = await setup({ store, env: { LESSONS_LIMIT: '1' } })
+  await s.run()
+  restore()
+  assert.match(s.ai.requests[0].prompt, /\nApply the LESSONS from past reviews\.$/)
+  assert.match(s.ai.requests[0].message, /--- LESSONS ---\n- Keep intros to two sentences\.\n--- ALLOWED URLS ---/)
+})
+
 test('repair: a hard failure gets one repair call listing the problems, then passes', async () => {
   const restore = quiet()
   const bad = draftAnswer({ post_markdown: GOOD_MD.replace('A pause keeps', "We've seen that a pause keeps") })
