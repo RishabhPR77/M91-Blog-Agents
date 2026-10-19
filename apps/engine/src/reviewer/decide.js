@@ -68,15 +68,15 @@ export function decide(answer, { markdown, checkResults = [], allowedUrls = null
   const { passAreaMin } = config.gates
   const aiGates = GATE_IDS.map((id) => ({ ...answer.gates.find((g) => g.id === id), source: 'ai' }))
   const areas = AREA_IDS.map((id) => answer.areas.find((a) => a.id === id))
-  const sources = answer.sources_checked ?? []
-
-  // Web use can only be limited by the prompt (viaSocket's web access is always on): check it afterwards.
-  if (allowedUrls) {
-    const outside = sources.filter((s) => !allowedUrls.has(urlKey(s.url)))
-    if (outside.length) warnings.push(`Reviewer checked URL(s) outside ALLOWED URLS: ${outside.map((s) => s.url).join(', ')}`)
-  }
+  // Web use can only be limited by the prompt (viaSocket's web access is always on), so code enforces
+  // it afterwards (Phase 5.5 A2): a check of a page outside ALLOWED URLS is dropped, so its verdict can
+  // never affect the decision (e.g. the sources_contradicted gate).
+  const checked = answer.sources_checked ?? []
+  const outside = allowedUrls ? checked.filter((s) => !allowedUrls.has(urlKey(s.url))) : []
+  const sources = checked.filter((s) => !outside.includes(s))
+  if (outside.length) warnings.push(`dropped ${outside.length} source check(s) of URL(s) outside ALLOWED URLS: ${outside.map((s) => `${s.url} (${s.verdict})`).join(', ')}`)
   const max = config.reviewer.maxSourceChecks
-  if (sources.length > max) warnings.push(`Reviewer checked ${sources.length} sources; REVIEWER_MAX_SOURCE_CHECKS is ${max}`)
+  if (checked.length > max) warnings.push(`Reviewer checked ${checked.length} sources; REVIEWER_MAX_SOURCE_CHECKS is ${max}`)
 
   const gates = [...aiGates, ...codeGates({ checkResults, sourcesChecked: sources })]
   const total = computeTotal(areas)

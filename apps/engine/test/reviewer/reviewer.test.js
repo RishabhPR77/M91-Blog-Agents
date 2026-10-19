@@ -76,11 +76,26 @@ test('route hint from "must" items: strategist, then scout with claims, then wri
   assert.deepEqual(w.feedback[0].claims, [])
 })
 
-test('web use is checked after the fact: URLs outside ALLOWED URLS and too many checks are warnings', () => {
-  const sources = Array.from({ length: 6 }, (_, i) => ({ url: i ? `https://m91.msg91.com/p${i}` : 'https://elsewhere.example.com/x', claim: 'c', verdict: 'supports' }))
-  const d = decide(reviewAnswer({ sources }), ctx({ allowedUrls: new Set(['https://m91.msg91.com/p1']) }))
-  assert.ok(d.warnings.some((w) => /outside ALLOWED URLS: https:\/\/elsewhere\.example\.com\/x/.test(w)))
-  assert.ok(d.warnings.some((w) => /checked 6 sources; REVIEWER_MAX_SOURCE_CHECKS is 5/.test(w)))
+test('web limit (A2): a source check outside ALLOWED URLS is dropped and never trips sources_contradicted; too many checks warn', () => {
+  const allowed = new Set(['https://m91.msg91.com/llms.txt'])
+  const sources = [
+    { url: 'https://m91.msg91.com', claim: 'The CTA URL is reachable.', verdict: 'contradicts' },
+    { url: 'https://m91.msg91.com/llms.txt', claim: 'rings until answered', verdict: 'supports' }
+  ]
+  const d = decide(reviewAnswer({ sources }), ctx({ allowedUrls: allowed }))
+  assert.deepEqual(d.sources_checked.map((x) => x.url), ['https://m91.msg91.com/llms.txt'])
+  assert.equal(d.gates.find((g) => g.id === 'sources_contradicted').passed, true)
+  assert.equal(d.pass, true)
+  assert.ok(d.warnings.some((w) => w.includes('dropped 1 source check(s) of URL(s) outside ALLOWED URLS: https://m91.msg91.com (contradicts)')), d.warnings.join(' | '))
+  // An allowed source that contradicts still fails the gate.
+  const bad = decide(reviewAnswer({ sources: [{ ...sources[1], verdict: 'contradicts' }] }), ctx({ allowedUrls: allowed }))
+  assert.equal(bad.gates.find((g) => g.id === 'sources_contradicted').passed, false)
+  const many = Array.from({ length: 6 }, (_, i) => ({ url: `https://m91.msg91.com/p${i}`, claim: 'c', verdict: 'supports' }))
+  assert.ok(decide(reviewAnswer({ sources: many }), ctx()).warnings.some((w) => /checked 6 sources; REVIEWER_MAX_SOURCE_CHECKS is 5/.test(w)))
+})
+
+test('prompt: links in the post outside ALLOWED URLS are reported, not opened', () => {
+  assert.ok(buildReviewerPrompt(cfg).includes('Do not open any other page.\nIf a link in the post is not in ALLOWED URLS, do not open it; report it as a "must" feedback item instead.\n'))
 })
 
 test('schema: exactly one entry per gate and area id', () => {
