@@ -26,8 +26,9 @@ export async function loadBrief(store, briefId, briefVersion) {
 }
 
 /** Every URL the post may link to (brief 6.5). Returns a Set of urlKey()s plus the plain list. */
-export function allowedUrlSet(brief, { sourcePack = null, ctaUrl } = {}) {
+export function allowedUrlSet(brief, { sourcePack = null, ctaUrl, snippets = [] } = {}) {
   const urls = [
+    ...snippets.map((s) => s.source_url),
     ...(brief.sources ?? []).map((s) => s.url),
     ...(brief.m91_facts_to_use ?? []).map((f) => f.source_url),
     brief.story?.use ? brief.story.source_url : null,
@@ -69,12 +70,47 @@ export async function toneSection(store, brief, config) {
  * (both through the GitHub API). Capped at maxChars (whole pages kept; the last one cut).
  */
 export async function tutorialSourceText(brief, { config, fetch = globalThis.fetch, timeoutMs = 15000 }) {
-  const urls = [...new Map((brief.tutorial?.steps ?? []).map((s) => [urlKey(s.source_url), s.source_url])).values()]
+  const urls = (brief.tutorial?.steps ?? []).map((s) => s.source_url)
+  const { text } = await fetchSourcePages(urls, { config, fetch, timeoutMs, onError: (url, error) => {
+    throw new WriterInputError(`tutorial source ${url} could not be fetched (${error.message}); no tutorial without its source text`)
+  } })
+  if (!text) throw new WriterInputError('the tutorial has no fetchable source text (M91 docs or the skill repository)')
+  return text
+}
+
+// At most this many cited docs pages are fetched for a non-tutorial post's snippets.
+const CITED_PAGES_MAX = 4
+
+/**
+ * Snippet source for a post that is not a tutorial (Phase 5 A1.6): the M91 docs pages and skill
+ * repository files the brief cites, so any code it shows comes from them. A page that fails to load
+ * is skipped with a warning (the post then describes code in words).
+ */
+export async function citedDocsSourceText(brief, { config, fetch = globalThis.fetch, timeoutMs = 15000, warnings = [] }) {
+  const urls = [
+    ...(brief.sources ?? []).map((s) => s.url),
+    ...(brief.m91_facts_to_use ?? []).map((f) => f.source_url),
+    ...(brief.outline ?? []).flatMap((s) => s.source_urls ?? [])
+  ]
+  const { text } = await fetchSourcePages(urls, { config, fetch, timeoutMs, maxPages: CITED_PAGES_MAX, onError: (url, error) => warnings.push(`snippet source ${url} not fetched (${error.message})`) })
+  return text
+}
+
+/**
+ * Fetches each M91 docs page or skill repository file once, in order: docs pages directly, the
+ * repository root as its README and a file in it through the GitHub API. Other URLs are skipped
+ * (the Writer may cite them, but gets no code from them). Capped at TUTORIAL_SOURCE_MAX_CHARS
+ * (whole pages kept; the last one cut). Returns { text, urls }.
+ */
+export async function fetchSourcePages(rawUrls, { config, fetch = globalThis.fetch, timeoutMs = 15000, maxPages = Infinity, onError }) {
+  const urls = [...new Map(rawUrls.filter(Boolean).map((u) => [urlKey(u), u])).values()]
   const repo = parseRepo(config.m91.skillRepoUrl)
   const hosts = config.scout.docsHosts
   const parts = []
+  const used = []
   let chars = 0
   for (const url of urls) {
+    if (used.length >= maxPages) break
     let text
     try {
       const u = new URL(url)
@@ -87,21 +123,23 @@ export async function tutorialSourceText(brief, { config, fetch = globalThis.fet
         }
         return null
       })()
-      if (!res) continue // not an M91 docs page or skill repo file: the Writer may cite it but gets no code from it
+      if (!res) continue
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const body = await res.text()
       text = /^\s*<(!doctype|html)/i.test(body) ? htmlToText(body) : body.trim()
     } catch (error) {
-      throw new WriterInputError(`tutorial source ${url} could not be fetched (${error.message}); no tutorial without its source text`)
+      if (error instanceof WriterInputError) throw error
+      onError?.(url, error)
+      continue
     }
     const block = `${sourceHeader(url)}\n${text}`
     const room = config.writer.tutorialSourceMaxChars - chars
     if (room <= 0) break
     parts.push(block.length > room ? block.slice(0, room) : block)
+    used.push(url)
     chars += Math.min(block.length, room)
   }
-  if (!parts.length) throw new WriterInputError('the tutorial has no fetchable source text (M91 docs or the skill repository)')
-  return parts.join('\n\n')
+  return { text: parts.join('\n\n'), urls: used }
 }
 
 /** The paragraph of `markdown` containing `quote` (case- and space-insensitive), or null. */
@@ -134,7 +172,7 @@ export const fullBriefForWriter = (brief) => Object.fromEntries(Object.entries(b
 export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
   const order = [
     ['brief', 'BRIEF'], ['briefRules', 'BRIEF RULES'], ['tone', 'TONE'], ['allowedUrls', 'ALLOWED URLS'],
-    ['internalLinks', 'INTERNAL LINKS'], ['interactiveIdeas', 'INTERACTIVE IDEAS'], ['tutorialText', 'TUTORIAL SOURCE TEXT'],
+    ['internalLinks', 'INTERNAL LINKS'], ['interactiveIdeas', 'INTERACTIVE IDEAS'], ['tutorialText', 'TUTORIAL SOURCE TEXT'], ['snippets', 'CODE SNIPPETS'],
     ['previousContext', 'PREVIOUS CONTEXT'], ['previousDraft', 'PREVIOUS DRAFT'], ['feedback', 'REVIEWER FEEDBACK'],
     ['excerpts', 'QUOTED EXCERPTS'], ['sourcePack', 'SOURCE PACK']
   ]

@@ -1,4 +1,5 @@
-// Writer prompts — exact text from the Phase 4 brief, section 8.
+// Writer prompts — exact text from the Phase 4 brief, section 8, with the Phase 5 changes (A1, A2).
+// Two lines that told the model to write fenced code now point to [[SNIPPET:Sn]] lines instead.
 
 import { fill } from '../scout/prompts.js'
 import { BANNED_PHRASES } from '../checks/phrases.js'
@@ -22,7 +23,7 @@ SIMPLE
 - Common words. Explain every technical word the first time it appears, in a few plain words.
 - Use an everyday comparison only where it really helps understanding, at most one per section.
 - Reading level: the TL;DR and the first paragraph at about grade {{intro_grade}} or lower; the whole post at about grade {{post_grade}} or lower.
-- Code goes in its own fenced block, with one plain sentence before it saying what it does.
+- Before code, one plain sentence saying what it does.
 
 STRUCTURE
 - Start with "# " + the title, then 1–2 sentences that answer the main question directly.
@@ -34,7 +35,7 @@ STRUCTURE
 
 FORMAT FOR LATER INTERACTIVE BLOCKS
 - Steps: a numbered list, one action per item, starting with a verb; "what you should see" on the next line of the same item.
-- Code: its own fenced block with a language tag.
+- Code: a line containing only [[SNIPPET:S<n>]]; the exact block and its source are filled in for you.
 - Comparisons: a Markdown table with a header row.
 - The approval flow (software asks → phone rings → person decides → software continues): a short numbered sequence of moments, one per item.
 - Choices with different outcomes: one short paragraph per outcome, starting with the choice in bold.
@@ -56,7 +57,8 @@ TONE
 - Link every outside fact with a Markdown link, using ONLY URLs from ALLOWED URLS. Never invent or change a URL.
 - Stories: only the story in the brief, credited exactly as its attribution line says. Never write as if M91 or "we" experienced it. Never write "we've seen", "our customers", "at M91 we" or similar.
 - News: only as "reported by <outlet>", never as established fact.
-- Tutorials: only the steps in the brief. Copy code and commands EXACTLY from TUTORIAL SOURCE TEXT; if the exact code is not there, describe the step in words and do not write code. Say plainly what the docs do not cover (the gaps); never fill a gap with a guess.
+- Tutorials: only the steps in the brief. NEVER write code or commands yourself, not even one line. To show code, put a line containing only [[SNIPPET:S<n>]] where it belongs, choosing from CODE SNIPPETS. If no snippet fits a step, describe the step in words. Say plainly what the docs do not cover (the gaps); never fill a gap with a guess.
+- Every other post: the same rule. Never write code or commands yourself; show code only as a [[SNIPPET:S<n>]] line from CODE SNIPPETS, otherwise describe it in words.
 - Never invent numbers, quotes, customers, companies or results.
 - Never present the post as legal, regulatory or compliance advice.
 - Never use these words or phrases: {{banned_phrases}}.

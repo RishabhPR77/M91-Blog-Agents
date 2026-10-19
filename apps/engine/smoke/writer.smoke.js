@@ -4,7 +4,7 @@
 //      and DRY_RUN is false; set SLACK_POST_DRAFTS=true for the full post)
 //   2. check table, words, grades, ms, model    3. first 40 lines of the draft
 //   4. revise with 2 feedback items quoting real sentences: v2, revision notes, H2 lists compared
-//   5. tutorial brief: every code block passed tutorial_code_verbatim
+//   5. tutorial brief: every code block passed ai_written_code
 // About 6 Writer calls (+ repairs). Steps 6–7 of the brief (pipeline fail_once, API run) are commands.
 
 import { runWriter } from '../src/writer/index.js'
@@ -68,8 +68,8 @@ export async function writerSmoke(config) {
     t = Date.now()
     const tr = await runWriter({ mode: 'new', briefId: tut.payload.brief_id, runId: `smoke-${tut.payload.brief_id}` }, { config, store, notifier })
     show('5. tutorial', tr, Date.now() - t)
-    const v = tr.draft.checks.results.find((x) => x.id === 'tutorial_code_verbatim')
-    console.log(`tutorial_code_verbatim: ${v?.passed ? 'PASSED' : 'FAILED'} (${v?.detail})`)
+    const v = tr.draft.checks.results.find((x) => x.id === 'ai_written_code')
+    console.log(`ai_written_code: ${v?.passed ? 'PASSED' : 'FAILED'} (${v?.detail})`)
     out.tutorial = tr
   } else console.log('\n-- 5. no tutorial brief in Mem0 (skipped)')
   return out

@@ -2,6 +2,14 @@
 
 import { loadConfig } from '../src/config.js'
 
+// Unit tests never touch the network: the real fetch only reaches local test servers.
+const realFetch = globalThis.fetch
+globalThis.fetch = async (url, opts) => {
+  const host = new URL(String(url?.url ?? url)).hostname
+  if (host === '127.0.0.1' || host === 'localhost') return realFetch(url, opts)
+  throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND', message: `network disabled in unit tests (${host})` } })
+}
+
 export function fakeEnv(overrides = {}) {
   return {
     VIASOCKET_ORG_ID: 'org-test',

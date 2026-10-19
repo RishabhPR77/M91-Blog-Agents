@@ -245,29 +245,73 @@ test('allowed URL set: new mode, revise with a source pack, tutorials; the CTA i
   assert.deepEqual(Object.keys(briefRules(b)).sort().slice(0, 3), ['angle', 'claims_to_avoid', 'cta'])
 })
 
-test('tutorial: source text fetched (docs page + skill repo file via GitHub API), code checked verbatim; fetch failure fails the draft', async () => {
+const TUTORIAL_CODE = './scripts/m91.sh --title "Deploy?" --respond'
+const tutorialFetch = async (url) => {
+  const res = (status, text) => ({ ok: status < 400, status, text: async () => text, headers: { get: () => 'text/plain' } })
+  if (url === 'https://api.github.com/repos/MSG91/m91-skill/contents/scripts/m91.sh') return res(200, `#!/bin/sh\n${TUTORIAL_CODE}\n`)
+  if (url === 'https://api.github.com/repos/MSG91/m91-skill/readme') return res(200, '# m91-skill\nInstall it:\n\n```bash\nnpx skills add MSG91/m91-skill\n```\n')
+  return res(404, '')
+}
+const tutorialBrief = { post_type: 'tutorial', format: 'tutorial', tutorial: { use: true, tutorial_id: 'T-1', target: 'CI', reader_outcome: 'x', steps: [{ step: 'Install', source_url: REPO }, { step: 'Run', source_url: SCRIPT }], gaps: ['Retry policy is not documented'] }, interactive_ideas: [{ block_type: 'steps_checklist', why: 'x' }] }
+const tutorialPost = (codeLines) => GOOD_MD.replace('## How do I start?\n', `## How do I start?\n\nStart small.\n\n1. Run the script.\n\nThis line runs the alert script.\n\n${codeLines}\n\nThe docs do not cover the retry policy.\n`)
+
+test('tutorial: source text fetched, code given as CODE SNIPPETS, [[SNIPPET:Sn]] replaced by the exact block and its source line', async () => {
   const restore = quiet()
-  const code = './scripts/m91.sh --title "Deploy?" --respond'
-  const fetch = async (url) => {
-    const res = (status, text) => ({ ok: status < 400, status, text: async () => text, headers: { get: () => 'text/plain' } })
-    if (url === 'https://api.github.com/repos/MSG91/m91-skill/contents/scripts/m91.sh') return res(200, `#!/bin/sh\n${code}\n`)
-    if (url === 'https://api.github.com/repos/MSG91/m91-skill/readme') return res(200, '# m91-skill\nInstall it.')
-    return res(404, '')
-  }
-  const tb = { post_type: 'tutorial', format: 'tutorial', tutorial: { use: true, tutorial_id: 'T-1', target: 'CI', reader_outcome: 'x', steps: [{ step: 'Install', source_url: REPO }, { step: 'Run', source_url: SCRIPT }], gaps: ['Retry policy is not documented'] }, interactive_ideas: [{ block_type: 'steps_checklist', why: 'x' }] }
-  const text = await tutorialSourceText(brief(tb), { config: config(), fetch })
+  const text = await tutorialSourceText(brief(tutorialBrief), { config: config(), fetch: tutorialFetch })
   assert.match(text, /^=== SOURCE: https:\/\/github\.com\/MSG91\/m91-skill ===\n# m91-skill/)
   assert.match(text, /=== SOURCE: https:\/\/github\.com\/MSG91\/m91-skill\/blob\/main\/scripts\/m91\.sh ===\n#!\/bin\/sh/)
-  const withCode = GOOD_MD.replace('## How do I start?\n', `## How do I start?\n\nStart small.\n\n1. Run the script.\n\n\`\`\`bash\n${code}\n\`\`\`\n\nThe docs do not cover the retry policy.\n`)
-  const s = await setup({ briefOver: tb, fetch, answers: { new: draftAnswer({ post_markdown: withCode }) } })
+  const s = await setup({ briefOver: tutorialBrief, fetch: tutorialFetch, answers: { new: draftAnswer({ post_markdown: tutorialPost('[[SNIPPET:S2]]') }) } })
   const r = await s.run()
-  const verbatim = drafts(s.store)[0].payload.checks.results.find((x) => x.id === 'tutorial_code_verbatim')
-  assert.equal(verbatim.passed, true, JSON.stringify(verbatim))
-  assert.match(s.ai.requests[0].message, /--- TUTORIAL SOURCE TEXT ---\n=== SOURCE: https:\/\/github\.com\/MSG91\/m91-skill ===/)
-  assert.equal(r.hard_passed, true)
-  const broken = await setup({ briefOver: tb, fetch: async () => ({ ok: false, status: 500, text: async () => '' }) })
-  await assert.rejects(broken.run(), /no tutorial without its source text/)
   restore()
+  const msg = s.ai.requests[0].message
+  // The source text keeps its prose, with each code block replaced by its token; the code travels in CODE SNIPPETS.
+  assert.match(msg, /--- TUTORIAL SOURCE TEXT ---\n=== SOURCE: https:\/\/github\.com\/MSG91\/m91-skill ===\n# m91-skill\nInstall it:\n\n\[\[SNIPPET:S1\]\]/)
+  assert.match(msg, /--- CODE SNIPPETS ---\n\[S1\] language: bash · source: https:\/\/github\.com\/MSG91\/m91-skill\ncontext: # m91-skill Install it:\n```bash\nnpx skills add MSG91\/m91-skill\n```/)
+  assert.match(msg, /\[S2\] language: bash · source: https:\/\/github\.com\/MSG91\/m91-skill\/blob\/main\/scripts\/m91\.sh/)
+  assert.match(s.ai.requests[0].prompt, /NEVER write code or commands yourself, not even one line\./)
+  const saved = drafts(s.store)[0].payload
+  assert.ok(saved.post_markdown.includes(`\`\`\`bash\n#!/bin/sh\n${TUTORIAL_CODE}\n\`\`\`\n\nSource: [github.com: scripts/m91.sh](${SCRIPT})`), saved.post_markdown)
+  assert.equal(saved.checks.results.find((x) => x.id === 'ai_written_code').passed, true)
+  assert.deepEqual(saved.snippets_used, ['S2'])
+  assert.equal(r.hard_passed, true)
+  const broken = await setup({ briefOver: tutorialBrief, fetch: async () => ({ ok: false, status: 500, text: async () => '' }) })
+  await assert.rejects(broken.run(), /no tutorial without its source text/)
+})
+
+test('tutorial: AI-written code and an unknown snippet id fail hard; the repair sees tokens, not code', async () => {
+  const restore = quiet()
+  const s = await setup({
+    briefOver: tutorialBrief,
+    fetch: tutorialFetch,
+    answers: {
+      new: draftAnswer({ post_markdown: tutorialPost(`[[SNIPPET:S7]]\n\n\`\`\`bash\n${TUTORIAL_CODE} --timeout 30\n\`\`\``) }),
+      repair: draftAnswer({ post_markdown: tutorialPost('[[SNIPPET:S2]]') })
+    }
+  })
+  const r = await s.run()
+  restore()
+  assert.deepEqual(s.ai.requests.map((q) => q.call), ['new', 'repair'])
+  const repairMsg = s.ai.requests[1].message
+  assert.match(repairMsg, /- snippet_unknown: unknown snippet id S7 \(CODE SNIPPETS has S1, S2\)/)
+  assert.match(repairMsg, /- ai_written_code: code block\(s\) 1 are not snippets from CODE SNIPPETS/)
+  assert.equal(r.hard_passed, true)
+  assert.equal(r.repairs_used, 1)
+})
+
+test('not a tutorial: cited M91 docs pages give snippets; an unloadable page is a warning, not a failure', async () => {
+  const restore = quiet()
+  const fetch = async (url) => (url === LLMS
+    ? { ok: true, status: 200, text: async () => '# M91\nSend an alert:\n\n```bash\ncurl -X POST https://m91.msg91.com/s/<send-link>\n```\n' }
+    : { ok: false, status: 404, text: async () => '' })
+  const s = await setup({ fetch })
+  await s.run()
+  assert.match(s.ai.requests[0].message, /--- CODE SNIPPETS ---\n\[S1\] language: bash · source: https:\/\/m91\.msg91\.com\/llms\.txt/)
+  assert.doesNotMatch(s.ai.requests[0].message, /--- TUTORIAL SOURCE TEXT ---/)
+  const down = await setup({ fetch: async () => { throw new TypeError('fetch failed') } })
+  const r = await down.run()
+  restore()
+  assert.doesNotMatch(down.ai.requests[0].message, /--- CODE SNIPPETS ---/)
+  assert.ok(r.warnings.some((w) => /snippet source https:\/\/m91\.msg91\.com\/llms\.txt not fetched/.test(w)))
 })
 
 test('message size guard: tutorial text trimmed first to stay under 50,000 characters', () => {

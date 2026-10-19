@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { runContentChecks, parseMarkdown, urlKey, hardProblems } from '../../src/checks/content.js'
 import { countSyllables, fleschKincaidGrade, sentenceStats } from '../../src/checks/readability.js'
 import { findPhrases, BANNED_PHRASES, FIRST_PERSON_PHRASES } from '../../src/checks/phrases.js'
+import { extractSnippets } from '../../src/writer/snippets.js'
 import { fakeConfig } from '../helpers.js'
 
 const GOOD = readFileSync(new URL('../fixtures/good-post.md', import.meta.url), 'utf8')
@@ -33,8 +34,8 @@ const draft = (md = GOOD, over = {}) => ({
   ...over
 })
 const allowed = new Set([CTA, ISSUE, LLMS].map(urlKey))
-const run = (md, { b = brief(), d, statuses, tutorialText, schemaErrors } = {}) =>
-  runContentChecks({ draft: d ?? draft(md), brief: b, config, allowedUrls: allowed, tutorialText, linkStatuses: statuses, schemaErrors })
+const run = (md, { b = brief(), d, statuses, snippets, snippetErrors, schemaErrors } = {}) =>
+  runContentChecks({ draft: d ?? draft(md), brief: b, config, allowedUrls: allowed, snippets, snippetErrors, linkStatuses: statuses, schemaErrors })
 const get = (r, id) => r.results.find((x) => x.id === id)
 
 test('the good fixture passes every hard check and the main soft checks', () => {
@@ -123,18 +124,38 @@ test('internal links used (soft)', () => {
   assert.equal(get(run(GOOD, { b }), 'internal_links_used').passed, false)
 })
 
-test('tutorial: exact code passes, a changed parameter fails, whitespace-only differences pass; gaps mentioned', () => {
+test('ai_written_code (every post): snippet code passes, a changed parameter fails, whitespace-only differences pass; gaps mentioned', () => {
   const source = '=== SOURCE: https://github.com/MSG91/m91-skill ===\nInstall:\n```bash\n./scripts/m91.sh --title "Deploy?" --respond\n```\nRetry policy is not documented.'
+  const { snippets } = extractSnippets(source)
   const tb = brief({ post_type: 'tutorial', tutorial: { use: true, steps: [], gaps: ['Retry policy is not documented'] }, interactive_ideas: [{ block_type: 'steps_checklist', why: 'x' }] })
   const withCode = (code) => GOOD.replace('## How do I start?\n', `## How do I start?\n\nRun the script.\n\n\`\`\`bash\n${code}\n\`\`\`\n\nThe docs do not cover the retry policy.\n`)
-  assert.equal(get(run(withCode('./scripts/m91.sh --title "Deploy?" --respond'), { b: tb, tutorialText: source }), 'tutorial_code_verbatim').passed, true)
-  assert.equal(get(run(withCode('   ./scripts/m91.sh --title "Deploy?" --respond   '), { b: tb, tutorialText: source }), 'tutorial_code_verbatim').passed, true)
-  const changed = run(withCode('./scripts/m91.sh --title "Deploy?" --respond --timeout 30'), { b: tb, tutorialText: source })
-  assert.equal(get(changed, 'tutorial_code_verbatim').passed, false)
+  assert.equal(get(run(withCode('./scripts/m91.sh --title "Deploy?" --respond'), { b: tb, snippets }), 'ai_written_code').passed, true)
+  assert.equal(get(run(withCode('   ./scripts/m91.sh --title "Deploy?" --respond   '), { b: tb, snippets }), 'ai_written_code').passed, true)
+  const changed = run(withCode('./scripts/m91.sh --title "Deploy?" --respond --timeout 30'), { b: tb, snippets })
+  assert.equal(get(changed, 'ai_written_code').passed, false)
   assert.equal(changed.hard_passed, false)
-  assert.equal(get(run(withCode('./scripts/m91.sh --title "Deploy?" --respond'), { b: tb, tutorialText: source }), 'tutorial_gaps').passed, true)
-  assert.equal(get(run(GOOD, { b: tb, tutorialText: source }), 'tutorial_gaps').passed, false)
-  assert.equal(get(run(withCode('./scripts/m91.sh --title "Deploy?" --respond'), { b: tb, tutorialText: source }), 'block_steps_numbered').passed, true)
+  // Not a tutorial, no snippets: any code block is AI-written.
+  const plain = run(withCode('npm install m91'))
+  assert.equal(get(plain, 'ai_written_code').passed, false)
+  assert.equal(get(plain, 'ai_written_code').severity, 'hard')
+  assert.equal(get(run(GOOD), 'ai_written_code').passed, true, 'no code at all passes')
+  assert.equal(get(run(withCode('./scripts/m91.sh --title "Deploy?" --respond'), { b: tb, snippets }), 'tutorial_gaps').passed, true)
+  assert.equal(get(run(GOOD, { b: tb, snippets }), 'tutorial_gaps').passed, false)
+  assert.equal(get(run(withCode('./scripts/m91.sh --title "Deploy?" --respond'), { b: tb, snippets }), 'block_steps_numbered').passed, true)
+})
+
+test('snippet_unknown is hard; inline_code_known is soft and accepts words from the brief or snippets', () => {
+  const r = run(GOOD, { snippetErrors: ['unknown snippet id S9 (CODE SNIPPETS has S1)'] })
+  assert.equal(get(r, 'snippet_unknown').passed, false)
+  assert.equal(r.hard_passed, false)
+  const { snippets } = extractSnippets('=== SOURCE: https://m91.msg91.com/api/public/api.md ===\n```json\n{ "customId": "x" }\n```')
+  const inl = (word) => GOOD.replace('Your software then decides what to do.', `Your software then reads \`${word}\` and decides.`)
+  assert.equal(get(run(inl('customId'), { snippets }), 'inline_code_known').passed, true)
+  assert.equal(get(run(inl('agent approval')), 'inline_code_known').passed, true, 'brief keyword')
+  const unknown = run(inl('retryPolicy'), { snippets })
+  assert.equal(get(unknown, 'inline_code_known').passed, false)
+  assert.equal(get(unknown, 'inline_code_known').severity, 'soft')
+  assert.equal(unknown.hard_passed, true)
 })
 
 test('block-friendly: code language tags, comparison table, troubleshooting H3s, FAQ H3s', () => {

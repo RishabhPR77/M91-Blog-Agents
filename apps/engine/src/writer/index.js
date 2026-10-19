@@ -11,7 +11,8 @@ import { runContentChecks, hardProblems, urlKey, parseMarkdown } from '../checks
 import { DEFAULT_CTA_TEXT } from '../strategist/prompts.js'
 import { writer_draft, draftSchemaErrors } from './schemas.js'
 import { buildWriterPrompt, repairTail, truncatedProblem } from './prompts.js'
-import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage } from './inputs.js'
+import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, citedDocsSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage } from './inputs.js'
+import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets } from './snippets.js'
 import { draftsOf, nextDraftVersion, saveDraft } from './save.js'
 
 export class WriterError extends Error {
@@ -100,7 +101,10 @@ export async function runWriter(params = {}, deps = {}) {
 
   const isTutorial = brief.post_type === 'tutorial' || brief.tutorial?.use === true
   const tutorialText = isTutorial ? await tutorialSourceText(brief, { config, fetch: deps.fetch }) : ''
-  const allowed = allowedUrlSet(brief, { sourcePack: params.sourcePack, ctaUrl: config.m91.ctaUrl })
+  // The only code a post may show: blocks extracted from the tutorial source or the cited docs pages.
+  const snippetSource = isTutorial ? tutorialText : await citedDocsSourceText(brief, { config, fetch: deps.fetch, warnings })
+  const { snippets, text: tokenisedSource } = extractSnippets(snippetSource)
+  const allowed = allowedUrlSet(brief, { sourcePack: params.sourcePack, ctaUrl: config.m91.ctaUrl, snippets })
   const tone = await toneSection(store, brief, config)
   const drafts = await draftsOf(store, params.briefId)
   const previous = drafts.find((d) => (d.version ?? d.payload?.version) < version) ??
@@ -111,7 +115,8 @@ export async function runWriter(params = {}, deps = {}) {
     allowedUrls: allowed.list.map((u) => `- ${u}`).join('\n'),
     internalLinks: brief.internal_links?.length ? JSON.stringify(brief.internal_links.map(({ url, anchor_text }) => ({ url, anchor_text }))) : null,
     interactiveIdeas: brief.interactive_ideas?.length ? JSON.stringify(brief.interactive_ideas) : null,
-    tutorialText: tutorialText || null
+    tutorialText: isTutorial ? tokenisedSource : null,
+    snippets: snippets.length ? snippetSection(snippets) : null
   }
   let previousContext = false
   if (mode === 'new') {
@@ -126,7 +131,7 @@ export async function runWriter(params = {}, deps = {}) {
     sections.briefRules = JSON.stringify(briefRules(brief))
     if (!previous) throw new WriterError(`revise mode: no earlier draft of brief ${params.briefId} to revise`)
     const prevCtx = JSON.stringify(previous.payload?.context ?? {})
-    sections.previousDraft = wc.revisionInput === 'full' ? previous.payload?.post_markdown ?? prevCtx : prevCtx
+    sections.previousDraft = wc.revisionInput === 'full' && previous.payload?.post_markdown ? tokeniseSnippets(previous.payload.post_markdown, snippets) : prevCtx
     sections.previousContextFallback = prevCtx
     sections.feedback = JSON.stringify(feedback.map(({ area, quote, problem, fix, severity }) => ({ area, quote, problem, fix, severity })))
     const excerpts = feedback.filter((f) => f.quote).map((f) => `- "${f.quote}" → ${excerptFor(previous.payload?.post_markdown, f.quote) ?? '(not found in the previous draft)'}`)
@@ -193,7 +198,7 @@ export async function runWriter(params = {}, deps = {}) {
     throw new WriterError(`${callName}: no usable draft after ${attempts.length} attempt(s)${fallbackAiSend ? ' including the fallback model' : ''}: ${lastError?.message ?? 'unknown error'}`, { kind: lastError?.kind ?? 'schema' })
   }
 
-  async function check(draft, tutorialSent) {
+  async function check(draft, snippetErrors) {
     throwIfCancelled()
     emit('step.started', { agent: 'writer', step: 'checks' })
     const fixes = autoFixDraft(draft, { config, brief })
@@ -201,7 +206,7 @@ export async function runWriter(params = {}, deps = {}) {
     const linkUrls = [...new Set(parseMarkdown(draft.post_markdown).links.map((l) => l.url))]
     const linkStatuses = new Map()
     await Promise.all(linkUrls.map(async (u) => linkStatuses.set(urlKey(u), await urlChecker.check(u))))
-    const res = runContentChecks({ draft, brief, config, allowedUrls: allowed.set, tutorialText: tutorialSent, linkStatuses })
+    const res = runContentChecks({ draft, brief, config, allowedUrls: allowed.set, snippets, snippetErrors, linkStatuses })
     const hardFails = res.results.filter((x) => x.severity === 'hard' && !x.passed).length
     const softFails = res.results.filter((x) => x.severity === 'soft' && !x.passed).length
     emit('step.finished', { agent: 'writer', step: 'checks', data: { hard_failures: hardFails, soft_warnings: softFails } })
@@ -214,6 +219,7 @@ export async function runWriter(params = {}, deps = {}) {
   let repairs = 0
   let draft = null
   let checks = null
+  let snippetsUsed = []
   for (;;) {
     if (answer.truncated) {
       if (repairs >= wc.maxRepairs) throw new WriterError(`the ${mode} answer was cut off (finish_reason "truncated") and no repairs are left`, { kind: 'truncated' })
@@ -223,10 +229,14 @@ export async function runWriter(params = {}, deps = {}) {
     }
     autoFixes.push(...answer.fixes)
     draft = answer.draft
-    checks = await check(draft, answer.tutorialSent)
+    const replaced = replaceSnippetTokens(draft.post_markdown, snippets)
+    draft.post_markdown = replaced.markdown
+    snippetsUsed = replaced.used
+    checks = await check(draft, replaced.errors)
     if (checks.hard_passed || repairs >= wc.maxRepairs) break
     repairs++
-    answer = await callModel('repair', repairTail(draft, hardProblems(checks.results)))
+    // The repair sees snippet tokens again, so it places them instead of copying code.
+    answer = await callModel('repair', repairTail({ ...draft, post_markdown: tokeniseSnippets(draft.post_markdown, snippets) }, hardProblems(checks.results)))
   }
 
   // ---------- save ----------
@@ -234,7 +244,8 @@ export async function runWriter(params = {}, deps = {}) {
   const payload = {
     title: draft.title, post_markdown: draft.post_markdown, tldr: draft.tldr, seo: draft.seo, context: draft.context, revision_notes: draft.revision_notes,
     checks: { hard_passed: checks.hard_passed, results: checks.results },
-    word_count: checks.word_count, reading: checks.reading, model_used: answer.model, writer_mode: mode, repairs_used: repairs, auto_fixes: autoFixes
+    word_count: checks.word_count, reading: checks.reading, model_used: answer.model, writer_mode: mode, repairs_used: repairs, auto_fixes: autoFixes,
+    snippets_used: snippetsUsed, snippets_available: snippets.length
   }
   const { record, status, warnings: saveWarnings } = await saveDraft(store, { briefId: params.briefId, briefRecord, version, briefVersion, topicGroup: brief.topic_group, payload, hardPassed: checks.hard_passed })
   warnings.push(...saveWarnings)

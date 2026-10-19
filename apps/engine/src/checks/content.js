@@ -4,6 +4,7 @@
 
 import { BANNED_PHRASES, FIRST_PERSON_PHRASES, HARD_CLAIM_PATTERNS, SOFT_CLAIM_WORDS, LEGAL_FRAMING_PHRASES, findPhrases, phraseRegex } from './phrases.js'
 import { fleschKincaidGrade, sentences, words, sentenceStats } from './readability.js'
+import { normaliseCode } from '../writer/snippets.js'
 
 export const urlKey = (u) => String(u ?? '').trim().replace(/\/+$/, '').toLowerCase()
 const norm = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9?]+/g, ' ').trim()
@@ -139,12 +140,13 @@ const sentenceCount = (p) => sentences(p.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
  * @param {object} args.brief        the brief
  * @param {object} args.config       loaded config (content, strategist, m91, scout)
  * @param {Set<string>} args.allowedUrls  urlKey()s of allowed URLs
- * @param {string} [args.tutorialText]    tutorial source text that was sent to the Writer
+ * @param {object[]} [args.snippets]      code snippets from the sources: the only code a post may contain
+ * @param {string[]} [args.snippetErrors] [[SNIPPET:Sn]] problems found while replacing tokens
  * @param {Map<string,string>} [args.linkStatuses]  urlKey → ok | blocked | dead | invalid (pre-checked)
  * @param {string[]} [args.schemaErrors]  validation errors from the schema check, if any
  * @returns {{ results: object[], hard_passed: boolean, word_count: number, reading: { intro_grade, post_grade }, parsed }}
  */
-export function runContentChecks({ draft, brief, config, allowedUrls, tutorialText = '', linkStatuses = null, schemaErrors = [] }) {
+export function runContentChecks({ draft, brief, config, allowedUrls, snippets = [], snippetErrors = [], linkStatuses = null, schemaErrors = [] }) {
   const results = []
   const R = (id, passed, severity, value, detail = '') => results.push({ id, passed: Boolean(passed), severity, value, detail })
   const md = draft?.post_markdown ?? ''
@@ -266,13 +268,18 @@ export function runContentChecks({ draft, brief, config, allowedUrls, tutorialTe
     R('news_attribution', ok, 'hard', ok ? 1 : 0, ok ? 'ok' : `"reported by" and "${outlet}" must both appear`)
   }
 
+  // Code: only inserted snippets, never code the AI wrote (every post).
+  R('snippet_unknown', snippetErrors.length === 0, 'hard', snippetErrors.length, snippetErrors.slice(0, 3).join('; ') || 'ok')
+  const snippetCode = new Set(snippets.map((s) => normaliseCode(s.code)))
+  const written = p.code.map((b, i) => ({ i, code: normaliseCode(b.code) })).filter((b) => b.code && !snippetCode.has(b.code))
+  R('ai_written_code', written.length === 0, 'hard', written.length, written.length ? `code block(s) ${written.map((b) => b.i + 1).join(', ')} are not snippets from CODE SNIPPETS: use [[SNIPPET:Sn]] lines or describe the step in words` : `${p.code.length} code block(s), all snippets`)
+  const known = [JSON.stringify(brief ?? {}), ...snippets.map((s) => s.code)].join('\n').toLowerCase()
+  const inline = [...new Set([...p.rawText.matchAll(/`([^`\n]+)`/g)].map((m) => m[1].trim()).filter(Boolean))]
+  const unknownInline = inline.filter((x) => !known.includes(x.toLowerCase()))
+  R('inline_code_known', unknownInline.length === 0, 'soft', unknownInline.length, unknownInline.length ? `inline code not in the brief or snippets: ${unknownInline.slice(0, 5).join(', ')}` : 'ok')
+
   // Tutorials
   if (isTutorial) {
-    const src = '\n' + String(tutorialText).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).join('\n') + '\n'
-    const bad = p.code
-      .map((b, i) => ({ i, text: b.code.split('\n').map((l) => l.trim()).filter(Boolean).join('\n') }))
-      .filter((b) => b.text && !src.includes('\n' + b.text + '\n'))
-    R('tutorial_code_verbatim', bad.length === 0, 'hard', bad.length, bad.length ? `code block(s) ${bad.map((b) => b.i + 1).join(', ')} not found exactly in TUTORIAL SOURCE TEXT` : `${p.code.length} code block(s) verified`)
     const lower = norm(md)
     const missing = (brief.tutorial?.gaps ?? []).filter((g) => {
       const keys = norm(g).split(' ').filter((w) => w.length >= 4 && !STOP.has(w))
