@@ -54,6 +54,8 @@ const DEFAULTS = {
   REVIEWER_MAX_SOURCE_CHECKS: '5', REVIEW_FEEDBACK_MAX_ITEMS: '8', LESSONS_PER_REVIEW_MAX: '3',
   SLACK_POST_APPROVED: 'true', PROMO_LINKEDIN_MAX_CHARS: '1300', PROMO_X_POST_MAX_CHARS: '270',
   // Phase 5.5: human approval gate
+  // Phase 7: Mem0 read cache, Publisher and Embarko
+  STORE_CACHE_TTL_MS: '30000',
   MAX_HUMAN_REVISIONS: '5', REREVIEW_AFTER_HUMAN: 'true', M91_NOTIFY_ON_AWAITING: 'false',
   // TEST-ONLY CLI commands (npm run test:await); never available through the API
   ALLOW_TEST_COMMANDS: 'false',
@@ -266,7 +268,9 @@ export function loadConfig(env = process.env) {
       // Not used by the v3 SDK (the API key is project-scoped); kept for reference.
       orgId: str('MEM0_ORG_ID'),
       projectId: str('MEM0_PROJECT_ID'),
-      agentId: str('MEM0_AGENT_ID', { required: true })
+      agentId: str('MEM0_AGENT_ID', { required: true }),
+      // Phase 7: in-process read cache lifetime; 0 turns it off
+      cacheTtlMs: int('STORE_CACHE_TTL_MS', { max: 3600000 })
     },
     notify: {
       // Optional here; notify.js refuses a real send when they are missing.

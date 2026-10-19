@@ -89,7 +89,8 @@ test('getRecords / getOne filter by metadata; entity ids go in filters', async (
   const drafts = await store.getRecords({ type: 'draft', brief_id: 'b' })
   assert.equal(drafts.length, 2)
   const getAll = mem0.calls.find((c) => c[0] === 'getAll')[1]
-  assert.deepEqual(getAll.filters, { AND: [{ agent_id: 'm91-blog' }, { run_id: 'b' }] })
+  // Phase 7 A1: type (and status) go to Mem0 as metadata filters too; code still re-checks.
+  assert.deepEqual(getAll.filters, { AND: [{ agent_id: 'm91-blog' }, { run_id: 'b' }, { metadata: { type: 'draft' } }] })
   assert.equal(getAll.agentId, undefined)
   assert.deepEqual((await store.getOne('draft', 'b')).payload, { v: 2 })
   assert.deepEqual((await store.getOne('draft', 'b', 1)).payload, { v: 1 })

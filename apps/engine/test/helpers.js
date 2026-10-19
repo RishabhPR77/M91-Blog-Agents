@@ -21,6 +21,8 @@ export function fakeEnv(overrides = {}) {
     M91_ALERT_WEBHOOK_URL: 'https://flow.sokt.io/func/scriFAKEM91',
     WEBHOOK_SHARED_KEY: 'fake-shared-key-123',
     PIPELINE_TRIGGER_KEY: 'fake-trigger-key-0123456789',
+    // The read cache is shared per process: off in unit tests unless a test turns it on.
+    STORE_CACHE_TTL_MS: '0',
     ...overrides
   }
 }

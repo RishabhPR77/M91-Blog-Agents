@@ -111,7 +111,19 @@ function matches(record, filters = {}) {
  * @param {{ config?: object, clientFactory?: Function, fetch?: Function, sleepFn?: Function, eventTimeoutMs?: number }} deps
  */
 // testTag: smoke tests mark every record they create with metadata.test = true, so cleanup can find them.
-export function createStore({ config = getConfig(), clientFactory = defaultClientFactory, fetch = globalThis.fetch, sleepFn = sleep, eventTimeoutMs = 60000, eventPollMs = 1000, dryRun = config.runtime.dryRun, testTag = false } = {}) {
+// The read cache: one per agent_id per process, shared by every store (lists by filter key, records by id).
+const CACHES = new Map()
+const sharedCache = (agentId) => {
+  if (!CACHES.has(agentId)) CACHES.set(agentId, { lists: new Map(), records: new Map(), metadataFilters: true })
+  return CACHES.get(agentId)
+}
+/** Tests: forget every cached list and record (and re-enable server-side metadata filters). */
+export function clearStoreCache() {
+  CACHES.clear()
+}
+
+// cacheTtlMs (default STORE_CACHE_TTL_MS) and now are injectable for tests.
+export function createStore({ config = getConfig(), clientFactory = defaultClientFactory, fetch = globalThis.fetch, sleepFn = sleep, eventTimeoutMs = 60000, eventPollMs = 1000, dryRun = config.runtime.dryRun, testTag = false, cacheTtlMs, now = Date.now } = {}) {
   const { apiKey, agentId } = config.mem0
   // DRY_RUN rule: no Mem0 writes, except run_log records, which carry dry_run: true.
   // Reads still happen. Skipped writes return a placeholder record with a "dryrun-" id.
@@ -149,16 +161,56 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     throw new StoreError(`Mem0 add event not finished after ${eventTimeoutMs} ms`, { eventId })
   }
 
-  async function listAll(briefId) {
+  // Read cache (Phase 7 A2), shared by every store of this agent in this process: the run manager makes a
+  // store per run, and its writes must clear what the API's store has cached. STORE_CACHE_TTL_MS=0 turns it off.
+  const ttl = cacheTtlMs ?? config.mem0.cacheTtlMs ?? 0
+  const cache = sharedCache(agentId)
+  const fresh = (entry) => entry && ttl > 0 && now() - entry.at < ttl
+  const forgetLists = () => cache.lists.clear()
+
+  /**
+   * Server-side filters (Phase 7 A1): agent_id, run_id (brief_id) and, while Mem0 accepts them, exact
+   * metadata matches on type and status (v2 filters). Code still re-checks every record (matches()).
+   */
+  function serverFilters(briefId, f = {}) {
+    const and = [{ agent_id: agentId }]
+    if (briefId) and.push({ run_id: briefId })
+    if (cache.metadataFilters) {
+      if (f.type) and.push({ metadata: { type: f.type } })
+      if (f.status) and.push({ metadata: { status: f.status } })
+    }
+    return and.length === 1 ? and[0] : { AND: and }
+  }
+
+  async function fetchAll(filters) {
     const c = await client()
     const out = []
     for (let page = 1; page <= 50; page++) {
-      const res = await net(() => c.getAll({ filters: entityFilters(briefId), page, pageSize: 100 }), 'list')
+      const res = await net(() => c.getAll({ filters, page, pageSize: 100 }), 'list')
       const results = Array.isArray(res) ? res : res?.results ?? []
       out.push(...results)
       if (Array.isArray(res) || !res?.next || results.length === 0) break
     }
     return out
+  }
+
+  /** Raw memories for a brief (or all), narrowed on the server by type/status when given; cached. */
+  async function listAll(briefId, f = {}) {
+    const key = JSON.stringify([briefId ?? null, f.type ?? null, f.status ?? null, cache.metadataFilters])
+    const hit = cache.lists.get(key)
+    if (fresh(hit)) return hit.value
+    let value
+    try {
+      value = await fetchAll(serverFilters(briefId, f))
+    } catch (error) {
+      if (isNetworkError(error) || !cache.metadataFilters || !(f.type || f.status)) throw error
+      // Mem0 refused the metadata filter: fall back to agent/run filters (filtered in code) for this process.
+      log.warn('Mem0 metadata filters refused; listing without them', { error })
+      cache.metadataFilters = false
+      return listAll(briefId, f)
+    }
+    if (ttl > 0) cache.lists.set(key, { at: now(), value })
+    return value
   }
 
   /**
@@ -190,9 +242,10 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
       const event = await waitForEvent(eventId)
       id = event.results?.find?.((r) => r?.id)?.id ?? event.results?.[0]?.memory_id
     }
+    forgetLists()
     if (!id) {
       // The event did not name the memory: find it by the unique record_key we attached.
-      const found = (await listAll(briefId)).find((m) => m.metadata?.record_key === recordKey)
+      const found = (await fetchAll(serverFilters(briefId, { type }))).find((m) => m.metadata?.record_key === recordKey)
       id = found?.id
     }
     if (!id) throw new StoreError('Mem0 stored the record but its memory id could not be found', { type, eventId })
@@ -211,11 +264,16 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     const current = await net(() => c.get(id), 'get')
     const merged = { ...(current?.metadata ?? {}), ...metadata }
     await net(() => c.update(id, { ...(payload !== undefined && { text: JSON.stringify(payload) }), metadata: merged }), 'update')
-    return toRecord({ ...current, id, metadata: merged, memory: payload !== undefined ? JSON.stringify(payload) : current?.memory })
+    const record = toRecord({ ...current, id, metadata: merged, memory: payload !== undefined ? JSON.stringify(payload) : current?.memory })
+    forgetLists()
+    if (ttl > 0) cache.records.set(id, { at: now(), value: record })
+    return record
   }
 
-  /** One record by memory id, or null (also null for another agent's memory). */
+  /** One record by memory id, or null (also null for another agent's memory). Cached like the lists. */
   async function getRecord(id) {
+    const hit = cache.records.get(id)
+    if (fresh(hit)) return hit.value
     const c = await client()
     let m
     try {
@@ -224,13 +282,15 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
       return null
     }
     if (!m || (m.agentId ?? m.agent_id) && (m.agentId ?? m.agent_id) !== agentId) return null
-    return toRecord({ ...m, id: m.id ?? id })
+    const record = toRecord({ ...m, id: m.id ?? id })
+    if (ttl > 0) cache.records.set(id, { at: now(), value: record })
+    return record
   }
 
   /** Records under our agent_id, filtered by type / brief_id / status / version / topic_group. */
   async function getRecords(filters = {}) {
     const briefId = filters.brief_id ?? filters.briefId
-    return (await listAll(briefId)).map(toRecord).filter((r) => matches(r, filters))
+    return (await listAll(briefId, { type: filters.type, status: filters.status })).map(toRecord).filter((r) => matches(r, filters))
   }
 
   /** One record of a type for a brief; the given version, else the highest. */
@@ -258,14 +318,17 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     }
     const c = await client()
     const added = await c.add([{ role: 'user', content: text }], { agentId, metadata: { ...meta, ...(testTag && { test: true }), type: 'lesson', date: istDate() }, infer: true })
+    forgetLists()
     return { eventId: added?.eventId ?? added?.event_id ?? null, status: added?.status ?? null }
   }
 
-  /** Tests and lock release only. */
+  /** Lock release, cleanup and deletes the user asks for. */
   async function deleteRecord(id) {
     if (dryRun || String(id).startsWith(DRY_ID)) return
     const c = await client()
     await net(() => c.delete(id), 'delete')
+    forgetLists()
+    cache.records.delete(id)
   }
 
   return { dryRun, createRecord, updateRecord, getRecord, getRecords, getOne, searchSimilar, addLesson, deleteRecord }

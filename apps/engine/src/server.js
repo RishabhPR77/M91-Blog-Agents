@@ -283,21 +283,19 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     return { write, close, stream }
   }
 
+  /** A run record by run_id: run records are stored under run_id = <run id>, so this is one small filtered read. */
   async function findRun(runId) {
-    const rec = (await store.getRecords({ type: 'run', brief_id: runId })).find((r) => r.payload?.run_id === runId)
-      ?? (await store.getRecords({ type: 'run' })).find((r) => r.payload?.run_id === runId)
-    return rec ?? null
+    return (await store.getRecords({ type: 'run', brief_id: runId })).find((r) => r.payload?.run_id === runId) ?? null
   }
 
   async function producedRecords(run) {
     const ids = new Set((run.payload?.steps ?? []).flatMap((s) => s.record_ids ?? []))
     if (run.payload?.brief_id) ids.add(run.payload.brief_id)
     if (!ids.size) return []
-    const out = []
-    for (const type of ['m91_facts', 'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'source_pack', 'draft', 'review']) {
-      for (const r of await store.getRecords({ type })) if (ids.has(r.id) || ids.has(KEY_ID_OF(r.payload))) out.push(trimRecord(r))
-    }
-    return out
+    // One filtered (and cached) read per type, in parallel.
+    const types = ['m91_facts', 'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'source_pack', 'draft', 'review']
+    const lists = await Promise.all(types.map((type) => store.getRecords({ type })))
+    return lists.flat().filter((r) => ids.has(r.id) || ids.has(KEY_ID_OF(r.payload))).map(trimRecord)
   }
 
   async function api(req, res, url) {
