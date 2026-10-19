@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { pathToFileURL } from 'node:url'
 import { getConfig, ConfigError } from './config.js'
 import { log, mask, registerSecrets, setLevel } from './util/log.js'
-import { createRunManager, RunError, RUN_ID_RE, BUILT_MODES, DECISION_MODES } from './runs.js'
+import { createRunManager, RunError, RUN_ID_RE, BUILT_MODES, PUBLISH_MODES, DECISION_MODES } from './runs.js'
 import { getStore, RECORD_TYPES } from './store.js'
 import { replay, subscribe, TERMINAL_TYPES } from './events.js'
 import { listPins, addPin, cancelPin, PinError } from './pins.js'
@@ -82,8 +82,14 @@ export function publicSettings(config) {
       max_human_revisions: config.approval.maxHumanRevisions, rereview_after_human: config.approval.rereviewAfterHuman,
       m91_notify_on_awaiting: config.approval.notifyOnAwaiting
     },
+    // The blog and the Publisher (Phase 7): whether a deploy token is set, never its value.
+    blog: config.blog && {
+      auto_publish: config.runtime.autoPublish, app_name: config.blog.appName, base_url: config.blog.baseUrl,
+      noindex_first_n_posts: config.blog.noindexFirstNPosts, deploy_token_set: Boolean(config.blog.embarkoDeployToken)
+    },
     built_modes: [...BUILT_MODES],
-    decision_modes: [...DECISION_MODES]
+    decision_modes: [...DECISION_MODES],
+    publish_modes: [...PUBLISH_MODES]
   }
 }
 
@@ -427,6 +433,18 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
 
     // Settings
     if (path === '/api/settings' && method === 'GET') return send(res, 200, publicSettings(config))
+    // Phase 7: the published posts for the dashboard's Posts page (never the post text).
+    if (path === '/api/posts' && method === 'GET') {
+      const posts = (await store.getRecords({ type: 'published_post' })).map((r) => {
+        const p = r.payload ?? {}
+        return {
+          record_id: r.id, slug: p.slug ?? p.post?.slug ?? null, title: p.title ?? p.post?.title ?? '', status: r.status, noindex: Boolean(p.noindex ?? p.post?.noindex),
+          url: p.url ?? p.post?.canonical_url ?? null, brief_id: p.brief_id ?? r.briefId ?? null, version: p.version ?? null, topic_group: p.topic_group ?? null,
+          published_at: p.post?.published_at ?? null, updated_at: p.post?.updated_at ?? null, deployed_at: p.deployed_at ?? null, last_error: p.last_error ?? null
+        }
+      }).sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))
+      return send(res, 200, { posts })
+    }
 
     // Lessons (Phase 6): the dashboard can delete one; only lesson records.
     if (seg[1] === 'lessons' && seg[2] && seg.length === 3 && method === 'DELETE') {

@@ -130,7 +130,8 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
   // Lessons (Phase 5 writes them).
   // Published posts (Phase 7 writes them): the only allowed targets for internal_links.
   const publishedPosts = (await store.getRecords({ type: 'published_post' }))
-    .filter((r) => r.status !== 'unpublished' && r.payload?.url)
+    // Phase 7 C7: only posts that are live now (status published).
+    .filter((r) => r.status === 'published' && r.payload?.url)
     .sort((a, b) => byDateDesc(a.payload?.published_at ?? a.date, b.payload?.published_at ?? b.date))
     .slice(0, 40)
     .map((r) => ({ title: r.payload.title ?? '', url: r.payload.url, topic_group: r.payload.topic_group ?? r.topicGroup ?? null, summary: String(r.payload.summary ?? r.payload.description ?? '').slice(0, 200) }))

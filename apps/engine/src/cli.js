@@ -13,6 +13,8 @@
 // npm run reviewer -- --brief-id=<id> [--version=<n>] [--brief-version=<n>] [--route]
 // npm run promo -- --brief-id=<id> [--version=<n>]
 // npm run test:await -- --brief-id=<id> [--version=<n>]   TEST-ONLY, needs ALLOW_TEST_COMMANDS=true
+// npm run publish -- --brief-id=<id> · unpublish -- --slug=<slug> · set-index -- --slug=<slug> --noindex=true|false · rebuild-blog
+// npm run blog:sync   (published posts from Mem0 → apps/blog/src/content/posts; no build, no deploy)
 // npm run approvals -- --list
 // npm run approve -- --brief-id=<id> [--force-unreviewed]
 // npm run review -- --brief-id=<id>   one Reviewer call on the waiting version (no routing)
@@ -35,6 +37,7 @@ import { findCandidates, deleteIds, PROTECTED_TYPES } from './cleanup.js'
 import { extractSnippets } from './writer/snippets.js'
 import { lessonText } from './lessons.js'
 import { setAwaitingForTest } from './testcommands.js'
+import { exportPublished } from './publisher/export.js'
 import { WEIGHTS } from './reviewer/decide.js'
 import { createNotifier } from './notify.js'
 import { createRunManager } from './runs.js'
@@ -297,6 +300,32 @@ async function main() {
   if (args._[0] === 'test-await') {
     const r = await setAwaitingForTest(createStore({ config, dryRun: false }), config, { briefId: args['brief-id'], version: args.version ? Number(args.version) : undefined })
     console.log(`TEST: ${r.brief_id} v${r.version} (brief v${r.brief_version}) ${r.previous_status} → awaiting_human · score ${r.total ?? 'none'} · draft and brief marked test data`)
+    return
+  }
+
+  // Phase 7: the Publisher (no AI calls). Each runs as a normal run: lock, events, run record.
+  if (['publish', 'unpublish', 'set-index', 'rebuild-blog'].includes(args._[0])) {
+    const mode = { publish: 'publish', unpublish: 'unpublish', 'set-index': 'set_index', 'rebuild-blog': 'rebuild_blog' }[args._[0]]
+    const usage = { publish: '--brief-id=<id>', unpublish: '--slug=<slug>', set_index: '--slug=<slug> --noindex=true|false', rebuild_blog: '' }[mode]
+    const params = {}
+    if (mode === 'publish') params.brief_id = args['brief-id']
+    if (mode === 'unpublish' || mode === 'set_index') params.slug = args.slug
+    if (mode === 'set_index') params.noindex = args.noindex === 'true' ? true : args.noindex === 'false' ? false : undefined
+    if (Object.values(params).some((v) => v === undefined || v === true)) throw new Error(`usage: npm run ${args._[0]} -- ${usage}`)
+    const manager = createRunManager({ config })
+    const { run_id } = await manager.startRun({ mode, trigger: 'cli', params })
+    const result = await manager.wait(run_id)
+    console.table((result.run?.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, summary: String(s.summary).slice(0, 90), error: s.error ? String(s.error).slice(0, 60) : '' })))
+    console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
+    for (const w of result.run?.warnings ?? []) console.log(`WARNING: ${w}`)
+    process.exitCode = result.status === 'succeeded' ? 0 : 1
+    return
+  }
+
+  // Phase 7: write the published posts from Mem0 into apps/blog/src/content/posts (no build, no deploy).
+  if (args._[0] === 'blog-sync') {
+    const { files } = await exportPublished(store)
+    console.log(files.length ? `Wrote ${files.length} post file(s) to apps/blog/src/content/posts: ${files.join(', ')}` : 'No published posts: apps/blog/src/content/posts is empty (npm run dev:blog shows the samples).')
     return
   }
 

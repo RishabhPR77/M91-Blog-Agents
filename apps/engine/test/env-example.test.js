@@ -22,9 +22,9 @@ test('env.example lists every key config.js reads, and nothing else', () => {
   assert.deepEqual([...listed].filter((k) => !read.has(k)).sort(), [], 'keys in env.example that config does not read')
 })
 
-test('secrets are empty; no PUBLISH_* keys; no inline comments after values', () => {
+test('secrets are empty; no PUBLISH_* keys except PUBLISH_VERIFY_TIMEOUT_MS (Phase 7); no inline comments after values', () => {
   for (const k of SECRET_KEYS) assert.equal(entries[k] ?? '', '', `${k} must be empty in env.example`)
-  assert.ok(!Object.keys(entries).some((k) => k.startsWith('PUBLISH_')))
+  assert.deepEqual(Object.keys(entries).filter((k) => k.startsWith('PUBLISH_')), ['PUBLISH_VERIFY_TIMEOUT_MS'])
   for (const [k, v] of Object.entries(entries)) assert.ok(!/\s#/.test(v), `${k} has an inline comment`)
 })
 
@@ -37,7 +37,7 @@ test('the defaults written in env.example are valid config values', () => {
 test('Phase 3.5 keys: designer validated, blog settings, dashboard password only with auth', () => {
   const c = loadConfig(fakeEnv())
   assert.deepEqual(c.designer, { service: 'openai', model: 'gpt-5.6-luna', delivery: 'rtlayer' })
-  assert.deepEqual(c.blog, { appName: 'm91-blog', baseUrl: 'https://m91-blog.embarko.app', embarkoDeployToken: undefined, noindexFirstNPosts: 10 })
+  assert.deepEqual(c.blog, { appName: 'm91-blog', baseUrl: 'https://m91-blog.embarko.app', embarkoDeployToken: undefined, noindexFirstNPosts: 10, embarkoApiBase: 'https://ship.embarko.ai', embarkoAgentName: 'm91-blog-engine', buildTimeoutMs: 300000, publishVerifyTimeoutMs: 120000 })
   assert.equal(c.dashboard.port, 5173)
   assert.equal(c.schedule, undefined, 'no scheduler for now')
   assert.equal(c.publish, undefined)

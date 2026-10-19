@@ -10,6 +10,7 @@ import { loadDraft } from './reviewer/inputs.js'
 import { quoteFound } from './reviewer/decide.js'
 import { draftVersion, draftBriefVersion, draftsOf } from './writer/save.js'
 import { runPromo } from './promo/index.js'
+import { createPublisher } from './publisher/index.js'
 import { setLeadStatus } from './strategist/save.js'
 
 export const FEEDBACK_MIN_CHARS = 5
@@ -125,7 +126,7 @@ async function notifySafe(notifier, warnings, kind, args) {
  * blocks), placeholder Designer and Publisher steps, Slack, approval.approved.
  * ctx: { briefId, runId, config, store, notifier, agents?, runStep(agent, fn), now }
  */
-export async function runApprove({ briefId, runId, params = {}, config, store, notifier, agents, runStep, now = Date.now }) {
+export async function runApprove({ briefId, runId, params = {}, config, store, notifier, agents, runStep, now = Date.now, publisher = null }) {
   const warnings = []
   // The same gate as before the run starts: awaiting_human, hard checks passed, reviewed (or force_unreviewed).
   const d = await checkDecision('approve', { ...params, brief_id: briefId }, { store, config })
@@ -151,20 +152,38 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
     if (isCancel(error)) throw error
     warnings.push(`promo pack failed (approval stands): ${error.message}`)
   }
-  // Phases 8 and 7 replace these placeholders; until then the post simply stays approved.
-  for (const [agent, message] of [['designer', 'Designer: not built yet (Phase 8)'], ['publisher', 'Publisher: not built yet (Phase 7)']]) {
-    await runStep(agent, async () => {
-      log.info(message, { briefId, version })
-      return { placeholder: true, message }
-    })
-  }
+  // Phase 8 replaces the Designer placeholder; until then the post goes out as Markdown.
+  await runStep('designer', async () => {
+    const message = 'Designer: not built yet (Phase 8)'
+    log.info(message, { briefId, version })
+    return { placeholder: true, message }
+  })
 
   const title = d.payload?.title ?? briefRec?.payload?.titles?.[0] ?? briefId
   await notifySafe(notifier, warnings, 'slack', `✅ Approved by you: *${title}* · v${version}`)
   if (promo?.pack) await notifySafe(notifier, warnings, 'slack', `Promo pack preview (${promo.status}):\n\nLinkedIn:\n${promo.pack.linkedin_post}\n\nNewsletter:\n${promo.pack.newsletter_blurb}`)
   emit('approval.approved', { agent: 'human', message: `approved by you (v${version}${unreviewed ? ', unreviewed' : ''})`, data: { brief_id: briefId, version, total, approved_unreviewed: unreviewed } })
   const scoreText = unreviewed ? ', not reviewed' : total === null ? '' : `, score ${total}`
-  return { status: 'succeeded', brief_id: briefId, summary: `approved by you (v${version}${scoreText})`, warnings, run_fields: { approved_unreviewed: unreviewed } }
+
+  // Phase 7 C2: AUTO_PUBLISH=true publishes straight away; false (the kill switch) stops at approved.
+  let published = null
+  if (config.runtime.autoPublish) {
+    try {
+      published = await runStep('publisher', async () => (publisher ?? createPublisher({ config, store, notifier })).publish({ briefId }))
+      warnings.push(...(published?.warnings ?? []))
+    } catch (error) {
+      if (isCancel(error)) throw error
+      warnings.push(`publish failed (the post stays approved): ${error.message}`)
+    }
+  } else {
+    await runStep('publisher', async () => {
+      const message = 'Publishing is off (AUTO_PUBLISH=false): use Publish in the dashboard'
+      log.info(message, { briefId, version })
+      return { placeholder: true, message }
+    })
+  }
+  const pubText = published?.url ? `; published → ${published.url}` : ''
+  return { status: 'succeeded', brief_id: briefId, summary: `approved by you (v${version}${scoreText})${pubText}`, warnings, run_fields: { approved_unreviewed: unreviewed } }
 }
 
 /**

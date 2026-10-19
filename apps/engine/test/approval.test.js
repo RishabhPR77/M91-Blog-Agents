@@ -54,7 +54,7 @@ test('approve: statuses approved (by human, with time), promo pack, placeholder 
   assert.deepEqual(r.run.steps.map((x) => [x.name, x.status, x.summary]), [
     ['promo', 'succeeded', 'Promo pack ok: LinkedIn 65 chars · X thread 3 posts · 3 video scenes · 0 issue(s)'],
     ['designer', 'succeeded', 'Designer: not built yet (Phase 8)'],
-    ['publisher', 'succeeded', 'Publisher: not built yet (Phase 7)']
+    ['publisher', 'succeeded', 'Publishing is off (AUTO_PUBLISH=false): use Publish in the dashboard']
   ])
   const d = s.store.records.get(s.draft.id)
   assert.equal(d.status, 'approved')

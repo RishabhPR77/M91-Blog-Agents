@@ -56,6 +56,7 @@ const DEFAULTS = {
   // Phase 5.5: human approval gate
   // Phase 7: Mem0 read cache, Publisher and Embarko
   STORE_CACHE_TTL_MS: '30000',
+  EMBARKO_API_BASE: 'https://ship.embarko.ai', EMBARKO_AGENT_NAME: 'm91-blog-engine', BLOG_BUILD_TIMEOUT_MS: '300000', PUBLISH_VERIFY_TIMEOUT_MS: '120000',
   MAX_HUMAN_REVISIONS: '5', REREVIEW_AFTER_HUMAN: 'true', M91_NOTIFY_ON_AWAITING: 'false',
   // TEST-ONLY CLI commands (npm run test:await); never available through the API
   ALLOW_TEST_COMMANDS: 'false',
@@ -335,7 +336,12 @@ export function loadConfig(env = process.env) {
       appName: str('BLOG_APP_NAME', { required: true }),
       baseUrl: url('BLOG_BASE_URL', { required: true })?.replace(/\/+$/, ''),
       embarkoDeployToken: str('EMBARKO_DEPLOY_TOKEN'),
-      noindexFirstNPosts: int('NOINDEX_FIRST_N_POSTS', { max: 1000 })
+      noindexFirstNPosts: int('NOINDEX_FIRST_N_POSTS', { max: 1000 }),
+      // Phase 7: the Publisher (Embarko deploy API, blog build and live checks)
+      embarkoApiBase: url('EMBARKO_API_BASE', { required: true })?.replace(/\/+$/, ''),
+      embarkoAgentName: str('EMBARKO_AGENT_NAME', { required: true }),
+      buildTimeoutMs: int('BLOG_BUILD_TIMEOUT_MS', { min: 10000, max: 3600000 }),
+      publishVerifyTimeoutMs: int('PUBLISH_VERIFY_TIMEOUT_MS', { min: 5000, max: 3600000 })
     }
   }
 

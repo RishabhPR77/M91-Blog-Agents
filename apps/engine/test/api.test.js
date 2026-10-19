@@ -75,9 +75,10 @@ test('POST /api/runs validation: bad JSON, bad mode type, unknown and not-built 
     assert.equal(bad.json.error.code, 'bad_json')
     assert.equal((await call('POST', '/api/runs', { mode: 5 })).json.error.code, 'bad_mode')
     assert.equal((await call('POST', '/api/runs', { mode: 'everything' })).json.error.code, 'bad_mode')
-    const nb = await call('POST', '/api/runs', { mode: 'publish' })
-    assert.equal(nb.status, 501)
-    assert.equal(nb.json.error.code, 'not_built')
+    // Every mode is built since Phase 7; publish without a deploy token is refused before the run starts.
+    const nb = await call('POST', '/api/runs', { mode: 'publish', params: { brief_id: '261018-0700-ZZZZ' } })
+    assert.equal(nb.status, 409)
+    assert.equal(nb.json.error.code, 'no_token')
     const noBrief = await call('POST', '/api/runs', { mode: 'writer' })
     assert.equal(noBrief.status, 400)
     assert.equal(noBrief.json.error.code, 'bad_params')
@@ -374,7 +375,7 @@ test('Phase 6: settings list built and decision modes and the approval settings 
   await withApi({ env: { MAX_HUMAN_REVISIONS: '4', REREVIEW_AFTER_HUMAN: 'false' } }, async ({ call }) => {
     const s = (await call('GET', '/api/settings')).json
     assert.ok(s.built_modes.includes('full') && s.built_modes.includes('approval_review'))
-    assert.ok(!s.built_modes.includes('publish'))
+    assert.ok(['publish', 'unpublish', 'set_index', 'rebuild_blog'].every((m) => s.built_modes.includes(m)))
     assert.deepEqual(s.decision_modes, ['approve', 'human_revise', 'reject_topic', 'approval_review'])
     assert.deepEqual(s.approval, { max_human_revisions: 4, rereview_after_human: false, m91_notify_on_awaiting: false })
   })
@@ -409,5 +410,23 @@ test('Phase 6: lessons are listed with their text as title and can be deleted; o
     assert.deepEqual([del.status, del.json.deleted], [200, lesson.id])
     assert.equal((await call('GET', '/api/records?type=lesson')).json.records.length, 0)
     assert.ok(store.records.has(brief.id))
+  })
+})
+
+test('Phase 7: settings show the blog settings and deploy_token_set (never the token); GET /api/posts lists published posts', async () => {
+  await withApi({ env: { EMBARKO_DEPLOY_TOKEN: 'emb_faketoken_0123456789abcdef', AUTO_PUBLISH: 'true' } }, async ({ call, store }) => {
+    const res = await call('GET', '/api/settings')
+    assert.ok(!res.text.includes('emb_faketoken'))
+    assert.deepEqual(res.json.blog, { auto_publish: true, app_name: 'm91-blog', base_url: 'https://m91-blog.embarko.app', noindex_first_n_posts: 10, deploy_token_set: true })
+    assert.deepEqual(res.json.publish_modes, ['publish', 'unpublish', 'set_index', 'rebuild_blog'])
+    await store.createRecord({ type: 'published_post', briefId: 'B1', status: 'published', version: 2, payload: { slug: 'a', title: 'A', url: 'https://m91-blog.embarko.app/posts/a/', brief_id: 'B1', version: 2, topic_group: 1, noindex: true, post: { markdown: 'long text' } } })
+    const posts = await call('GET', '/api/posts')
+    assert.equal(posts.status, 200)
+    assert.equal(posts.json.posts.length, 1)
+    assert.deepEqual({ slug: posts.json.posts[0].slug, status: posts.json.posts[0].status, noindex: posts.json.posts[0].noindex, url: posts.json.posts[0].url }, { slug: 'a', status: 'published', noindex: true, url: 'https://m91-blog.embarko.app/posts/a/' })
+    assert.ok(!posts.text.includes('long text'), 'no post body in the list')
+  })
+  await withApi({ env: { EMBARKO_DEPLOY_TOKEN: '' } }, async ({ call }) => {
+    assert.equal((await call('GET', '/api/settings')).json.blog.deploy_token_set, false)
   })
 })

@@ -108,6 +108,7 @@ export function summariseOutput(agent, out) {
     }
   }
   if (out.placeholder) return { message: out.message, data: { placeholder: true } }
+  if (agent === 'publisher' && out.summary) return { message: out.summary, data: { url: out.url ?? null, dist: out.dist ?? null } }
   if (agent === 'promo' && out.pack) {
     return {
       message: `Promo pack ${out.status}: LinkedIn ${out.pack.linkedin_post.length} chars · X thread ${out.pack.x_thread.length} posts · ${out.pack.video_script.length} video scenes · ${out.problems?.length ?? 0} issue(s)`,

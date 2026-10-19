@@ -18,6 +18,8 @@ import { runPipeline, defaultAgents, acquireLock, LockedError, summariseOutput }
 import { runReviewer } from './reviewer/index.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { runPromo, approvedDraft } from './promo/index.js'
+import { createPublisher, publishPreflight, PublishError } from './publisher/index.js'
+import { draftsOf } from './writer/save.js'
 import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopic, runApprovalReview } from './approval.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
@@ -25,8 +27,10 @@ import { runWriter } from './writer/index.js'
 import { loadBrief } from './writer/inputs.js'
 import { addToTimeline } from './timeline.js'
 
-export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'publish'])
-export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review'])
+export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'publish', 'unpublish', 'set_index', 'rebuild_blog'])
+export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'publish', 'unpublish', 'set_index', 'rebuild_blog'])
+// The Publisher's modes (Phase 7): code only, no AI calls.
+export const PUBLISH_MODES = Object.freeze(['publish', 'unpublish', 'set_index', 'rebuild_blog'])
 // The human's decisions on a draft that waits at awaiting_human (Phase 5.5).
 export const DECISION_MODES = Object.freeze(['approve', 'human_revise', 'reject_topic', 'approval_review'])
 export const TRIGGERS = Object.freeze(['manual', 'cron', 'api', 'cli'])
@@ -97,7 +101,7 @@ export function configForRun(config, { dryRun, params = {} } = {}) {
 /**
  * @param {{ config?, storeFactory?, notifierFactory?, agentsFactory?, now? }} deps  factories take the run's config
  */
-export function createRunManager({ config = getConfig(), storeFactory, notifierFactory, agentsFactory, now = Date.now } = {}) {
+export function createRunManager({ config = getConfig(), storeFactory, notifierFactory, agentsFactory, publisherFactory, now = Date.now } = {}) {
   storeFactory ??= (cfg) => createStore({ config: cfg })
   notifierFactory ??= (cfg) => createNotifier({ config: cfg })
   let active = null // { runId, controller, done }
@@ -113,6 +117,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (mode === 'writer') await checkWriterParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'reviewer') await checkReviewerParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'promo') await checkPromoParams(params, configForRun(config, { dryRun, params }))
+    if (PUBLISH_MODES.includes(mode)) await checkPublishParams(mode, params, configForRun(config, { dryRun, params }))
     if (DECISION_MODES.includes(mode)) {
       const runConfig0 = configForRun(config, { dryRun, params })
       try {
@@ -239,7 +244,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
 
   async function runMode({ mode, runId, params, runConfig, store, notifier, signal }) {
     const agentDeps = agentsFactory ? undefined : {}
-    if (DECISION_MODES.includes(mode)) {
+    if (DECISION_MODES.includes(mode) || PUBLISH_MODES.includes(mode)) {
       const agents = agentsFactory?.(runConfig, { store, notifier }) ?? defaultAgents({ config: runConfig, store, notifier, agentDeps })
       // One top-level step with its events (started / finished + output / failed or cancelled).
       const runStep = async (agent, fn) => {
@@ -255,7 +260,16 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
           throw error
         }
       }
-      const ctx = { briefId: params.brief_id, runId, params, config: runConfig, store, notifier, agents, runStep, runPipeline, signal, now }
+      const publisher = (publisherFactory ?? ((cfg, d) => createPublisher({ config: cfg, ...d })))(runConfig, { store, notifier })
+      if (PUBLISH_MODES.includes(mode)) {
+        const out = await runStep('publisher', () =>
+          mode === 'publish' ? publisher.publish({ briefId: params.brief_id })
+            : mode === 'unpublish' ? publisher.unpublish({ slug: params.slug })
+              : mode === 'set_index' ? publisher.setIndex({ slug: params.slug, noindex: params.noindex })
+                : publisher.rebuildBlog())
+        return { status: 'succeeded', brief_id: params.brief_id ?? out.post?.brief_id ?? null, summary: out.summary, warnings: out.warnings }
+      }
+      const ctx = { briefId: params.brief_id, runId, params, config: runConfig, store, notifier, agents, runStep, runPipeline, signal, now, publisher }
       if (mode === 'approve') return runApprove(ctx)
       if (mode === 'human_revise') return runHumanRevise(ctx)
       if (mode === 'approval_review') return runApprovalReview(ctx)
@@ -372,6 +386,29 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     checkDraftParams(params, 'promo')
     const draft = await approvedDraft(storeFactory(runConfig), params.brief_id, { version: params.version, briefVersion: params.brief_version })
     if (!draft) throw new RunError('no_approved_draft', `brief ${params.brief_id} has no approved draft${params.version ? ` v${params.version}` : ''}`)
+  }
+
+  /** The Publisher's modes: preflight (token, site URL) and params, before the run starts. */
+  async function checkPublishParams(mode, params, runConfig) {
+    try {
+      publishPreflight(runConfig)
+    } catch (error) {
+      if (error instanceof PublishError) throw new RunError(error.code, error.message, 409)
+      throw error
+    }
+    const store = storeFactory(runConfig)
+    if (mode === 'publish') {
+      if (typeof params.brief_id !== 'string' || !params.brief_id.trim()) throw new RunError('bad_params', 'publish needs params.brief_id')
+      const draft = (await draftsOf(store, params.brief_id)).find((d) => d.status === 'approved' || d.status === 'published')
+      if (!draft) throw new RunError('no_approved_draft', `brief ${params.brief_id} has no approved draft to publish`, 409)
+      return
+    }
+    if (mode === 'rebuild_blog') return
+    if (typeof params.slug !== 'string' || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(params.slug)) throw new RunError('bad_params', `${mode} needs params.slug (lowercase words joined by hyphens)`)
+    if (mode === 'set_index' && typeof params.noindex !== 'boolean') throw new RunError('bad_params', 'set_index needs params.noindex: true or false')
+    const rec = (await store.getRecords({ type: 'published_post' })).find((r) => (r.payload?.slug ?? r.payload?.post?.slug) === params.slug)
+    if (!rec) throw new RunError('unknown_post', `no published post with the slug ${params.slug}`, 404)
+    if (rec.status !== 'published') throw new RunError('not_published', `the post ${params.slug} is ${rec.status}, not published`, 409)
   }
 
   /** Cancels the active run (Task 4). Returns false if that run isn't running. */
