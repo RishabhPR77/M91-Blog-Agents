@@ -265,7 +265,9 @@ export async function runWriter(params = {}, deps = {}) {
     title: draft.title, post_markdown: draft.post_markdown, tldr: draft.tldr, seo: draft.seo, context: draft.context, revision_notes: draft.revision_notes,
     checks: { hard_passed: checks.hard_passed, results: checks.results },
     word_count: checks.word_count, reading: checks.reading, model_used: answer.model, writer_mode: mode, repairs_used: repairs, auto_fixes: autoFixes,
-    snippets_used: snippetsUsed, snippets_available: snippets.length
+    snippets_used: snippetsUsed, snippets_available: snippets.length,
+    // The inserted snippets themselves, for the Reviewer (B3) and later re-checks.
+    snippets: snippets.filter((s) => snippetsUsed.includes(s.id))
   }
   const { record, status, warnings: saveWarnings } = await saveDraft(store, { briefId: params.briefId, briefRecord, version, briefVersion, topicGroup: brief.topic_group, payload, hardPassed: checks.hard_passed })
   warnings.push(...saveWarnings)
