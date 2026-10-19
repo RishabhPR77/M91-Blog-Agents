@@ -14,5 +14,8 @@
     "dev:engine": "npm run dev --workspace @m91/engine",
     "test": "npm test --workspaces --if-present",
     "check": "npm run check --workspace @m91/engine"
+  },
+  "overrides": {
+    "shell-quote": "1.11.0"
   }
 }
