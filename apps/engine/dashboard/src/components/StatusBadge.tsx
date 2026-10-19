@@ -9,6 +9,7 @@ const TONE: Record<string, string> = {
 }
 
 const STATUS_TONE: Record<string, keyof typeof TONE> = {
+  published: 'green', publish_failed: 'red', publishing: 'blue', unpublished: 'gray',
   succeeded: 'green', done: 'green', approved: 'green', pass: 'green', ok: 'green', current: 'green',
   failed: 'red', fail: 'red', failed_review: 'red', rejected: 'red', error: 'red',
   running: 'blue', drafted: 'blue', new: 'blue', active: 'blue', open: 'blue',

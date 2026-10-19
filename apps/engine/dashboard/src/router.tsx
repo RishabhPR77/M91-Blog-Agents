@@ -16,6 +16,7 @@ const RecordDetail = lazy(() => import('./pages/RecordDetail'))
 const Pinned = lazy(() => import('./pages/Pinned'))
 const Lessons = lazy(() => import('./pages/Lessons'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Posts = lazy(() => import('./pages/Posts'))
 
 export function AppRoutes() {
   return (
@@ -36,6 +37,7 @@ export function AppRoutes() {
                 <Route path="/records/:memoryId" element={<RecordDetail />} />
                 <Route path="/pinned" element={<Pinned />} />
                 <Route path="/lessons" element={<Lessons />} />
+                <Route path="/posts" element={<Posts />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<NotYet title="Not found" task="no task: this address does not exist" />} />
               </Routes>

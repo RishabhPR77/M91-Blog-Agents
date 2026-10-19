@@ -3,13 +3,14 @@
 // (the runs and approvals lists each make the engine scan Mem0).
 import { useQuery } from '@tanstack/react-query'
 import { api } from './client'
-import type { ApprovalItem, Health, RunSummary, Settings } from './types'
+import type { ApprovalItem, Health, PostItem, RunSummary, Settings } from './types'
 
 export const keys = {
   health: ['health'] as const,
   settings: ['settings'] as const,
   approvals: ['approvals'] as const,
-  runs: (limit: number) => ['runs', limit] as const
+  runs: (limit: number) => ['runs', limit] as const,
+  posts: ['posts'] as const
 }
 
 /** Engine status; errors here mean "offline" and are shown as a banner, not a toast. */
@@ -24,3 +25,7 @@ export const useApprovals = (enabled = true) =>
 
 export const useRuns = (limit = 20, enabled = true) =>
   useQuery({ queryKey: keys.runs(limit), queryFn: async () => (await api<{ runs: RunSummary[] }>(`/api/runs?limit=${limit}`)).runs, refetchInterval: 30_000, enabled })
+
+/** Blog posts (Phase 7). Run events refresh it, so a publish shows up without a reload. */
+export const usePosts = (enabled = true) =>
+  useQuery({ queryKey: keys.posts, queryFn: async () => (await api<{ posts: PostItem[] }>('/api/posts')).posts, refetchInterval: 60_000, enabled })

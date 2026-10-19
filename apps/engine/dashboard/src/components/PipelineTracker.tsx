@@ -41,7 +41,7 @@ export function PipelineTracker({ view }: { view: RunView }) {
   return (
     <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8" aria-label="Pipeline">
       {steps.map((st, i) => {
-        const placeholder = st.placeholder || ((st.name === 'designer' || st.name === 'publisher') && st.status !== 'waiting' && st.status !== 'skipped' && /not built yet/.test(st.summary ?? ''))
+        const placeholder = st.placeholder || ((st.name === 'designer' || st.name === 'publisher') && st.status !== 'waiting' && st.status !== 'skipped' && /not built yet|Publishing is off/.test(st.summary ?? ''))
         return (
           <li key={st.name} data-testid={`step-${st.name}`} data-status={st.status} className={`relative rounded-lg border p-2.5 ${STYLE[st.status]}`}>
             <div className="flex items-center gap-1.5 text-sm font-medium">

@@ -21,6 +21,8 @@ type Trimmed = { id: string; type: string; status: string | null; brief_id: stri
 type Pending = { mode: string; label: string; costKey: CostKey; params: Record<string, unknown>; details: [string, string][] }
 
 const RUN_ID = /R-\d{6}-\d{4}-[A-Z0-9]{4}/
+// Publisher modes use no AI: the low-cost params do not apply to them.
+const NO_AI_MODES = ['publish', 'unpublish', 'set_index', 'rebuild_blog']
 
 const useRecords = (key: string, query: string, enabled: boolean) =>
   useQuery({ queryKey: ['records', key], queryFn: async () => (await api<{ records: Trimmed[] }>(`/api/records?${query}`)).records, enabled, staleTime: 30_000 })
@@ -83,6 +85,7 @@ export default function Control() {
   const [draftKey, setDraftKey] = useState('')
   const [route, setRoute] = useState(false)
   const [promoBrief, setPromoBrief] = useState('')
+  const [publishBrief, setPublishBrief] = useState('')
   const [pending, setPending] = useState<Pending | null>(null)
   const [starting, setStarting] = useState(false)
   const [conflict, setConflict] = useState<{ message: string; runId: string | null } | null>(null)
@@ -100,6 +103,9 @@ export default function Control() {
   const activeRun = runs.data?.find((r) => r.status === 'running')
   const offline = !online
   const outdated = Boolean(settings.data) && !modesKnown
+  const blog = settings.data?.blog
+  // A real deploy needs the token; a dry run builds locally and needs none.
+  const tokenReason = blog && !blog.deploy_token_set && !(dryRun ?? true) ? 'Deploy token not set (dry run only)' : null
   const busyReason = offline ? 'Engine offline' : outdated ? 'Restart the engine first' : !settings.data ? 'Loading settings…' : activeRun ? 'A run is in progress' : null
 
   const draftOptions = (drafts.data ?? []).filter((d) => d.brief_id && d.version != null)
@@ -113,7 +119,7 @@ export default function Control() {
   async function start() {
     if (!pending) return
     setStarting(true)
-    const body = buildRunRequest(pending.mode, { dryRun: dryRun ?? true, lowCost, group: effectiveGroup, params: pending.params })
+    const body = buildRunRequest(pending.mode, { dryRun: dryRun ?? true, lowCost: lowCost && !NO_AI_MODES.includes(pending.mode), group: effectiveGroup, params: pending.params })
     try {
       const { run_id } = await api<{ run_id: string }>('/api/runs', { method: 'POST', body })
       void qc.invalidateQueries({ queryKey: ['runs'] })
@@ -219,7 +225,17 @@ export default function Control() {
             </select>
           </RunButton>
           <RunButton title="Designer" description="Illustrations and interactive blocks for an approved post." lowCost={lowCost} built={built.has('design')} comingIn="Phase 8" onRun={() => {}} />
-          <RunButton title="Publish" description="Put an approved post on the blog." lowCost={lowCost} built={built.has('publish')} comingIn="Phase 7" onRun={() => {}} />
+          <RunButton title="Publish" description={`Put an approved post on the blog: build, deploy, check it is live.${blog?.auto_publish ? ' (AUTO_PUBLISH is on: approving publishes too.)' : ''}`} costKey="publish" lowCost={lowCost} built={isBuilt('publish')} comingIn="Phase 7"
+            disabledReason={busyReason ?? (publishBrief ? tokenReason : 'Pick an approved draft')}
+            onRun={() => ask('publish', 'Publish', 'publish', { brief_id: publishBrief }, [['Approved draft of', publishBrief], ['Deploys to', blog?.base_url ?? '…']])}>
+            <select aria-label="Approved draft to publish" className="input py-1.5" value={publishBrief} onChange={(e) => setPublishBrief(e.target.value)}>
+              <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
+              {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
+            </select>
+          </RunButton>
+          <RunButton title="Rebuild blog" description="Rebuild and redeploy the blog from the published posts without changing any post (after a change to the blog's code or look)." costKey="rebuild_blog" lowCost={lowCost} built={isBuilt('rebuild_blog')} comingIn="Phase 7"
+            disabledReason={busyReason ?? tokenReason}
+            onRun={() => ask('rebuild_blog', 'Rebuild blog', 'rebuild_blog', {}, [['Deploys to', blog?.base_url ?? '…']])} />
         </div>
 
         <Card title="Recent runs" actions={<Link to="/runs" className="text-sm text-sky-700 hover:underline dark:text-sky-300">All runs →</Link>}>
@@ -255,7 +271,7 @@ export default function Control() {
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1" data-testid="run-summary">
           <dt className="text-slate-500">Mode</dt><dd className="font-mono">{pending?.mode}</dd>
           <dt className="text-slate-500">Dry run</dt><dd>{dryRun ?? true ? 'yes: nothing is saved or sent (AI is still called)' : 'no: results are saved and Slack/M91 may be sent'}</dd>
-          <dt className="text-slate-500">Low cost</dt><dd>{lowCost ? `on (Scout group ${effectiveGroup})` : 'off'}</dd>
+          <dt className="text-slate-500">Low cost</dt><dd>{pending && NO_AI_MODES.includes(pending.mode) ? 'not used (no AI)' : lowCost ? `on (Scout group ${effectiveGroup})` : 'off'}</dd>
           {pending?.details.map(([k, v]) => <Fragment key={k}><dt className="text-slate-500">{k}</dt><dd>{v}</dd></Fragment>)}
         </dl>
       </ConfirmDialog>

@@ -32,6 +32,17 @@ export default function Settings() {
             </dl>
           ) : <p className="text-sm text-slate-500">Not reported by this engine (restart it).</p>}
         </Card>
+        <Card title="Blog and publishing">
+          {d.blog ? (
+            <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
+              <dt className="text-slate-500">Auto-publish on approve</dt><dd data-testid="setting-auto-publish">{yes(d.blog.auto_publish)}</dd>
+              <dt className="text-slate-500">Blog app (Embarko)</dt><dd className="font-mono text-xs">{d.blog.app_name}</dd>
+              <dt className="text-slate-500">Blog URL</dt><dd><a className="text-sky-700 hover:underline dark:text-sky-300" href={d.blog.base_url} target="_blank" rel="noreferrer">{d.blog.base_url}</a></dd>
+              <dt className="text-slate-500">noindex for the first</dt><dd>{d.blog.noindex_first_n_posts} posts</dd>
+              <dt className="text-slate-500">Deploy token set</dt><dd data-testid="setting-deploy-token">{d.blog.deploy_token_set ? 'yes' : 'no (only dry runs can publish)'}</dd>
+            </dl>
+          ) : <p className="text-sm text-slate-500">No blog settings from this engine (it predates Phase 7: restart it).</p>}
+        </Card>
         <Card title="Models per agent" className="lg:col-span-2">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm" aria-label="Models">

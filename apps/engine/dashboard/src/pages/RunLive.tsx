@@ -12,6 +12,7 @@ import { Card, EmptyState, PageHeader } from '../components/Page'
 import { PipelineTracker } from '../components/PipelineTracker'
 import { StatusBadge } from '../components/StatusBadge'
 import { StepOutputs } from '../components/StepOutputs'
+import { PublisherSteps, publisherProgress } from '../components/PublisherSteps'
 import { toast } from '../components/Toasts'
 import { fmtDateTime, fmtDuration } from '../format'
 import type { ApprovalBanner } from '../state/runEvents'
@@ -128,6 +129,7 @@ export default function RunLive() {
         {view.approvals.map((a) => <Banner key={a.seq} a={a} />)}
 
         <Card title="Pipeline"><PipelineTracker view={view} /></Card>
+        {publisherProgress(view.outputs).size > 0 && <Card title="Publisher"><PublisherSteps outputs={view.outputs} stepStatus={view.steps.publisher?.status ?? null} /></Card>}
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="Loop timeline"><LoopTimeline routes={view.routes} /></Card>
           <Card title="Outputs"><StepOutputs outputs={view.outputs} records={detail?.records} /></Card>

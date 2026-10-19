@@ -10,6 +10,7 @@ import { useSettings } from '../api/queries'
 import { ChecksTable, type CheckResult } from '../components/ChecksTable'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MarkdownPreview } from '../components/MarkdownPreview'
+import { PublishCard } from '../components/PublishCard'
 import { Card, EmptyState, PageHeader } from '../components/Page'
 import { VerdictPanel, type Review } from '../components/VerdictPanel'
 import { StatusBadge } from '../components/StatusBadge'
@@ -193,6 +194,7 @@ export default function ApprovalDetail() {
         </div>
 
         <div className="space-y-4 lg:col-span-2">
+          <PublishCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} title={d.draft.title} />
           <Card title="Your decision">
             <div className="space-y-4">
               {error && <ActionError error={error} onClose={() => setError(null)} />}
@@ -313,7 +315,7 @@ export default function ApprovalDetail() {
         </div>
       ) : (
         <ConfirmDialog open title={`Approve v${d.draft.version}?`} expectedCalls={COSTS.approve.normal} confirmLabel="Approve" busy={busy} onConfirm={() => run(approveAction)} onCancel={() => setApproveOpen(false)}>
-          <p>The promo pack is created, then the Designer and Publisher steps (placeholders until Phases 8 and 7).{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>
+          <p>The promo pack is created, then the Designer step (a placeholder until Phase 8) and the Publisher step ({settings.data?.blog?.auto_publish ? 'AUTO_PUBLISH is on: the post is published to the blog, no AI calls' : 'AUTO_PUBLISH is off: publish it afterwards with Publish'}).{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>
         </ConfirmDialog>
       ))}
 

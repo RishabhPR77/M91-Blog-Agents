@@ -15,7 +15,10 @@ export const COSTS = {
   approval_review: { normal: '1–2', lowCost: '1–2' },
   human_revise_rereview: { normal: '2–4', lowCost: '2–4', note: 'Writer revision, then the Reviewer' },
   human_revise_no_rereview: { normal: '1–2', lowCost: '1–2', note: 'Writer revision only' },
-  reject_topic: { normal: '0', lowCost: '0' }
+  reject_topic: { normal: '0', lowCost: '0' },
+  // Phase 7: the Publisher is code, not AI.
+  publish: { normal: '0', lowCost: '0', note: 'no AI: build, deploy and check' },
+  rebuild_blog: { normal: '0', lowCost: '0', note: 'no AI: rebuild and redeploy the blog' }
 } satisfies Record<string, Estimate>
 
 export type CostKey = keyof typeof COSTS

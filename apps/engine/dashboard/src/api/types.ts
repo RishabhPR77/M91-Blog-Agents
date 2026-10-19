@@ -17,6 +17,26 @@ export type Settings = {
   approval?: { max_human_revisions: number; rereview_after_human: boolean; m91_notify_on_awaiting: boolean }
   built_modes?: string[]
   decision_modes?: string[]
+  /** Phase 7: the blog and the Publisher (deploy_token_set is yes/no only, never the token). */
+  blog?: { auto_publish: boolean; app_name: string; base_url: string; noindex_first_n_posts: number; deploy_token_set: boolean }
+  publish_modes?: string[]
+}
+
+/** GET /api/posts: one row per published_post record (Phase 7). */
+export type PostItem = {
+  record_id: string
+  slug: string
+  title: string
+  status: 'publishing' | 'published' | 'publish_failed' | 'unpublished' | string
+  noindex: boolean
+  url: string | null
+  brief_id: string | null
+  version: number | null
+  topic_group: number | null
+  published_at: string | null
+  updated_at: string | null
+  deployed_at: string | null
+  last_error: string | null
 }
 
 export type RunStepSummary = { name: string; status: string; ms: number | null; ai_calls: number }

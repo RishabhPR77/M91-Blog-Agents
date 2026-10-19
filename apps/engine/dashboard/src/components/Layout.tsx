@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Activity, BookOpen, Gauge, History, Inbox, Lightbulb, LogOut, Menu, Monitor, Moon, Pin, Settings as SettingsIcon, Sun, X } from 'lucide-react'
+import { Activity, BookOpen, Gauge, History, Inbox, Lightbulb, LogOut, Menu, Monitor, Moon, Newspaper, Pin, Settings as SettingsIcon, Sun, X } from 'lucide-react'
 import { api } from '../api/client'
 import { keys, useApprovals, useHealth, useRuns, useSettings } from '../api/queries'
 import { openEventStream } from '../api/sse'
@@ -30,6 +30,7 @@ function useGlobalLive(online: boolean) {
           qc.invalidateQueries({ queryKey: ['runs'] })
           qc.invalidateQueries({ queryKey: keys.approvals })
           qc.invalidateQueries({ queryKey: keys.health })
+          qc.invalidateQueries({ queryKey: keys.posts })
         }
       }
     })
@@ -76,6 +77,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/approvals', label: 'Approvals', icon: <Inbox size={18} />, badge: waiting },
     { to: '/runs', label: 'Runs', icon: <History size={18} />, end: true },
     { to: '/content', label: 'Content', icon: <BookOpen size={18} /> },
+    { to: '/posts', label: 'Posts', icon: <Newspaper size={18} /> },
     { to: '/pinned', label: 'Pinned topics', icon: <Pin size={18} /> },
     { to: '/lessons', label: 'Lessons', icon: <Lightbulb size={18} /> },
     { to: '/settings', label: 'Settings', icon: <SettingsIcon size={18} /> }
