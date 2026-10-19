@@ -169,20 +169,26 @@ export function usageFromComments(fileLines, fileName = '') {
   return out
 }
 
-/** The CODE SNIPPETS message section: every snippet with line numbers, for whole or line-range use. */
-export function snippetSection(snippets) {
+/**
+ * The CODE SNIPPETS message section: every snippet with line numbers, for whole or line-range use.
+ * maxLines: a snippet longer than this is listed without its lines (to fit viaSocket's message cap);
+ * the Writer is told to use the usage snippets instead.
+ */
+export function snippetSection(snippets, { maxLines = Infinity } = {}) {
   return snippets.map((s) => {
     const lines = s.code.split('\n')
     const w = String(lines.length).length
-    return [
+    const head = [
       `[${s.id}] kind: ${s.kind ?? 'block'} · language: ${s.language} · lines 1-${lines.length} · source: ${s.source_url ?? 'unknown'}`,
-      `context: ${s.context || '(none)'}`,
-      '```' + s.language,
-      ...lines.map((l, i) => `${String(i + 1).padStart(w)}| ${l}`),
-      '```'
-    ].join('\n')
+      `context: ${s.context || '(none)'}`
+    ]
+    if (lines.length > maxLines) return [...head, `(${lines.length} lines: too long to list here. Do not insert ${s.id} or a range of it; use the other snippets, e.g. its usage snippets.)`].join('\n')
+    return [...head, '```' + s.language, ...lines.map((l, i) => `${String(i + 1).padStart(w)}| ${l}`), '```'].join('\n')
   }).join('\n\n')
 }
+
+/** Lines above which a snippet is listed without its lines when the Writer message is too long. */
+export const SNIPPET_LIST_MAX_LINES = 60
 
 /** Link label for a snippet's source line: the page title, else the host and path. */
 export function sourceLabel(s) {

@@ -166,8 +166,8 @@ export const fullBriefForWriter = (brief) => Object.fromEntries(Object.entries(b
 
 /**
  * Message sections in the brief's order (8.5), only those given. Kept under viaSocket's 50,000-char
- * cap by trimming TUTORIAL SOURCE TEXT first (the checks then use exactly the text that was sent),
- * then a full PREVIOUS DRAFT. Returns { message, tutorialText, trimmed[] }.
+ * cap by listing very long CODE SNIPPETS without their lines (snippetsCompact), then trimming TUTORIAL
+ * SOURCE TEXT, then a full PREVIOUS DRAFT. Returns { message, tutorialText, trimmed[] }.
  */
 export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
   const order = [
@@ -180,6 +180,12 @@ export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
   const build = () => [...order.filter(([k]) => sec[k] !== undefined && sec[k] !== null && sec[k] !== '').map(([k, label]) => `--- ${label} ---\n${sec[k]}`), ...(tail ? [tail] : [])].join('\n')
   const trimmed = []
   let message = build()
+  // First, very long snippets (a whole script) are listed without their lines (Phase 5.5 A1).
+  if (message.length > max && sec.snippetsCompact && sec.snippetsCompact !== sec.snippets) {
+    sec.snippets = sec.snippetsCompact
+    trimmed.push('long code snippets (listed without their lines)')
+    message = build()
+  }
   if (message.length > max && sec.tutorialText) {
     const keep = Math.max(0, sec.tutorialText.length - (message.length - max) - 50)
     sec.tutorialText = sec.tutorialText.slice(0, keep)

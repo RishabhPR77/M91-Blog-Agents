@@ -2,6 +2,7 @@ import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { runWriter, autoFixDraft, WriterError, writerFeedback } from '../../src/writer/index.js'
 import { allowedUrlSet, excerptFor, tutorialSourceText, buildWriterMessage, briefRules } from '../../src/writer/inputs.js'
+import { extractSnippets, snippetSection } from '../../src/writer/snippets.js'
 import { WRITER_BASE } from '../../src/writer/prompts.js'
 import { parseJsonContent, AiError, TruncatedError } from '../../src/viasocket.js'
 import { withRun, replay, resetEvents, CancelledError } from '../../src/events.js'
@@ -420,4 +421,18 @@ test('tutorial: a line-range token inserts exactly those lines; the range is sav
   assert.deepEqual(saved.snippet_inserts.map((x) => [x.id, x.from, x.to]), [['S2', 2, 2]])
   assert.equal(saved.checks.results.find((x) => x.id === 'ai_written_code').passed, true)
   assert.equal(r.hard_passed, true)
+})
+
+test('message guard: a very long snippet (a whole script) is listed without its lines first; usage snippets stay', () => {
+  const script = Array.from({ length: 700 }, (_, i) => `echo line ${i} ${'x'.repeat(60)}`).join('\n')
+  const { snippets } = extractSnippets(`=== SOURCE: ${SCRIPT} ===\n# Usage: m91.sh check\n${script}`)
+  const full = snippetSection(snippets)
+  const compact = snippetSection(snippets, { maxLines: 60 })
+  const { message, trimmed } = buildWriterMessage({ brief: '{}', tone: 't', allowedUrls: '- x', tutorialText: 'steps', snippets: full, snippetsCompact: compact })
+  assert.ok(full.length > 50000)
+  assert.ok(message.length <= 50000)
+  assert.deepEqual(trimmed, ['long code snippets (listed without their lines)'])
+  assert.match(message, /\[S1\] kind: file · language: bash · lines 1-701 · source: [^\n]+\ncontext: [^\n]*\n\(701 lines: too long to list here\. Do not insert S1 or a range of it; use the other snippets, e\.g\. its usage snippets\.\)/)
+  assert.match(message, /\[S2\] kind: usage_from_comment · language: bash · lines 1-1 · source: [^\n]+\ncontext: [^\n]*\n```bash\n1\| m91\.sh check\n```/)
+  assert.match(message, /--- TUTORIAL SOURCE TEXT ---\nsteps/, 'the source text is not trimmed when compacting is enough')
 })

@@ -13,7 +13,7 @@ import { DEFAULT_CTA_TEXT } from '../strategist/prompts.js'
 import { writer_draft, draftSchemaErrors } from './schemas.js'
 import { buildWriterPrompt, repairTail, truncatedProblem } from './prompts.js'
 import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, citedDocsSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage } from './inputs.js'
-import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets } from './snippets.js'
+import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets, SNIPPET_LIST_MAX_LINES } from './snippets.js'
 import { draftsOf, nextDraftVersion, saveDraft, draftVersion, isEarlierDraft } from './save.js'
 
 export class WriterError extends Error {
@@ -136,7 +136,8 @@ export async function runWriter(params = {}, deps = {}) {
     internalLinks: brief.internal_links?.length ? JSON.stringify(brief.internal_links.map(({ url, anchor_text }) => ({ url, anchor_text }))) : null,
     interactiveIdeas: brief.interactive_ideas?.length ? JSON.stringify(brief.interactive_ideas) : null,
     tutorialText: isTutorial ? tokenisedSource : null,
-    snippets: snippets.length ? snippetSection(snippets) : null
+    snippets: snippets.length ? snippetSection(snippets) : null,
+    snippetsCompact: snippets.length ? snippetSection(snippets, { maxLines: SNIPPET_LIST_MAX_LINES }) : null
   }
   let previousContext = false
   if (mode === 'new') {
