@@ -107,6 +107,7 @@ export function summariseOutput(agent, out) {
       data: { record_id: out.record_id ?? null, pass: out.pass, total: out.total ?? out.score ?? null, route_hint: out.route_hint ?? null }
     }
   }
+  if (out.placeholder) return { message: out.message, data: { placeholder: true } }
   if (agent === 'promo' && out.pack) {
     return {
       message: `Promo pack ${out.status}: LinkedIn ${out.pack.linkedin_post.length} chars · X thread ${out.pack.x_thread.length} posts · ${out.pack.video_script.length} video scenes · ${out.problems?.length ?? 0} issue(s)`,
@@ -202,7 +203,9 @@ export async function acquireLock(store, { owner, now = Date.now } = {}) {
 
 /**
  * Runs one pipeline.
- * resume: { version?, briefVersion? } starts at the review of a saved draft of briefId (reviewer mode, route: true).
+ * resume: { version?, briefVersion? } starts at the review of a saved draft of briefId (reviewer mode, route: true);
+ *   with startAt: 'writer' and feedback (human items) it starts with a Writer revision (human_revise); skipReview
+ *   sends that revision straight back to awaiting_human (REREVIEW_AFTER_HUMAN=false).
  * @param {{ config?, store, notifier, agents?, now?, onState? }} deps
  */
 export async function runPipeline({ config = getConfig(), store, notifier, agents, now = Date.now, briefId = newBriefId(new Date(now())), runId = briefId, lock: useLock = true, signal = null, resume = null } = {}) {
@@ -306,13 +309,19 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
       if (!d) throw new Error(`no draft of brief ${briefId}${resume.version ? ` v${resume.version}` : ''}`)
       draft = { record_id: d.id, version: draftVersion(d), brief_version: draftBriefVersion(d), title: d.payload?.title, draft: d.payload }
       version = draft.version
+      if (resume.startAt === 'writer') {
+        // human_revise (B3): the Writer revises with the human's feedback first.
+        writerMode = 'revise'
+        routeFeedback = resume.feedback ?? []
+      }
     } else {
       await research()
       await plan()
     }
     setState('drafting')
 
-    let skipWriter = Boolean(resume)
+    let skipWriter = Boolean(resume) && resume.startAt !== 'writer'
+    let skipReview = Boolean(resume?.skipReview)
     for (;;) {
       if (skipWriter) skipWriter = false
       else {
@@ -323,10 +332,17 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
         else await store.createRecord({ type: 'draft', briefId, payload: draft, status: 'drafted', version, topicGroup: brief?.topic_group ?? null })
       }
       setState('reviewing')
-      review = await step('reviewer', ctx())
-      reviews++
-      // The real Reviewer saves its own review record; a mock's review is saved here.
-      if (!review?.record_id) await store.createRecord({ type: 'review', briefId, payload: review, status: review?.pass ? 'pass' : 'fail', version })
+      if (skipReview) {
+        // REREVIEW_AFTER_HUMAN=false: the human's revision goes straight back to the human.
+        skipReview = false
+        review = { pass: true, total: null, feedback: [], skipped: true }
+        emit('step.output', { agent: 'orchestrator', step: 'approval', message: 'Reviewer skipped (REREVIEW_AFTER_HUMAN=false)', data: { version } })
+      } else {
+        review = await step('reviewer', ctx())
+        reviews++
+        // The real Reviewer saves its own review record; a mock's review is saved here.
+        if (!review?.record_id) await store.createRecord({ type: 'review', briefId, payload: review, status: review?.pass ? 'pass' : 'fail', version })
+      }
       const total = review?.total ?? review?.score
       if (typeof total === 'number') best = best === null || total > best.total ? { total, version, review } : best
 
@@ -427,13 +443,14 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     await setStatus(draftId, 'awaiting_human', 'draft', { awaiting_since: istIso(new Date(now())), review_total: total })
     await setStatus(briefRecord?.id, 'awaiting_human', 'brief')
     const title = titleOf()
-    await send('slack', `📝 Ready for your approval: *${title}* · score ${total}/100 · v${version} · brief ${briefId}`)
+    const score = total === null ? 'not re-reviewed' : `score ${total}/100`
+    await send('slack', `📝 Ready for your approval: *${title}* · ${score} · v${version} · brief ${briefId}`)
     const markdown = draft?.draft?.post_markdown ?? draft?.post_markdown
     // DRY_RUN would only log a preview of each part, and log lines become events: no post text in events.
     if (config.notify.postApproved && markdown && dryRun) log.info('DRY_RUN: draft not posted to Slack', { chars: markdown.length })
     else if (config.notify.postApproved && markdown) await send('slack', markdown)
-    if (config.approval.notifyOnAwaiting) await send('m91', { title: 'Blog draft ready for approval', description: `${title} — score ${total}/100. Open the dashboard.`, severity: 'LOW' })
-    const summary = `awaiting human approval (v${version}, score ${total})`
+    if (config.approval.notifyOnAwaiting) await send('m91', { title: 'Blog draft ready for approval', description: `${title} — ${score}. Open the dashboard.`, severity: 'LOW' })
+    const summary = `awaiting human approval (v${version}, ${total === null ? 'not re-reviewed' : `score ${total}`})`
     emit('step.output', { agent: 'orchestrator', step: 'approval', message: 'Awaiting human approval', data: { brief_id: briefId, version, total } })
     emit('approval.waiting', { agent: 'orchestrator', message: summary, data: { brief_id: briefId, version, total } })
     return summary

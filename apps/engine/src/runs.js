@@ -18,13 +18,16 @@ import { runPipeline, defaultAgents, acquireLock, LockedError, summariseOutput }
 import { runReviewer } from './reviewer/index.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { runPromo, approvedDraft } from './promo/index.js'
+import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopic } from './approval.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
 import { loadBrief } from './writer/inputs.js'
 
-export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'publish'])
-export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo'])
+export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'publish'])
+export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic'])
+// The human's decisions on a draft that waits at awaiting_human (Phase 5.5).
+export const DECISION_MODES = Object.freeze(['approve', 'human_revise', 'reject_topic'])
 export const TRIGGERS = Object.freeze(['manual', 'cron', 'api', 'cli'])
 const TOP_STEPS = ['scout', 'strategist', 'writer', 'checks', 'reviewer', 'promo', 'designer', 'publisher']
 
@@ -89,6 +92,15 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (mode === 'writer') await checkWriterParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'reviewer') await checkReviewerParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'promo') await checkPromoParams(params, configForRun(config, { dryRun, params }))
+    if (DECISION_MODES.includes(mode)) {
+      const runConfig0 = configForRun(config, { dryRun, params })
+      try {
+        await checkDecision(mode, params, { store: storeFactory(runConfig0), config: runConfig0 })
+      } catch (error) {
+        if (error instanceof ApprovalError) throw new RunError(error.code, error.message, error.status)
+        throw error
+      }
+    }
 
     const runConfig = configForRun(config, { dryRun, params })
     const runId = newRunId(new Date(now()))
@@ -201,6 +213,27 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
 
   async function runMode({ mode, runId, params, runConfig, store, notifier, signal }) {
     const agentDeps = agentsFactory ? undefined : {}
+    if (DECISION_MODES.includes(mode)) {
+      const agents = agentsFactory?.(runConfig, { store, notifier }) ?? defaultAgents({ config: runConfig, store, notifier, agentDeps })
+      // One top-level step with its events (started / finished + output / failed or cancelled).
+      const runStep = async (agent, fn) => {
+        emit('step.started', { agent, step: agent })
+        try {
+          const out = await fn()
+          emit('step.finished', { agent, step: agent })
+          const sum = summariseOutput(agent, out)
+          if (sum) emit('step.output', { agent, step: agent, ...sum })
+          return out
+        } catch (error) {
+          stepEnded(agent, error, signal)
+          throw error
+        }
+      }
+      const ctx = { briefId: params.brief_id, runId, params, config: runConfig, store, notifier, agents, runStep, runPipeline, signal, now }
+      if (mode === 'approve') return runApprove(ctx)
+      if (mode === 'human_revise') return runHumanRevise(ctx)
+      return runRejectTopic(ctx)
+    }
     if (mode === 'full') {
       const agents = agentsFactory?.(runConfig, { store, notifier }) ?? defaultAgents({ config: runConfig, store, notifier, agentDeps })
       const r = await runPipeline({ config: runConfig, store, notifier, agents, now, runId, briefId: params.brief_id ?? newBriefId(new Date(now())), lock: false, signal })

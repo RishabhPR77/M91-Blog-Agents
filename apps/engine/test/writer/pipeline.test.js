@@ -66,7 +66,7 @@ test('reviewer fails once: Writer v1 → fail (must + should, quoted) → loop.r
   assert.equal(r.status, 'succeeded')
   assert.deepEqual(s.ai.requests.map((q) => q.call), ['new', 'revise'])
   const rev = s.ai.requests[1]
-  assert.match(rev.message, /--- REVIEWER FEEDBACK ---\n\[\{"area":"simplicity","quote":"Agent approval means your software stops and asks a person before a risky step\."/)
+  assert.match(rev.message, /--- FEEDBACK ---\n\[\{"source":"reviewer","area":"simplicity","quote":"Agent approval means your software stops and asks a person before a risky step\."/)
   assert.match(rev.message, /--- QUOTED EXCERPTS ---\n- "Agent approval means/)
   assert.deepEqual(recordsOf(s.store, 'draft').map((d) => [d.version, d.status]).sort(), [[1, 'superseded'], [2, 'awaiting_human']])
   const route = replay(run_id).find((e) => e.type === 'loop.route')
@@ -185,7 +185,7 @@ test('the real Reviewer in the loop (DRY_RUN): fail with a quoted "must" item �
   assert.equal(r.status, 'succeeded', r.run.result_summary)
   assert.deepEqual(reviewerAi.requests.map((q) => q.call), ['review', 'review'])
   assert.match(reviewerAi.requests[1].message, /--- PREVIOUS REVIEW ---\n\{"feedback":\[\{"area":"simplicity","quote":"A ringing phone gets attention fast\."/)
-  assert.match(writerAi.requests[1].message, /--- REVIEWER FEEDBACK ---\n\[\{"area":"simplicity","quote":"A ringing phone gets attention fast\."/)
+  assert.match(writerAi.requests[1].message, /--- FEEDBACK ---\n\[\{"source":"reviewer","area":"simplicity","quote":"A ringing phone gets attention fast\."/)
   const reviewSteps = r.run.steps.filter((x) => x.name === 'reviewer')
   assert.match(reviewSteps[0].summary, /^Score \d+(\.\d)?\/100 · fail · simplicity 5 → writer$/)
   assert.match(reviewSteps[1].summary, /^Score 90\/100 · pass · gates 10\/10 · 0 should-fix items$/)

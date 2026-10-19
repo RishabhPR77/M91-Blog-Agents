@@ -153,7 +153,8 @@ export async function runWriter(params = {}, deps = {}) {
     const prevCtx = JSON.stringify(previous.payload?.context ?? {})
     sections.previousDraft = wc.revisionInput === 'full' && previous.payload?.post_markdown ? tokeniseSnippets(previous.payload.post_markdown, snippets, previous.payload.snippet_inserts ?? []) : prevCtx
     sections.previousContextFallback = prevCtx
-    sections.feedback = JSON.stringify(feedback.map(({ area, quote, problem, fix, severity }) => ({ area, quote, problem, fix, severity })))
+    // One FEEDBACK section: each item says where it came from (reviewer or human, Phase 5.5 B5).
+    sections.feedback = JSON.stringify(feedback.map(({ source, area, quote, problem, fix, severity }) => ({ source: source ?? 'reviewer', area, quote, problem, fix, severity })))
     const excerpts = feedback.filter((f) => f.quote).map((f) => `- "${f.quote}" → ${excerptFor(previous.payload?.post_markdown, f.quote) ?? '(not found in the previous draft)'}`)
     sections.excerpts = excerpts.length ? excerpts.join('\n') : null
     const pack = supportedSources(params.sourcePack)

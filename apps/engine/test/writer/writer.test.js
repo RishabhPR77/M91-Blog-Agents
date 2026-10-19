@@ -238,7 +238,7 @@ test('revise inputs: context vs full previous draft, excerpts found, strategist 
     assert.ok(!/--- BRIEF ---/.test(m))
     if (input === 'context') assert.match(m, /--- PREVIOUS DRAFT ---\n\{"summary":"Explains agent approval/)
     else assert.match(m, /--- PREVIOUS DRAFT ---\n# How agent approval works/)
-    assert.match(m, /--- REVIEWER FEEDBACK ---\n\[\{"area":"clarity","quote":"A ringing phone gets attention fast\."/)
+    assert.match(m, /--- FEEDBACK ---\n\[\{"source":"reviewer","area":"clarity","quote":"A ringing phone gets attention fast\."/)
     assert.match(m, /--- QUOTED EXCERPTS ---\n- "A ringing phone gets attention fast\." → A ringing phone gets attention fast\. A chat message can wait unread for hours\./)
     assert.match(ai.requests[0].prompt, /Task: revise the post/)
   }

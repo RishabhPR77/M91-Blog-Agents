@@ -79,8 +79,9 @@ export const LESSONS_LINE = 'Apply the LESSONS from past reviews.'
 
 export const PREVIOUS_CONTEXT_RULE = 'PREVIOUS CONTEXT describes an earlier draft for this topic. Keep what still fits the new brief; follow the new brief where they differ.'
 
-export const REVISE = `Task: revise the post to fix every item in REVIEWER FEEDBACK.
+export const REVISE = `Task: revise the post to fix every item in FEEDBACK.
 - Fix exactly what each feedback item asks. QUOTED EXCERPTS show where each problem is.
+- Feedback from "human" comes from the editor: follow it closely. If it asks for something the HONESTY RULES forbid (a fact not in the brief, a claim in claims_to_avoid, an invented example, code that is not a snippet), do not do that part; explain why in revision_notes.
 - Keep the same structure, headings and everything the feedback did not criticise, as described in PREVIOUS DRAFT.
 - If SOURCE PACK is present, use its URLs to support the claims it covers; remove or soften any claim it could not support.
 - Return the full revised post, not only the changed parts.

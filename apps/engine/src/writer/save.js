@@ -15,6 +15,8 @@ export function draftBriefVersion(d) {
   return Number.isInteger(v) && v > 0 ? v : 1
 }
 
+const KEEP_STATUS = ['superseded', 'changes_requested', 'approved', 'rejected', 'failed_review']
+
 /** True when draft a was written before draft b: an older brief version, or the same one with a lower version. */
 export const isEarlierDraft = (a, b) => draftBriefVersion(a) < draftBriefVersion(b) ||
   (draftBriefVersion(a) === draftBriefVersion(b) && (draftVersion(a) ?? 0) < (draftVersion(b) ?? 0))
@@ -47,7 +49,8 @@ export async function saveDraft(store, { briefId, briefRecord, version, briefVer
   const record = await store.createRecord({ type: 'draft', briefId, payload: { ...payload, brief_id: briefId, version, brief_version: briefVersion }, status, version, topicGroup, date: istDate(), meta: { brief_version: briefVersion } })
   const mine = { version, metadata: { brief_version: briefVersion } }
   for (const old of await draftsOf(store, briefId)) {
-    if (old.id !== record.id && old.status !== 'superseded' && isEarlierDraft(old, mine)) {
+    // A draft with a decision on it (changes requested, approved, rejected, failed review) keeps its status: it is history.
+    if (old.id !== record.id && !KEEP_STATUS.includes(old.status) && isEarlierDraft(old, mine)) {
       try {
         await store.updateRecord(old.id, undefined, { status: 'superseded' })
       } catch (error) {
