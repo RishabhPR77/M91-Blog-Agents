@@ -1,0 +1,2006 @@
+{
+ "_about": "Event streams for the dashboard tests. human_revise and approve are real streams from the engine (2026-10-19, checked: no secrets, no post text). full_run and cancelled_run are hand-written in the same format. full_run_record holds a timeline built with apps/engine/src/timeline.js; qhvg is a real run record (GET /api/runs/:id) from before Phase 6, with no timeline.",
+ "human_revise": [
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 1,
+   "ts": "2026-10-19T05:54:30.393Z",
+   "type": "run.started",
+   "message": "human_revise run (manual)",
+   "data": {
+    "mode": "human_revise",
+    "trigger": "manual",
+    "dry_run": false
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 2,
+   "ts": "2026-10-19T05:54:37.757Z",
+   "type": "approval.changes_requested",
+   "agent": "human",
+   "message": "changes requested on v2",
+   "data": {
+    "brief_id": "261019-1055-BZ89",
+    "version": 2,
+    "human_revisions_used": 1,
+    "max": 5
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 3,
+   "ts": "2026-10-19T05:54:38.772Z",
+   "type": "log",
+   "level": "info",
+   "message": "pipeline state",
+   "data": {
+    "briefId": "261019-1055-BZ89",
+    "state": "drafting",
+    "version": 2
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 4,
+   "ts": "2026-10-19T05:54:38.772Z",
+   "type": "step.started",
+   "agent": "writer",
+   "step": "writer"
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 5,
+   "ts": "2026-10-19T05:55:32.769Z",
+   "type": "log",
+   "level": "info",
+   "message": "ai answer",
+   "data": {
+    "agent": "writer",
+    "model": "gemini-2.5-flash",
+    "finishReason": null,
+    "ms": 50468,
+    "threadId": "writer-261019-1055-BZ89-v3-revise-bbv9"
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 6,
+   "ts": "2026-10-19T05:55:32.770Z",
+   "type": "ai.call",
+   "agent": "writer",
+   "data": {
+    "agent": "writer",
+    "service": "gemini",
+    "model": "gemini-2.5-flash",
+    "delivery": "rtlayer",
+    "call": "revise",
+    "ms": 50468,
+    "retries": 0,
+    "finish_reason": null,
+    "thread": "writer-261019-1055-BZ89-v3-revise",
+    "recovered_from_history": false
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 7,
+   "ts": "2026-10-19T05:55:32.772Z",
+   "type": "log",
+   "level": "info",
+   "message": "writer call",
+   "data": {
+    "run_id": "R-261019-1124-S9BX",
+    "brief_id": "261019-1055-BZ89",
+    "agent": "writer",
+    "call": "revise",
+    "model": "gemini-2.5-flash",
+    "delivery": "rtlayer",
+    "ms": 50468,
+    "result": "ok",
+    "hard_failures": [],
+    "auto_fixes": [],
+    "error": null,
+    "fallback": false
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 8,
+   "ts": "2026-10-19T05:55:35.156Z",
+   "type": "step.started",
+   "agent": "writer",
+   "step": "checks"
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 9,
+   "ts": "2026-10-19T05:55:36.442Z",
+   "type": "step.finished",
+   "agent": "writer",
+   "step": "checks",
+   "data": {
+    "hard_failures": 0,
+    "soft_warnings": 4
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 10,
+   "ts": "2026-10-19T05:55:36.443Z",
+   "type": "step.output",
+   "agent": "writer",
+   "step": "checks",
+   "message": "4 soft warning(s), 0 hard failure(s)",
+   "data": {
+    "hard_failures": 0,
+    "soft_warnings": 4,
+    "failed": [
+     "reading_post",
+     "reading_intro",
+     "sentence_length",
+     "keyword_title_h1_slug"
+    ]
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 11,
+   "ts": "2026-10-19T05:55:41.395Z",
+   "type": "log",
+   "level": "warn",
+   "message": "pending flows: SLACK_POST_WEBHOOK_URL is empty, Slack message (1 part(s)) skipped"
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 12,
+   "ts": "2026-10-19T05:55:42.435Z",
+   "type": "step.finished",
+   "agent": "writer",
+   "step": "writer",
+   "data": {
+    "ms": 63663,
+    "model": "gemini-2.5-flash"
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 13,
+   "ts": "2026-10-19T05:55:42.438Z",
+   "type": "step.output",
+   "agent": "writer",
+   "step": "writer",
+   "message": "Draft v3: 1,139 words · grade 8.6 · hard checks passed · repairs 0",
+   "data": {
+    "record_id": "bc4bda0f-f76d-4fd1-a769-d8d91023ef60",
+    "brief_id": "261019-1055-BZ89",
+    "version": 3,
+    "hard_passed": true,
+    "model": "gemini-2.5-flash"
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 14,
+   "ts": "2026-10-19T05:55:42.439Z",
+   "type": "log",
+   "level": "info",
+   "message": "pipeline state",
+   "data": {
+    "briefId": "261019-1055-BZ89",
+    "state": "reviewing",
+    "version": 3
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 15,
+   "ts": "2026-10-19T05:55:42.439Z",
+   "type": "step.output",
+   "agent": "orchestrator",
+   "step": "approval",
+   "message": "Reviewer skipped (REREVIEW_AFTER_HUMAN=false)",
+   "data": {
+    "version": 3
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 16,
+   "ts": "2026-10-19T05:55:42.439Z",
+   "type": "loop.route",
+   "agent": "orchestrator",
+   "message": "approve: pass (?)",
+   "data": {
+    "send_to": null,
+    "action": "approve",
+    "reason": "pass (?)",
+    "total": null,
+    "version": 3,
+    "counters": {
+     "writerRevisions": 0,
+     "rebriefs": 0,
+     "scoutRetries": 0,
+     "rounds": 0
+    }
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 17,
+   "ts": "2026-10-19T05:55:42.439Z",
+   "type": "log",
+   "level": "info",
+   "message": "pipeline state",
+   "data": {
+    "briefId": "261019-1055-BZ89",
+    "state": "awaiting_human",
+    "version": 3
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 18,
+   "ts": "2026-10-19T05:55:47.398Z",
+   "type": "log",
+   "level": "warn",
+   "message": "pending flows: SLACK_POST_WEBHOOK_URL is empty, Slack message (1 part(s)) skipped"
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 19,
+   "ts": "2026-10-19T05:55:47.399Z",
+   "type": "log",
+   "level": "warn",
+   "message": "pending flows: SLACK_POST_WEBHOOK_URL is empty, Slack message (5 part(s)) skipped"
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 20,
+   "ts": "2026-10-19T05:55:47.399Z",
+   "type": "step.output",
+   "agent": "orchestrator",
+   "step": "approval",
+   "message": "Awaiting human approval",
+   "data": {
+    "brief_id": "261019-1055-BZ89",
+    "version": 3,
+    "total": null
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 21,
+   "ts": "2026-10-19T05:55:47.399Z",
+   "type": "approval.waiting",
+   "agent": "orchestrator",
+   "message": "awaiting human approval (v3, not re-reviewed)",
+   "data": {
+    "brief_id": "261019-1055-BZ89",
+    "version": 3,
+    "total": null
+   }
+  },
+  {
+   "run_id": "R-261019-1124-S9BX",
+   "seq": 22,
+   "ts": "2026-10-19T05:55:50.244Z",
+   "type": "run.finished",
+   "message": "awaiting human approval (v3, not re-reviewed)",
+   "data": {
+    "status": "succeeded",
+    "ms": 78721,
+    "brief_id": "261019-1055-BZ89"
+   }
+  }
+ ],
+ "approve": [
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 1,
+   "ts": "2026-10-19T06:06:07.326Z",
+   "type": "run.started",
+   "message": "approve run (manual)",
+   "data": {
+    "mode": "approve",
+    "trigger": "manual",
+    "dry_run": false
+   }
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 2,
+   "ts": "2026-10-19T06:06:17.312Z",
+   "type": "step.started",
+   "agent": "promo",
+   "step": "promo"
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 3,
+   "ts": "2026-10-19T06:06:31.758Z",
+   "type": "log",
+   "level": "info",
+   "message": "ai answer",
+   "data": {
+    "agent": "promo",
+    "model": "gpt-5-mini",
+    "finishReason": "completed",
+    "ms": 13450,
+    "threadId": "promo-261019-1055-BZ89-v3-9qns"
+   }
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 4,
+   "ts": "2026-10-19T06:06:31.759Z",
+   "type": "ai.call",
+   "agent": "promo",
+   "data": {
+    "agent": "promo",
+    "service": "openai",
+    "model": "gpt-5-mini",
+    "delivery": "sync",
+    "call": "promo",
+    "ms": 13450,
+    "retries": 0,
+    "finish_reason": "completed",
+    "thread": "promo-261019-1055-BZ89-v3",
+    "recovered_from_history": false
+   }
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 5,
+   "ts": "2026-10-19T06:06:31.765Z",
+   "type": "log",
+   "level": "info",
+   "message": "promo call",
+   "data": {
+    "run_id": "R-261019-1136-UQ7F",
+    "brief_id": "261019-1055-BZ89",
+    "agent": "promo",
+    "call": "promo",
+    "model": "gpt-5-mini",
+    "delivery": "sync",
+    "ms": 13450,
+    "result": "ok",
+    "problems": [],
+    "error": null
+   }
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 6,
+   "ts": "2026-10-19T06:06:35.417Z",
+   "type": "step.finished",
+   "agent": "promo",
+   "step": "promo"
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 7,
+   "ts": "2026-10-19T06:06:35.417Z",
+   "type": "step.output",
+   "agent": "promo",
+   "step": "promo",
+   "message": "Promo pack ok: LinkedIn 737 chars · X thread 4 posts · 4 video scenes · 0 issue(s)",
+   "data": {
+    "record_id": "3c05dff0-fb00-493f-b157-a1c61638c22c",
+    "status": "ok",
+    "problems": 0,
+    "repairs_used": 0
+   }
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 8,
+   "ts": "2026-10-19T06:06:35.418Z",
+   "type": "step.started",
+   "agent": "designer",
+   "step": "designer"
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 9,
+   "ts": "2026-10-19T06:06:35.418Z",
+   "type": "log",
+   "level": "info",
+   "message": "Designer: not built yet (Phase 8)",
+   "data": {
+    "briefId": "261019-1055-BZ89",
+    "version": 3
+   }
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 10,
+   "ts": "2026-10-19T06:06:35.419Z",
+   "type": "step.finished",
+   "agent": "designer",
+   "step": "designer"
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 11,
+   "ts": "2026-10-19T06:06:35.419Z",
+   "type": "step.output",
+   "agent": "designer",
+   "step": "designer",
+   "message": "Designer: not built yet (Phase 8)",
+   "data": {
+    "placeholder": true
+   }
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 12,
+   "ts": "2026-10-19T06:06:35.419Z",
+   "type": "step.started",
+   "agent": "publisher",
+   "step": "publisher"
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 13,
+   "ts": "2026-10-19T06:06:35.419Z",
+   "type": "log",
+   "level": "info",
+   "message": "Publisher: not built yet (Phase 7)",
+   "data": {
+    "briefId": "261019-1055-BZ89",
+    "version": 3
+   }
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 14,
+   "ts": "2026-10-19T06:06:35.419Z",
+   "type": "step.finished",
+   "agent": "publisher",
+   "step": "publisher"
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 15,
+   "ts": "2026-10-19T06:06:35.419Z",
+   "type": "step.output",
+   "agent": "publisher",
+   "step": "publisher",
+   "message": "Publisher: not built yet (Phase 7)",
+   "data": {
+    "placeholder": true
+   }
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 16,
+   "ts": "2026-10-19T06:06:35.420Z",
+   "type": "log",
+   "level": "warn",
+   "message": "pending flows: SLACK_POST_WEBHOOK_URL is empty, Slack message (1 part(s)) skipped"
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 17,
+   "ts": "2026-10-19T06:06:35.420Z",
+   "type": "log",
+   "level": "warn",
+   "message": "pending flows: SLACK_POST_WEBHOOK_URL is empty, Slack message (1 part(s)) skipped"
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 18,
+   "ts": "2026-10-19T06:06:35.420Z",
+   "type": "approval.approved",
+   "agent": "human",
+   "message": "approved by you (v3)",
+   "data": {
+    "brief_id": "261019-1055-BZ89",
+    "version": 3,
+    "total": null
+   }
+  },
+  {
+   "run_id": "R-261019-1136-UQ7F",
+   "seq": 19,
+   "ts": "2026-10-19T06:06:42.745Z",
+   "type": "run.finished",
+   "message": "approved by you (v3)",
+   "data": {
+    "status": "succeeded",
+    "ms": 29217,
+    "brief_id": "261019-1055-BZ89"
+   }
+  }
+ ],
+ "full_run": [
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 1,
+   "ts": "2026-10-19T03:30:00.000Z",
+   "type": "run.started",
+   "message": "full run (manual)",
+   "data": {
+    "mode": "full",
+    "trigger": "manual",
+    "dry_run": true
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 2,
+   "ts": "2026-10-19T03:30:01.000Z",
+   "type": "step.started",
+   "agent": "scout",
+   "step": "scout"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 3,
+   "ts": "2026-10-19T03:30:01.000Z",
+   "type": "step.started",
+   "agent": "scout",
+   "step": "scout.facts"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 4,
+   "ts": "2026-10-19T03:30:30.000Z",
+   "type": "log",
+   "level": "warn",
+   "message": "viaSocket call retried after a timeout"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 5,
+   "ts": "2026-10-19T03:31:00.000Z",
+   "type": "ai.call",
+   "agent": "scout",
+   "data": {
+    "agent": "scout",
+    "service": "openai",
+    "model": "gpt-5-mini",
+    "delivery": "sync",
+    "call": "facts",
+    "ms": 58000,
+    "retries": 2,
+    "finish_reason": "completed",
+    "thread": "scout-x"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 6,
+   "ts": "2026-10-19T03:31:00.000Z",
+   "type": "step.finished",
+   "agent": "scout",
+   "step": "scout.facts",
+   "data": {
+    "ms": 59000,
+    "retries": 2,
+    "model": "gpt-5-mini",
+    "delivery": "sync"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 7,
+   "ts": "2026-10-19T03:31:00.000Z",
+   "type": "step.output",
+   "agent": "scout",
+   "step": "scout.facts",
+   "message": "12 kept of 14 returned (2 dropped)",
+   "data": {
+    "returned": 14,
+    "kept": 12,
+    "dropped": 2
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 8,
+   "ts": "2026-10-19T03:31:01.000Z",
+   "type": "step.started",
+   "agent": "scout",
+   "step": "scout.questions.g1"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 9,
+   "ts": "2026-10-19T03:31:02.000Z",
+   "type": "log",
+   "level": "info",
+   "message": "ai answer",
+   "data": {
+    "agent": "scout",
+    "model": "gpt-5-mini"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 10,
+   "ts": "2026-10-19T03:31:30.000Z",
+   "type": "ai.call",
+   "agent": "scout",
+   "data": {
+    "agent": "scout",
+    "service": "openai",
+    "model": "gpt-5-mini",
+    "delivery": "sync",
+    "call": "questions-1",
+    "ms": 29000,
+    "retries": 0,
+    "finish_reason": "completed",
+    "thread": "scout-x"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 11,
+   "ts": "2026-10-19T03:31:30.000Z",
+   "type": "step.finished",
+   "agent": "scout",
+   "step": "scout.questions.g1",
+   "data": {
+    "ms": 29000,
+    "retries": 0,
+    "model": "gpt-5-mini",
+    "delivery": "sync"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 12,
+   "ts": "2026-10-19T03:31:30.000Z",
+   "type": "step.output",
+   "agent": "scout",
+   "step": "scout.questions.g1",
+   "message": "3 kept of 3 returned",
+   "data": {
+    "returned": 3,
+    "kept": 3,
+    "dropped": 0
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 13,
+   "ts": "2026-10-19T03:31:31.000Z",
+   "type": "step.finished",
+   "agent": "scout",
+   "step": "scout",
+   "data": {
+    "ms": 90000,
+    "model": "gpt-5-mini"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 14,
+   "ts": "2026-10-19T03:31:31.000Z",
+   "type": "step.output",
+   "agent": "scout",
+   "step": "scout",
+   "message": "1 new clusters (0 merged), 2 stories, 5 tutorials",
+   "data": {
+    "cluster_ids": [
+     "C-261019-0901-AAAA"
+    ],
+    "story_ids": [
+     "S-261019-0901-BBBB"
+    ],
+    "tutorial_ids": [],
+    "style_profile_id": null
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 15,
+   "ts": "2026-10-19T03:31:32.000Z",
+   "type": "step.started",
+   "agent": "strategist",
+   "step": "strategist"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 16,
+   "ts": "2026-10-19T03:31:50.000Z",
+   "type": "ai.call",
+   "agent": "strategist",
+   "data": {
+    "agent": "strategist",
+    "service": "openai",
+    "model": "gpt-5.6-luna",
+    "delivery": "sync",
+    "call": "plan",
+    "ms": 17000,
+    "retries": 0,
+    "finish_reason": "completed",
+    "thread": "strategist-x"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 17,
+   "ts": "2026-10-19T03:31:50.000Z",
+   "type": "step.output",
+   "agent": "strategist",
+   "step": "strategist.plan",
+   "message": "ok"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 18,
+   "ts": "2026-10-19T03:31:51.000Z",
+   "type": "step.finished",
+   "agent": "strategist",
+   "step": "strategist",
+   "data": {
+    "ms": 19000,
+    "model": "gpt-5.6-luna"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 19,
+   "ts": "2026-10-19T03:31:51.000Z",
+   "type": "step.output",
+   "agent": "strategist",
+   "step": "strategist",
+   "message": "brief 261019-0900-ABCD v1: how_to, group 1 — \"How to Gate Destructive AI Agent Actions\"",
+   "data": {
+    "brief_id": "261019-0900-ABCD",
+    "brief_version": 1,
+    "record_id": "mem-brief-1"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 20,
+   "ts": "2026-10-19T03:31:52.000Z",
+   "type": "step.started",
+   "agent": "writer",
+   "step": "writer"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 21,
+   "ts": "2026-10-19T03:32:50.000Z",
+   "type": "ai.call",
+   "agent": "writer",
+   "data": {
+    "agent": "writer",
+    "service": "openai",
+    "model": "gemini-2.5-flash",
+    "delivery": "sync",
+    "call": "new",
+    "ms": 57000,
+    "retries": 0,
+    "finish_reason": "completed",
+    "thread": "writer-x"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 22,
+   "ts": "2026-10-19T03:32:51.000Z",
+   "type": "step.started",
+   "agent": "checks",
+   "step": "checks"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 23,
+   "ts": "2026-10-19T03:32:52.000Z",
+   "type": "step.finished",
+   "agent": "checks",
+   "step": "checks",
+   "data": {
+    "hard_failures": 0,
+    "soft_warnings": 8
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 24,
+   "ts": "2026-10-19T03:32:52.000Z",
+   "type": "step.output",
+   "agent": "checks",
+   "step": "checks",
+   "message": "8 soft warning(s), 0 hard failure(s)",
+   "data": {
+    "hard_failures": 0,
+    "soft_warnings": 8
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 25,
+   "ts": "2026-10-19T03:32:53.000Z",
+   "type": "step.finished",
+   "agent": "writer",
+   "step": "writer",
+   "data": {
+    "ms": 61000,
+    "model": "gemini-2.5-flash"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 26,
+   "ts": "2026-10-19T03:32:53.000Z",
+   "type": "step.output",
+   "agent": "writer",
+   "step": "writer",
+   "message": "Draft v1: 1,196 words · grade 8.7 · hard checks passed · repairs 0",
+   "data": {
+    "record_id": "mem-draft-1",
+    "brief_id": "261019-0900-ABCD",
+    "version": 1,
+    "hard_passed": true
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 27,
+   "ts": "2026-10-19T03:32:54.000Z",
+   "type": "step.started",
+   "agent": "reviewer",
+   "step": "reviewer"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 28,
+   "ts": "2026-10-19T03:33:50.000Z",
+   "type": "ai.call",
+   "agent": "reviewer",
+   "data": {
+    "agent": "reviewer",
+    "service": "openai",
+    "model": "gpt-5.6-luna",
+    "delivery": "sync",
+    "call": "review",
+    "ms": 55000,
+    "retries": 0,
+    "finish_reason": "completed",
+    "thread": "reviewer-x"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 29,
+   "ts": "2026-10-19T03:33:51.000Z",
+   "type": "step.finished",
+   "agent": "reviewer",
+   "step": "reviewer",
+   "data": {
+    "ms": 57000,
+    "model": "gpt-5.6-luna"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 30,
+   "ts": "2026-10-19T03:33:51.000Z",
+   "type": "step.output",
+   "agent": "reviewer",
+   "step": "reviewer",
+   "message": "Score 77/100 · fail · simplicity 6, seo 6 → writer",
+   "data": {
+    "record_id": "mem-review-1",
+    "pass": false,
+    "total": 77
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 31,
+   "ts": "2026-10-19T03:33:51.000Z",
+   "type": "loop.route",
+   "agent": "orchestrator",
+   "message": "send_to writer: simplicity 6, seo 6",
+   "data": {
+    "send_to": "writer",
+    "action": "revise",
+    "reason": "simplicity 6, seo 6",
+    "total": 77,
+    "version": 1,
+    "counters": {
+     "writerRevisions": 0,
+     "rebriefs": 0,
+     "scoutRetries": 0,
+     "rounds": 0
+    }
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 32,
+   "ts": "2026-10-19T03:33:52.000Z",
+   "type": "step.started",
+   "agent": "writer",
+   "step": "writer"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 33,
+   "ts": "2026-10-19T03:34:50.000Z",
+   "type": "ai.call",
+   "agent": "writer",
+   "data": {
+    "agent": "writer",
+    "service": "openai",
+    "model": "gemini-2.5-flash",
+    "delivery": "sync",
+    "call": "revise",
+    "ms": 56000,
+    "retries": 1,
+    "finish_reason": "completed",
+    "thread": "writer-x"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 34,
+   "ts": "2026-10-19T03:34:51.000Z",
+   "type": "step.started",
+   "agent": "checks",
+   "step": "checks"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 35,
+   "ts": "2026-10-19T03:34:52.000Z",
+   "type": "step.finished",
+   "agent": "checks",
+   "step": "checks",
+   "data": {
+    "hard_failures": 0,
+    "soft_warnings": 4
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 36,
+   "ts": "2026-10-19T03:34:53.000Z",
+   "type": "step.finished",
+   "agent": "writer",
+   "step": "writer",
+   "data": {
+    "ms": 61000,
+    "model": "gemini-2.5-flash"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 37,
+   "ts": "2026-10-19T03:34:53.000Z",
+   "type": "step.output",
+   "agent": "writer",
+   "step": "writer",
+   "message": "Draft v2: 1,143 words · grade 8.2 · hard checks passed · repairs 0",
+   "data": {
+    "record_id": "mem-draft-2",
+    "brief_id": "261019-0900-ABCD",
+    "version": 2,
+    "hard_passed": true
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 38,
+   "ts": "2026-10-19T03:34:54.000Z",
+   "type": "step.started",
+   "agent": "reviewer",
+   "step": "reviewer"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 39,
+   "ts": "2026-10-19T03:35:50.000Z",
+   "type": "ai.call",
+   "agent": "reviewer",
+   "data": {
+    "agent": "reviewer",
+    "service": "openai",
+    "model": "gpt-5.6-luna",
+    "delivery": "sync",
+    "call": "review",
+    "ms": 55000,
+    "retries": 0,
+    "finish_reason": "completed",
+    "thread": "reviewer-x"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 40,
+   "ts": "2026-10-19T03:35:51.000Z",
+   "type": "step.finished",
+   "agent": "reviewer",
+   "step": "reviewer",
+   "data": {
+    "ms": 57000,
+    "model": "gpt-5.6-luna"
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 41,
+   "ts": "2026-10-19T03:35:51.000Z",
+   "type": "step.output",
+   "agent": "reviewer",
+   "step": "reviewer",
+   "message": "Score 86/100 · pass · gates 10/10 · 1 should-fix items",
+   "data": {
+    "record_id": "mem-review-2",
+    "pass": true,
+    "total": 86
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 42,
+   "ts": "2026-10-19T03:35:51.000Z",
+   "type": "loop.route",
+   "agent": "orchestrator",
+   "message": "approve: pass (86)",
+   "data": {
+    "send_to": null,
+    "action": "approve",
+    "reason": "pass (86)",
+    "total": 86,
+    "version": 2,
+    "counters": {
+     "writerRevisions": 1,
+     "rebriefs": 0,
+     "scoutRetries": 0,
+     "rounds": 1
+    }
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 43,
+   "ts": "2026-10-19T03:35:52.000Z",
+   "type": "log",
+   "level": "warn",
+   "message": "pending flows: SLACK_POST_WEBHOOK_URL is empty, Slack message (1 part(s)) skipped"
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 44,
+   "ts": "2026-10-19T03:35:52.000Z",
+   "type": "step.output",
+   "agent": "orchestrator",
+   "step": "approval",
+   "message": "Awaiting human approval",
+   "data": {
+    "brief_id": "261019-0900-ABCD",
+    "version": 2,
+    "total": 86
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 45,
+   "ts": "2026-10-19T03:35:52.000Z",
+   "type": "approval.waiting",
+   "agent": "orchestrator",
+   "message": "awaiting human approval (v2, score 86)",
+   "data": {
+    "brief_id": "261019-0900-ABCD",
+    "version": 2,
+    "total": 86
+   }
+  },
+  {
+   "run_id": "R-261019-0900-FULL",
+   "seq": 46,
+   "ts": "2026-10-19T03:35:53.000Z",
+   "type": "run.finished",
+   "message": "awaiting human approval (v2, score 86)",
+   "data": {
+    "status": "succeeded",
+    "ms": 353000,
+    "brief_id": "261019-0900-ABCD"
+   }
+  }
+ ],
+ "cancelled_run": [
+  {
+   "run_id": "R-261019-0930-CNCL",
+   "seq": 1,
+   "ts": "2026-10-19T04:00:00.000Z",
+   "type": "run.started",
+   "message": "scout run (manual, dry run)",
+   "data": {
+    "mode": "scout",
+    "trigger": "manual",
+    "dry_run": true
+   }
+  },
+  {
+   "run_id": "R-261019-0930-CNCL",
+   "seq": 2,
+   "ts": "2026-10-19T04:00:01.000Z",
+   "type": "step.started",
+   "agent": "scout",
+   "step": "scout"
+  },
+  {
+   "run_id": "R-261019-0930-CNCL",
+   "seq": 3,
+   "ts": "2026-10-19T04:00:01.000Z",
+   "type": "step.started",
+   "agent": "scout",
+   "step": "scout.facts"
+  },
+  {
+   "run_id": "R-261019-0930-CNCL",
+   "seq": 4,
+   "ts": "2026-10-19T04:00:20.000Z",
+   "type": "step.cancelled",
+   "agent": "scout",
+   "step": "scout",
+   "message": "cancelled"
+  },
+  {
+   "run_id": "R-261019-0930-CNCL",
+   "seq": 5,
+   "ts": "2026-10-19T04:00:20.000Z",
+   "type": "run.cancelled",
+   "message": "run cancelled",
+   "data": {
+    "status": "cancelled",
+    "ms": 20000,
+    "brief_id": null
+   }
+  }
+ ],
+ "full_run_record": {
+  "record_id": "mem-run-full",
+  "run_id": "R-261019-0900-FULL",
+  "trigger": "manual",
+  "mode": "full",
+  "dry_run": true,
+  "status": "succeeded",
+  "started_at": "2026-10-19T09:00:00+05:30",
+  "finished_at": "2026-10-19T09:05:53+05:30",
+  "ms": 353000,
+  "brief_id": "261019-0900-ABCD",
+  "result_summary": "awaiting human approval (v2, score 86)",
+  "warnings": [],
+  "steps": [
+   {
+    "name": "scout",
+    "status": "succeeded",
+    "ms": 90000,
+    "ai_calls": 2,
+    "models": [
+     "gpt-5-mini"
+    ],
+    "retries": 2,
+    "record_ids": [
+     "C-261019-0901-AAAA",
+     "S-261019-0901-BBBB"
+    ],
+    "summary": "1 new clusters (0 merged), 2 stories, 5 tutorials",
+    "error": null
+   },
+   {
+    "name": "strategist",
+    "status": "succeeded",
+    "ms": 19000,
+    "ai_calls": 1,
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "retries": 0,
+    "record_ids": [
+     "mem-brief-1"
+    ],
+    "summary": "brief 261019-0900-ABCD v1",
+    "error": null
+   }
+  ],
+  "timeline": [
+   {
+    "seq": 1,
+    "ts": "2026-10-19T03:30:00.000Z",
+    "type": "run.started",
+    "message": "full run (manual)",
+    "data": {
+     "mode": "full",
+     "trigger": "manual",
+     "dry_run": true
+    }
+   },
+   {
+    "seq": 2,
+    "ts": "2026-10-19T03:30:01.000Z",
+    "type": "step.started",
+    "step": "scout"
+   },
+   {
+    "seq": 3,
+    "ts": "2026-10-19T03:30:01.000Z",
+    "type": "step.started",
+    "step": "scout.facts"
+   },
+   {
+    "seq": 4,
+    "ts": "2026-10-19T03:30:30.000Z",
+    "type": "log",
+    "level": "warn",
+    "message": "viaSocket call retried after a timeout"
+   },
+   {
+    "seq": 5,
+    "ts": "2026-10-19T03:31:00.000Z",
+    "type": "ai.call",
+    "step": "scout",
+    "call": "facts",
+    "model": "gpt-5-mini",
+    "delivery": "sync",
+    "ms": 58000,
+    "retries": 2,
+    "finish_reason": "completed"
+   },
+   {
+    "seq": 6,
+    "ts": "2026-10-19T03:31:00.000Z",
+    "type": "step.finished",
+    "step": "scout.facts",
+    "data": {
+     "ms": 59000,
+     "retries": 2,
+     "model": "gpt-5-mini",
+     "delivery": "sync"
+    }
+   },
+   {
+    "seq": 7,
+    "ts": "2026-10-19T03:31:00.000Z",
+    "type": "step.output",
+    "step": "scout.facts",
+    "message": "12 kept of 14 returned (2 dropped)",
+    "data": {
+     "returned": 14,
+     "kept": 12,
+     "dropped": 2
+    }
+   },
+   {
+    "seq": 8,
+    "ts": "2026-10-19T03:31:01.000Z",
+    "type": "step.started",
+    "step": "scout.questions.g1"
+   },
+   {
+    "seq": 10,
+    "ts": "2026-10-19T03:31:30.000Z",
+    "type": "ai.call",
+    "step": "scout",
+    "call": "questions-1",
+    "model": "gpt-5-mini",
+    "delivery": "sync",
+    "ms": 29000,
+    "retries": 0,
+    "finish_reason": "completed"
+   },
+   {
+    "seq": 11,
+    "ts": "2026-10-19T03:31:30.000Z",
+    "type": "step.finished",
+    "step": "scout.questions.g1",
+    "data": {
+     "ms": 29000,
+     "retries": 0,
+     "model": "gpt-5-mini",
+     "delivery": "sync"
+    }
+   },
+   {
+    "seq": 12,
+    "ts": "2026-10-19T03:31:30.000Z",
+    "type": "step.output",
+    "step": "scout.questions.g1",
+    "message": "3 kept of 3 returned",
+    "data": {
+     "returned": 3,
+     "kept": 3,
+     "dropped": 0
+    }
+   },
+   {
+    "seq": 13,
+    "ts": "2026-10-19T03:31:31.000Z",
+    "type": "step.finished",
+    "step": "scout",
+    "data": {
+     "ms": 90000,
+     "model": "gpt-5-mini"
+    }
+   },
+   {
+    "seq": 14,
+    "ts": "2026-10-19T03:31:31.000Z",
+    "type": "step.output",
+    "step": "scout",
+    "message": "1 new clusters (0 merged), 2 stories, 5 tutorials",
+    "data": {
+     "cluster_ids": [
+      "C-261019-0901-AAAA"
+     ],
+     "story_ids": [
+      "S-261019-0901-BBBB"
+     ],
+     "tutorial_ids": [],
+     "style_profile_id": null
+    }
+   },
+   {
+    "seq": 15,
+    "ts": "2026-10-19T03:31:32.000Z",
+    "type": "step.started",
+    "step": "strategist"
+   },
+   {
+    "seq": 16,
+    "ts": "2026-10-19T03:31:50.000Z",
+    "type": "ai.call",
+    "step": "strategist",
+    "call": "plan",
+    "model": "gpt-5.6-luna",
+    "delivery": "sync",
+    "ms": 17000,
+    "retries": 0,
+    "finish_reason": "completed"
+   },
+   {
+    "seq": 17,
+    "ts": "2026-10-19T03:31:50.000Z",
+    "type": "step.output",
+    "step": "strategist.plan",
+    "message": "ok"
+   },
+   {
+    "seq": 18,
+    "ts": "2026-10-19T03:31:51.000Z",
+    "type": "step.finished",
+    "step": "strategist",
+    "data": {
+     "ms": 19000,
+     "model": "gpt-5.6-luna"
+    }
+   },
+   {
+    "seq": 19,
+    "ts": "2026-10-19T03:31:51.000Z",
+    "type": "step.output",
+    "step": "strategist",
+    "message": "brief 261019-0900-ABCD v1: how_to, group 1 — \"How to Gate Destructive AI Agent Actions\"",
+    "data": {
+     "brief_id": "261019-0900-ABCD",
+     "brief_version": 1,
+     "record_id": "mem-brief-1"
+    }
+   },
+   {
+    "seq": 20,
+    "ts": "2026-10-19T03:31:52.000Z",
+    "type": "step.started",
+    "step": "writer"
+   },
+   {
+    "seq": 21,
+    "ts": "2026-10-19T03:32:50.000Z",
+    "type": "ai.call",
+    "step": "writer",
+    "call": "new",
+    "model": "gemini-2.5-flash",
+    "delivery": "sync",
+    "ms": 57000,
+    "retries": 0,
+    "finish_reason": "completed"
+   },
+   {
+    "seq": 22,
+    "ts": "2026-10-19T03:32:51.000Z",
+    "type": "step.started",
+    "step": "checks"
+   },
+   {
+    "seq": 23,
+    "ts": "2026-10-19T03:32:52.000Z",
+    "type": "step.finished",
+    "step": "checks",
+    "data": {
+     "hard_failures": 0,
+     "soft_warnings": 8
+    }
+   },
+   {
+    "seq": 24,
+    "ts": "2026-10-19T03:32:52.000Z",
+    "type": "step.output",
+    "step": "checks",
+    "message": "8 soft warning(s), 0 hard failure(s)",
+    "data": {
+     "hard_failures": 0,
+     "soft_warnings": 8
+    }
+   },
+   {
+    "seq": 25,
+    "ts": "2026-10-19T03:32:53.000Z",
+    "type": "step.finished",
+    "step": "writer",
+    "data": {
+     "ms": 61000,
+     "model": "gemini-2.5-flash"
+    }
+   },
+   {
+    "seq": 26,
+    "ts": "2026-10-19T03:32:53.000Z",
+    "type": "step.output",
+    "step": "writer",
+    "message": "Draft v1: 1,196 words · grade 8.7 · hard checks passed · repairs 0",
+    "data": {
+     "record_id": "mem-draft-1",
+     "brief_id": "261019-0900-ABCD",
+     "version": 1,
+     "hard_passed": true
+    }
+   },
+   {
+    "seq": 27,
+    "ts": "2026-10-19T03:32:54.000Z",
+    "type": "step.started",
+    "step": "reviewer"
+   },
+   {
+    "seq": 28,
+    "ts": "2026-10-19T03:33:50.000Z",
+    "type": "ai.call",
+    "step": "reviewer",
+    "call": "review",
+    "model": "gpt-5.6-luna",
+    "delivery": "sync",
+    "ms": 55000,
+    "retries": 0,
+    "finish_reason": "completed"
+   },
+   {
+    "seq": 29,
+    "ts": "2026-10-19T03:33:51.000Z",
+    "type": "step.finished",
+    "step": "reviewer",
+    "data": {
+     "ms": 57000,
+     "model": "gpt-5.6-luna"
+    }
+   },
+   {
+    "seq": 30,
+    "ts": "2026-10-19T03:33:51.000Z",
+    "type": "step.output",
+    "step": "reviewer",
+    "message": "Score 77/100 · fail · simplicity 6, seo 6 → writer",
+    "data": {
+     "record_id": "mem-review-1",
+     "pass": false,
+     "total": 77
+    }
+   },
+   {
+    "seq": 31,
+    "ts": "2026-10-19T03:33:51.000Z",
+    "type": "loop.route",
+    "step": "orchestrator",
+    "message": "send_to writer: simplicity 6, seo 6",
+    "data": {
+     "send_to": "writer",
+     "action": "revise",
+     "reason": "simplicity 6, seo 6",
+     "total": 77,
+     "version": 1,
+     "counters": {
+      "writerRevisions": 0,
+      "rebriefs": 0,
+      "scoutRetries": 0,
+      "rounds": 0
+     }
+    }
+   },
+   {
+    "seq": 32,
+    "ts": "2026-10-19T03:33:52.000Z",
+    "type": "step.started",
+    "step": "writer"
+   },
+   {
+    "seq": 33,
+    "ts": "2026-10-19T03:34:50.000Z",
+    "type": "ai.call",
+    "step": "writer",
+    "call": "revise",
+    "model": "gemini-2.5-flash",
+    "delivery": "sync",
+    "ms": 56000,
+    "retries": 1,
+    "finish_reason": "completed"
+   },
+   {
+    "seq": 34,
+    "ts": "2026-10-19T03:34:51.000Z",
+    "type": "step.started",
+    "step": "checks"
+   },
+   {
+    "seq": 35,
+    "ts": "2026-10-19T03:34:52.000Z",
+    "type": "step.finished",
+    "step": "checks",
+    "data": {
+     "hard_failures": 0,
+     "soft_warnings": 4
+    }
+   },
+   {
+    "seq": 36,
+    "ts": "2026-10-19T03:34:53.000Z",
+    "type": "step.finished",
+    "step": "writer",
+    "data": {
+     "ms": 61000,
+     "model": "gemini-2.5-flash"
+    }
+   },
+   {
+    "seq": 37,
+    "ts": "2026-10-19T03:34:53.000Z",
+    "type": "step.output",
+    "step": "writer",
+    "message": "Draft v2: 1,143 words · grade 8.2 · hard checks passed · repairs 0",
+    "data": {
+     "record_id": "mem-draft-2",
+     "brief_id": "261019-0900-ABCD",
+     "version": 2,
+     "hard_passed": true
+    }
+   },
+   {
+    "seq": 38,
+    "ts": "2026-10-19T03:34:54.000Z",
+    "type": "step.started",
+    "step": "reviewer"
+   },
+   {
+    "seq": 39,
+    "ts": "2026-10-19T03:35:50.000Z",
+    "type": "ai.call",
+    "step": "reviewer",
+    "call": "review",
+    "model": "gpt-5.6-luna",
+    "delivery": "sync",
+    "ms": 55000,
+    "retries": 0,
+    "finish_reason": "completed"
+   },
+   {
+    "seq": 40,
+    "ts": "2026-10-19T03:35:51.000Z",
+    "type": "step.finished",
+    "step": "reviewer",
+    "data": {
+     "ms": 57000,
+     "model": "gpt-5.6-luna"
+    }
+   },
+   {
+    "seq": 41,
+    "ts": "2026-10-19T03:35:51.000Z",
+    "type": "step.output",
+    "step": "reviewer",
+    "message": "Score 86/100 · pass · gates 10/10 · 1 should-fix items",
+    "data": {
+     "record_id": "mem-review-2",
+     "pass": true,
+     "total": 86
+    }
+   },
+   {
+    "seq": 42,
+    "ts": "2026-10-19T03:35:51.000Z",
+    "type": "loop.route",
+    "step": "orchestrator",
+    "message": "approve: pass (86)",
+    "data": {
+     "send_to": null,
+     "action": "approve",
+     "reason": "pass (86)",
+     "total": 86,
+     "version": 2,
+     "counters": {
+      "writerRevisions": 1,
+      "rebriefs": 0,
+      "scoutRetries": 0,
+      "rounds": 1
+     }
+    }
+   },
+   {
+    "seq": 43,
+    "ts": "2026-10-19T03:35:52.000Z",
+    "type": "log",
+    "level": "warn",
+    "message": "pending flows: SLACK_POST_WEBHOOK_URL is empty, Slack message (1 part(s)) skipped"
+   },
+   {
+    "seq": 44,
+    "ts": "2026-10-19T03:35:52.000Z",
+    "type": "step.output",
+    "step": "approval",
+    "message": "Awaiting human approval",
+    "data": {
+     "brief_id": "261019-0900-ABCD",
+     "version": 2,
+     "total": 86
+    }
+   },
+   {
+    "seq": 45,
+    "ts": "2026-10-19T03:35:52.000Z",
+    "type": "approval.waiting",
+    "step": "orchestrator",
+    "message": "awaiting human approval (v2, score 86)",
+    "data": {
+     "brief_id": "261019-0900-ABCD",
+     "version": 2,
+     "total": 86
+    }
+   }
+  ]
+ },
+ "qhvg": {
+  "run": {
+   "record_id": "b80e1745-5429-479c-8ad2-dd3d351b00df",
+   "run_id": "R-261019-1055-QHVG",
+   "trigger": "manual",
+   "mode": "full",
+   "dry_run": false,
+   "status": "failed",
+   "started_at": "2026-10-19T10:55:22+05:30",
+   "finished_at": "2026-10-19T11:07:53+05:30",
+   "ms": 751616,
+   "steps": [
+    {
+     "name": "scout",
+     "status": "succeeded",
+     "started_at": "2026-10-19T05:25:28.191Z",
+     "finished_at": "2026-10-19T05:31:24.685Z",
+     "ms": 356494,
+     "ai_calls": 5,
+     "models": [
+      "gpt-5-mini"
+     ],
+     "retries": 0,
+     "record_ids": [
+      "C-261019-1101-L7PD",
+      "S-261019-1059-VP56",
+      "S-261019-1059-QABN",
+      "T-261019-1100-ZCVC",
+      "T-261019-1100-8VAA",
+      "T-261019-1100-UAAN",
+      "T-261019-1100-SFHL",
+      "T-261019-1100-M42T",
+      "P-261017-1203-7TEP"
+     ],
+     "summary": "1 new clusters (0 merged), 2 stories, 5 tutorials",
+     "error": null
+    },
+    {
+     "name": "strategist",
+     "status": "succeeded",
+     "started_at": "2026-10-19T05:31:24.688Z",
+     "finished_at": "2026-10-19T05:32:12.479Z",
+     "ms": 47791,
+     "ai_calls": 1,
+     "models": [
+      "gpt-5.6-luna"
+     ],
+     "retries": 0,
+     "record_ids": [
+      "f3ad41b2-fc1b-479f-af5b-c0b2efd6c095"
+     ],
+     "summary": "brief 261019-1055-BZ89 v1: \"How to Gate Destructive AI Agent Actions\"",
+     "error": null
+    },
+    {
+     "name": "writer",
+     "status": "succeeded",
+     "started_at": "2026-10-19T05:32:12.481Z",
+     "finished_at": "2026-10-19T05:33:28.225Z",
+     "ms": 75744,
+     "ai_calls": 1,
+     "models": [
+      "gemini-2.5-flash"
+     ],
+     "retries": 0,
+     "record_ids": [
+      "defd88da-5bb7-4fb4-b39e-c7e464c82d5f"
+     ],
+     "summary": "Draft v1: 1,196 words · grade 8.7 · hard checks passed · repairs 0",
+     "error": null
+    },
+    {
+     "name": "checks",
+     "status": "succeeded",
+     "started_at": "2026-10-19T05:33:21.254Z",
+     "finished_at": "2026-10-19T05:33:22.674Z",
+     "ms": null,
+     "ai_calls": 0,
+     "models": [],
+     "retries": 0,
+     "record_ids": [],
+     "summary": "8 soft warning(s), 0 hard failure(s)",
+     "error": null
+    },
+    {
+     "name": "reviewer",
+     "status": "succeeded",
+     "started_at": "2026-10-19T05:33:28.232Z",
+     "finished_at": "2026-10-19T05:34:27.445Z",
+     "ms": 59213,
+     "ai_calls": 1,
+     "models": [
+      "gpt-5.5"
+     ],
+     "retries": 0,
+     "record_ids": [
+      "140c045b-ef2a-46e8-b4b2-916341b8bb5d"
+     ],
+     "summary": "Score 77/100 · fail · simplicity 6, seo 6 → writer",
+     "error": null
+    },
+    {
+     "name": "writer",
+     "status": "succeeded",
+     "started_at": "2026-10-19T05:34:27.446Z",
+     "finished_at": "2026-10-19T05:36:43.287Z",
+     "ms": 135841,
+     "ai_calls": 2,
+     "models": [
+      "gemini-2.5-flash"
+     ],
+     "retries": 0,
+     "record_ids": [
+      "a6459c84-da9e-4557-a656-cebe526eb15c"
+     ],
+     "summary": "Draft v2: 1,143 words · grade 9 · hard checks passed · repairs 1",
+     "error": null
+    },
+    {
+     "name": "checks",
+     "status": "succeeded",
+     "started_at": "2026-10-19T05:35:31.747Z",
+     "finished_at": "2026-10-19T05:35:31.932Z",
+     "ms": null,
+     "ai_calls": 0,
+     "models": [],
+     "retries": 0,
+     "record_ids": [],
+     "summary": "5 soft warning(s), 1 hard failure(s)",
+     "error": null
+    },
+    {
+     "name": "checks",
+     "status": "succeeded",
+     "started_at": "2026-10-19T05:36:36.225Z",
+     "finished_at": "2026-10-19T05:36:37.449Z",
+     "ms": null,
+     "ai_calls": 0,
+     "models": [],
+     "retries": 0,
+     "record_ids": [],
+     "summary": "4 soft warning(s), 0 hard failure(s)",
+     "error": null
+    },
+    {
+     "name": "reviewer",
+     "status": "succeeded",
+     "started_at": "2026-10-19T05:36:43.290Z",
+     "finished_at": "2026-10-19T05:37:48.031Z",
+     "ms": 64741,
+     "ai_calls": 1,
+     "models": [
+      "gpt-5.5"
+     ],
+     "retries": 0,
+     "record_ids": [
+      "6a34c941-2711-4e86-b6f4-f543da8afba9"
+     ],
+     "summary": "Score 78/100 · fail · simplicity 6 → writer",
+     "error": null
+    }
+   ],
+   "brief_id": "261019-1055-BZ89",
+   "result_summary": "hit MAX_WRITER_REVISIONS (1)",
+   "warnings": [
+    "Slack message skipped: pending flows (SLACK_POST_WEBHOOK_URL is empty)",
+    "M91 alert skipped: pending flows (M91_ALERT_WEBHOOK_URL is empty)"
+   ]
+  },
+  "records": [
+   {
+    "id": "e6e7c815-a446-44cd-8395-a42c40ded50c",
+    "type": "question_cluster",
+    "status": "used",
+    "brief_id": null,
+    "date": "2026-10-19",
+    "topic_group": "1",
+    "version": null,
+    "key_id": "C-261019-1101-L7PD",
+    "title": "How can HumanInTheLoop middleware reliably require human approval (handling None `when` predicates and avoiding silent auto-approvals) and produce verifiable attestations that a human actually confirmed an action?"
+   },
+   {
+    "id": "81c58c8e-ce9b-45c6-806e-3da4d0aa2090",
+    "type": "story_lead",
+    "status": "open",
+    "brief_id": null,
+    "date": "2026-10-19",
+    "topic_group": "3",
+    "version": null,
+    "key_id": "S-261019-1059-QABN",
+    "title": "Experiment: AI agents refunded orders they shouldn’t have"
+   },
+   {
+    "id": "aea83879-7408-481d-8184-d66f59d8dfa8",
+    "type": "story_lead",
+    "status": "used",
+    "brief_id": null,
+    "date": "2026-10-19",
+    "topic_group": "1",
+    "version": null,
+    "key_id": "S-261019-1059-VP56",
+    "title": "Ten AI coding agents caused destructive production changes across multiple vendors"
+   },
+   {
+    "id": "af0ea3c9-435b-4626-a0e3-12686ffef192",
+    "type": "tutorial_lead",
+    "status": "open",
+    "brief_id": null,
+    "date": "2026-10-19",
+    "topic_group": "5",
+    "version": null,
+    "key_id": "T-261019-1100-M42T",
+    "title": "Test an M91 channel safely (connection test that does not ring phones)"
+   },
+   {
+    "id": "9f0a2328-c926-460d-b8e6-71a339afae7a",
+    "type": "tutorial_lead",
+    "status": "open",
+    "brief_id": null,
+    "date": "2026-10-19",
+    "topic_group": "4",
+    "version": null,
+    "key_id": "T-261019-1100-SFHL",
+    "title": "Receive human responses in your service via callbackUrl and fetch alert status"
+   },
+   {
+    "id": "0830dac4-a1e9-4a42-8432-9690853ab010",
+    "type": "tutorial_lead",
+    "status": "open",
+    "brief_id": null,
+    "date": "2026-10-19",
+    "topic_group": "3",
+    "version": null,
+    "key_id": "T-261019-1100-UAAN",
+    "title": "Send a monitoring alert with a graph or screenshot attached so the woken person can inspect evidence"
+   },
+   {
+    "id": "3f5d340b-a170-4fc8-b35c-3f7fb9a14030",
+    "type": "tutorial_lead",
+    "status": "open",
+    "brief_id": null,
+    "date": "2026-10-19",
+    "topic_group": "2",
+    "version": null,
+    "key_id": "T-261019-1100-8VAA",
+    "title": "Gate a POSIX-shell CI/CD job by sending an M91 alert from the build"
+   },
+   {
+    "id": "8cdeba84-2dac-481e-a095-dbe7e900cda1",
+    "type": "tutorial_lead",
+    "status": "open",
+    "brief_id": null,
+    "date": "2026-10-19",
+    "topic_group": "1",
+    "version": null,
+    "key_id": "T-261019-1100-ZCVC",
+    "title": "How to make Claude Code ask you on your phone before it deploys"
+   },
+   {
+    "id": "fe2c63ed-44fc-4827-b20c-259763f67d31",
+    "type": "tone_profile",
+    "status": "current",
+    "brief_id": null,
+    "date": "2026-10-17",
+    "topic_group": "1",
+    "version": null,
+    "key_id": "P-261017-1203-7TEP",
+    "title": "How can agent frameworks and approval UIs reliably map human approvals to the correct tool invocation, including how HumanInTheLoop `when` predicates that return None should behave, and whether a shared DecisionModel interface should be adopted across providers?"
+   },
+   {
+    "id": "f3ad41b2-fc1b-479f-af5b-c0b2efd6c095",
+    "type": "brief",
+    "status": "approved",
+    "brief_id": "261019-1055-BZ89",
+    "date": "2026-10-19",
+    "topic_group": "1",
+    "version": 1,
+    "key_id": "261019-1055-BZ89",
+    "title": "How to Gate Destructive AI Agent Actions"
+   },
+   {
+    "id": "bc4bda0f-f76d-4fd1-a769-d8d91023ef60",
+    "type": "draft",
+    "status": "approved",
+    "brief_id": "261019-1055-BZ89",
+    "date": "2026-10-19",
+    "topic_group": "1",
+    "version": 3,
+    "key_id": "261019-1055-BZ89",
+    "title": "How to Gate Destructive AI Agent Actions"
+   },
+   {
+    "id": "a6459c84-da9e-4557-a656-cebe526eb15c",
+    "type": "draft",
+    "status": "changes_requested",
+    "brief_id": "261019-1055-BZ89",
+    "date": "2026-10-19",
+    "topic_group": "1",
+    "version": 2,
+    "key_id": "261019-1055-BZ89",
+    "title": "How to Gate Destructive AI Agent Actions"
+   },
+   {
+    "id": "defd88da-5bb7-4fb4-b39e-c7e464c82d5f",
+    "type": "draft",
+    "status": "superseded",
+    "brief_id": "261019-1055-BZ89",
+    "date": "2026-10-19",
+    "topic_group": "1",
+    "version": 1,
+    "key_id": "261019-1055-BZ89",
+    "title": "How can HumanInTheLoop middleware reliably require human approval?"
+   },
+   {
+    "id": "6a34c941-2711-4e86-b6f4-f543da8afba9",
+    "type": "review",
+    "status": "fail",
+    "brief_id": "261019-1055-BZ89",
+    "date": "2026-10-19",
+    "topic_group": null,
+    "version": 2,
+    "key_id": "261019-1055-BZ89",
+    "title": null
+   },
+   {
+    "id": "140c045b-ef2a-46e8-b4b2-916341b8bb5d",
+    "type": "review",
+    "status": "fail",
+    "brief_id": "261019-1055-BZ89",
+    "date": "2026-10-19",
+    "topic_group": null,
+    "version": 1,
+    "key_id": "261019-1055-BZ89",
+    "title": null
+   }
+  ]
+ }
+}
