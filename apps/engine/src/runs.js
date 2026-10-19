@@ -10,10 +10,10 @@ import { createStore } from './store.js'
 import { createNotifier } from './notify.js'
 import { withRun, emit, subscribe, isCancel } from './events.js'
 
-/** The step.failed event for a step that threw; a cancel is marked cancelled (the run record shows it as such). */
-const stepFailed = (agent, error, signal) => (isCancel(error, signal)
-  ? { agent, step: agent, message: 'cancelled', data: { cancelled: true } }
-  : { agent, step: agent, message: error.message })
+/** The event for a step that threw: step.cancelled when a cancel interrupted it, else step.failed. */
+const stepEnded = (agent, error, signal) => (isCancel(error, signal)
+  ? emit('step.cancelled', { agent, step: agent, message: 'cancelled' })
+  : emit('step.failed', { agent, step: agent, message: error.message }))
 import { runPipeline, defaultAgents, acquireLock, LockedError, summariseOutput } from './orchestrator.js'
 import { runReviewer } from './reviewer/index.js'
 import { loadDraft } from './reviewer/inputs.js'
@@ -136,9 +136,9 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       if (e.type === 'step.started' && TOP_STEPS.includes(e.step)) {
         run.steps.push({ name: e.step, status: 'running', started_at: e.ts, finished_at: null, ms: null, ai_calls: 0, models: [], retries: 0, record_ids: [], summary: '', error: null })
         save()
-      } else if ((e.type === 'step.finished' || e.type === 'step.failed') && TOP_STEPS.includes(e.step)) {
+      } else if ((e.type === 'step.finished' || e.type === 'step.failed' || e.type === 'step.cancelled') && TOP_STEPS.includes(e.step)) {
         const s = stepFor(e.step)
-        const status = e.type === 'step.finished' ? 'succeeded' : e.data?.cancelled ? 'cancelled' : 'failed'
+        const status = e.type === 'step.finished' ? 'succeeded' : e.type === 'step.cancelled' ? 'cancelled' : 'failed'
         if (s) Object.assign(s, { status, finished_at: e.ts, ms: e.data?.ms ?? null, error: status === 'failed' ? e.message ?? 'failed' : null })
         save()
       } else if (e.type === 'ai.call') {
@@ -219,7 +219,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
         emit('step.output', { agent: 'scout', step: 'scout', message: `${c.clusters_new ?? 0} new clusters, ${c.stories ?? 0} stories, ${c.tutorials ?? 0} tutorials`, data: { cluster_ids: out.cluster_ids, story_ids: out.story_ids, tutorial_ids: out.tutorial_ids, style_profile_id: out.style_profile_id } })
         return { status: 'succeeded', summary: `scout: ${out.calls_used} calls, ${c.questions ?? 0} questions, ${c.stories ?? 0} stories, ${c.tutorials ?? 0} tutorials${out.reused ? ' (reused)' : ''}`, warnings: out.warnings }
       } catch (error) {
-        emit('step.failed', stepFailed('scout', error, signal))
+        stepEnded('scout', error, signal)
         throw error
       }
     }
@@ -235,7 +235,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
         emit('step.output', { agent: 'writer', step: 'writer', message: `Draft v${out.version}: ${out.word_count} words · grade ${out.reading?.post_grade} · hard checks ${out.hard_passed ? 'passed' : 'failed'} · repairs ${out.repairs_used}`, data: { record_id: out.record_id, brief_id: out.brief_id, version: out.version } })
         return { status: 'succeeded', brief_id: out.brief_id, summary: `draft v${out.version} of ${out.brief_id}: ${out.title}`, warnings: out.warnings }
       } catch (error) {
-        emit('step.failed', stepFailed('writer', error, signal))
+        stepEnded('writer', error, signal)
         throw error
       }
     }
@@ -262,7 +262,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
           : `promo pack ${out.status} for ${params.brief_id} ${which(out)}`
         return { status: 'succeeded', brief_id: params.brief_id, summary, warnings: out.warnings, output: out }
       } catch (error) {
-        emit('step.failed', stepFailed(agent, error, signal))
+        stepEnded(agent, error, signal)
         throw error
       }
     }
@@ -277,7 +277,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       emit('step.output', { agent: 'strategist', step: 'strategist', message: `brief ${out.brief_id} v${out.brief_version}: "${out.title}"`, data: { brief_id: out.brief_id, record_id: out.record_id } })
       return { status: 'succeeded', brief_id: out.brief_id, summary: `brief ${out.brief_id}: ${out.title}`, warnings: out.warnings }
     } catch (error) {
-      emit('step.failed', stepFailed('strategist', error, signal))
+      stepEnded('strategist', error, signal)
       throw error
     }
   }

@@ -254,7 +254,8 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
       // A step interrupted by a cancel is "cancelled", not "failed" (also when a later error follows the cancel).
       const cancelled = isCancel(error, signal)
       await runLog({ agent, model: null, ms: now() - started, result: cancelled ? 'cancelled' : 'error', error: cancelled ? null : error.message })
-      emit('step.failed', { agent, step: agent, message: cancelled ? 'cancelled' : error.message, data: { ms: now() - started, ...(cancelled && { cancelled: true }) } })
+      if (cancelled) emit('step.cancelled', { agent, step: agent, message: 'cancelled', data: { ms: now() - started } })
+      else emit('step.failed', { agent, step: agent, message: error.message, data: { ms: now() - started } })
       throw error
     }
   }
