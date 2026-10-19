@@ -84,8 +84,13 @@ export function configForRun(config, { dryRun, params = {} } = {}) {
   if (wr !== undefined) limits.maxWriterRevisions = wr
   const ro = intParam('max_ai_rounds_per_post', 1, 20)
   if (ro !== undefined) limits.maxAiRoundsPerPost = ro
+  const approval = { ...config.approval }
+  if (params.rereview_after_human !== undefined) {
+    if (typeof params.rereview_after_human !== 'boolean') throw new RunError('bad_params', 'params.rereview_after_human must be true or false')
+    approval.rereviewAfterHuman = params.rereview_after_human
+  }
   const runtime = { ...config.runtime, dryRun: dryRun ?? config.runtime.dryRun }
-  return Object.freeze({ ...config, scout: Object.freeze(scout), viasocket: Object.freeze(viasocket), reviewer: Object.freeze(reviewer), limits: Object.freeze(limits), runtime: Object.freeze(runtime) })
+  return Object.freeze({ ...config, scout: Object.freeze(scout), viasocket: Object.freeze(viasocket), reviewer: Object.freeze(reviewer), limits: Object.freeze(limits), approval: Object.freeze(approval), runtime: Object.freeze(runtime) })
 }
 
 /**

@@ -55,6 +55,8 @@ const DEFAULTS = {
   SLACK_POST_APPROVED: 'true', PROMO_LINKEDIN_MAX_CHARS: '1300', PROMO_X_POST_MAX_CHARS: '270',
   // Phase 5.5: human approval gate
   MAX_HUMAN_REVISIONS: '5', REREVIEW_AFTER_HUMAN: 'true', M91_NOTIFY_ON_AWAITING: 'false',
+  // TEST-ONLY CLI commands (npm run test:await); never available through the API
+  ALLOW_TEST_COMMANDS: 'false',
   // Phase 3.5: dashboard API
   DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', PORT: '8080',
   // Designer (Phase 8) and blog + Embarko (Phase 7)
@@ -278,6 +280,9 @@ export function loadConfig(env = process.env) {
       docsUrl: url('M91_DOCS_URL', { required: true }),
       ctaUrl: url('M91_CTA_URL'),
       skillRepoUrl: url('M91_SKILL_REPO_URL', { required: true })
+    },
+    testing: {
+      allowTestCommands: bool('ALLOW_TEST_COMMANDS')
     },
     approval: {
       maxHumanRevisions: int('MAX_HUMAN_REVISIONS', { max: 50 }),

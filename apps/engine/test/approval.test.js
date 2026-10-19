@@ -173,3 +173,15 @@ test('human_revise that fails review after the limits: the existing failure path
   assert.equal(s.store.records.get(s.draft.id).status, 'changes_requested')
   assert.equal(s.notifier.sent.m91[0].title, 'Blog post failed review')
 })
+
+test('human_revise with the run param rereview_after_human: false skips the Reviewer for that run only', async () => {
+  const restore = quiet()
+  const reviewer = mockReviewer(['fail'])
+  const s = await setup({ reviewer, writerAnswers: { revise: draftAnswer({ revision_notes: [{ feedback_quote: '', what_changed: 'w' }] }) } })
+  const r = await s.run('human_revise', { feedback: 'Use a shorter title.', rereview_after_human: false })
+  restore()
+  assert.equal(r.status, 'succeeded')
+  assert.equal(r.run.result_summary, 'awaiting human approval (v2, not re-reviewed)')
+  assert.equal(reviewer.count(), 0)
+  assert.equal(s.cfg.approval.rereviewAfterHuman, true, 'config unchanged')
+})

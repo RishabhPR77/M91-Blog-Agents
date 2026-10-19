@@ -12,6 +12,7 @@
 // npm run lessons -- --list | --delete <memory_id>
 // npm run reviewer -- --brief-id=<id> [--version=<n>] [--brief-version=<n>] [--route]
 // npm run promo -- --brief-id=<id> [--version=<n>]
+// npm run test:await -- --brief-id=<id> [--version=<n>]   TEST-ONLY, needs ALLOW_TEST_COMMANDS=true
 // npm run approvals -- --list
 // npm run approve -- --brief-id=<id>
 // npm run revise -- --brief-id=<id> --feedback "<text>" [--quote "<exact sentence>"] …
@@ -32,6 +33,7 @@ import { getStore, createStore } from './store.js'
 import { findCandidates, deleteIds, PROTECTED_TYPES } from './cleanup.js'
 import { extractSnippets } from './writer/snippets.js'
 import { lessonText } from './lessons.js'
+import { setAwaitingForTest } from './testcommands.js'
 import { WEIGHTS } from './reviewer/decide.js'
 import { createNotifier } from './notify.js'
 import { createRunManager } from './runs.js'
@@ -287,6 +289,13 @@ async function main() {
     const { calls, ...result } = await scoutCommand(args, { config, store, notifier })
     log.info('scout finished', result)
     console.table(calls.map((c) => ({ call: c.call, model: c.model, delivery: c.delivery, ms: c.ms, returned: c.items_returned, kept: c.items_kept, dropped: c.items_dropped, retries: c.retries, error: c.error ? c.error.slice(0, 60) : '' })))
+    return
+  }
+
+  // TEST-ONLY (ALLOW_TEST_COMMANDS=true): put an existing draft at awaiting_human for a cheap approval test.
+  if (args._[0] === 'test-await') {
+    const r = await setAwaitingForTest(createStore({ config, dryRun: false }), config, { briefId: args['brief-id'], version: args.version ? Number(args.version) : undefined })
+    console.log(`TEST: ${r.brief_id} v${r.version} (brief v${r.brief_version}) ${r.previous_status} → awaiting_human · score ${r.total ?? 'none'} · draft and brief marked test data`)
     return
   }
 
