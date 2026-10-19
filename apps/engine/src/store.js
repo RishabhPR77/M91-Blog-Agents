@@ -91,7 +91,8 @@ function matches(record, filters = {}) {
 /**
  * @param {{ config?: object, clientFactory?: Function, fetch?: Function, sleepFn?: Function, eventTimeoutMs?: number }} deps
  */
-export function createStore({ config = getConfig(), clientFactory = defaultClientFactory, fetch = globalThis.fetch, sleepFn = sleep, eventTimeoutMs = 60000, eventPollMs = 1000, dryRun = config.runtime.dryRun } = {}) {
+// testTag: smoke tests mark every record they create with metadata.test = true, so cleanup can find them.
+export function createStore({ config = getConfig(), clientFactory = defaultClientFactory, fetch = globalThis.fetch, sleepFn = sleep, eventTimeoutMs = 60000, eventPollMs = 1000, dryRun = config.runtime.dryRun, testTag = false } = {}) {
   const { apiKey, agentId } = config.mem0
   // DRY_RUN rule: no Mem0 writes, except run_log records, which carry dry_run: true.
   // Reads still happen. Skipped writes return a placeholder record with a "dryrun-" id.
@@ -141,11 +142,14 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     return out
   }
 
-  /** Stores one record verbatim (infer=false) and returns it with its memory id. */
-  async function createRecord({ type, payload, briefId, status = null, version = null, topicGroup = null, date = istDate() }) {
+  /**
+   * Stores one record verbatim (infer=false) and returns it with its memory id.
+   * meta: extra metadata (e.g. a draft's brief_version); it never overrides the fields above it.
+   */
+  async function createRecord({ type, payload, briefId, status = null, version = null, topicGroup = null, date = istDate(), meta = {} }) {
     if (!RECORD_TYPES.includes(type)) throw new StoreError(`Unknown record type "${type}"`)
     const recordKey = randomUUID()
-    const metadata = { type, brief_id: briefId ?? null, status, version, topic_group: topicGroup, date, record_key: recordKey }
+    const metadata = { ...meta, ...(testTag && { test: true }), type, brief_id: briefId ?? null, status, version, topic_group: topicGroup, date, record_key: recordKey }
     if (type === 'run_log' || type === 'run') {
       metadata.dry_run = dryRun
       payload = { ...payload, dry_run: dryRun }

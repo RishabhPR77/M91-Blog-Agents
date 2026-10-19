@@ -14,7 +14,7 @@ import { writer_draft, draftSchemaErrors } from './schemas.js'
 import { buildWriterPrompt, repairTail, truncatedProblem } from './prompts.js'
 import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, citedDocsSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage } from './inputs.js'
 import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets } from './snippets.js'
-import { draftsOf, nextDraftVersion, saveDraft } from './save.js'
+import { draftsOf, nextDraftVersion, saveDraft, draftVersion, isEarlierDraft } from './save.js'
 
 export class WriterError extends Error {
   constructor(message, { kind } = {}) {
@@ -107,7 +107,11 @@ export async function runWriter(params = {}, deps = {}) {
   const brief = briefRecord.payload
   const briefVersion = brief.brief_version ?? briefRecord.version ?? 1
   const inMemoryPrev = config.runtime.dryRun && params.previousDraft ? params.previousDraft : null
-  const version = params.version ?? (inMemoryPrev ? (Number(inMemoryPrev.version) || 0) + 1 : await nextDraftVersion(store, params.briefId))
+  // Drafts are numbered per brief version: a new brief version starts again at v1.
+  const sameBriefVersion = (d) => Number(d.brief_version ?? 1) === Number(briefVersion)
+  const version = params.version ?? (inMemoryPrev
+    ? (sameBriefVersion(inMemoryPrev) ? (Number(inMemoryPrev.version) || 0) + 1 : 1)
+    : await nextDraftVersion(store, params.briefId, briefVersion))
   const feedback = writerFeedback(params.feedback)
   if (mode === 'revise' && !feedback.length && !params.sourcePack) throw new WriterError('revise mode needs Reviewer feedback for the Writer (or a source pack)')
 
@@ -120,8 +124,10 @@ export async function runWriter(params = {}, deps = {}) {
   const tone = await toneSection(store, brief, config)
   const lessons = await latestLessons(store, config.strategist.lessonsLimit)
   const drafts = await draftsOf(store, params.briefId)
-  const previous = drafts.find((d) => (d.version ?? d.payload?.version) < version) ??
-    (inMemoryPrev ? { version: inMemoryPrev.version, payload: inMemoryPrev } : null)
+  // The newest draft written before this one (an older brief version counts as earlier).
+  const current = { version, metadata: { brief_version: briefVersion } }
+  const previous = drafts.find((d) => draftVersion(d) !== null && isEarlierDraft(d, current)) ??
+    (inMemoryPrev ? { version: inMemoryPrev.version, metadata: { brief_version: inMemoryPrev.brief_version ?? 1 }, payload: inMemoryPrev } : null)
 
   const sections = {
     tone: tone.text,

@@ -33,7 +33,7 @@ function duplicates(records, keyOf) {
 }
 
 export async function scoutSmoke(config) {
-  const store = createStore({ config })
+  const store = createStore({ config, testTag: true })
   const notifier = createNotifier({ config })
   const dry = config.runtime.dryRun
   console.log(`\n=== Scout smoke (${dry ? 'DRY_RUN: nothing saved except run_log, no Slack' : 'LIVE: saves to Mem0 and posts the Slack summary'}) ===`)

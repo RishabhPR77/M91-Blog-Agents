@@ -152,6 +152,19 @@ test('Mem0 network blips are retried for safe calls (search), but a new-record a
   assert.equal(adds, 1)
 })
 
+test('createRecord: extra metadata via meta (never overriding core fields); testTag marks every record test: true', async () => {
+  const added = []
+  const client = { async add(messages, opts) { added.push(opts.metadata); return [{ id: `m${added.length}` }] } }
+  const plain = createStore({ config: fakeConfig(), clientFactory: async () => client, fetch: fakeFetch(() => ({})), dryRun: false })
+  await plain.createRecord({ type: 'draft', briefId: 'B', payload: {}, version: 1, meta: { brief_version: 2, type: 'nope' } })
+  assert.equal(added[0].brief_version, 2)
+  assert.equal(added[0].type, 'draft')
+  assert.equal(added[0].test, undefined)
+  const smoke = createStore({ config: fakeConfig(), clientFactory: async () => client, fetch: fakeFetch(() => ({})), dryRun: false, testTag: true })
+  await smoke.createRecord({ type: 'run', payload: {} })
+  assert.equal(added[1].test, true)
+})
+
 test('the Mem0 retry window rides out a long blip: 5 retries, every wait at least half its cap (≥22 s in total)', async () => {
   const { MEM0_RETRY } = await import('../src/store.js')
   const { backoffDelay } = await import('../src/util/retry.js')

@@ -91,7 +91,7 @@ async function s4() {
     record('S4 Mem0', 'SKIPPED', '', '', 'DRY_RUN=true: no Mem0 writes except run_log')
     return
   }
-  const store = createStore({ config })
+  const store = createStore({ config, testTag: true })
   const briefId = `smoke-${newBriefId()}`
   let id
   const step = async (name, fn) => {

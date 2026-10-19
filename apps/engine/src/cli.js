@@ -7,20 +7,23 @@
 //   feedback file: [{ "area": "angle", "problem": "…", "fix": "…" }]  or  { "feedback": [...] }
 // npm run brief -- --show <brief_id>
 // npm run writer -- --brief-id=<id> [--brief-version=<n>] [--mode=revise --feedback-file=<path.json>]
-// npm run draft -- --show <brief_id> [--version <n>]  |  --export <brief_id> [--version <n>] --out <file.md>
+// npm run draft -- --show <brief_id> [--version <n> [--brief-version <n>]]  |  --export <brief_id> [--version <n>] --out <file.md>
+// npm run cleanup -- --list | --delete <memory_id …> | --delete-listed   (asks you to type "yes")
 // npm run checks -- --file <post.md> --brief-id <id>
 // npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"] | --list | --cancel <pinned_id>
 
 import { readFile, writeFile } from 'node:fs/promises'
 import { runWriter } from './writer/index.js'
-import { draftsOf } from './writer/save.js'
-import { loadBrief, allowedUrlSet, tutorialSourceText } from './writer/inputs.js'
+import { draftsOf, draftVersion, draftBriefVersion } from './writer/save.js'
+import { loadBrief, allowedUrlSet, tutorialSourceText, citedDocsSourceText } from './writer/inputs.js'
 import { runContentChecks, parseMarkdown, urlKey } from './checks/content.js'
 import { createUrlChecker } from './scout/checks.js'
 import { pathToFileURL } from 'node:url'
 import { getConfig, ConfigError } from './config.js'
 import { log, registerSecrets, setLevel } from './util/log.js'
-import { getStore } from './store.js'
+import { getStore, createStore } from './store.js'
+import { findCandidates, deleteIds, PROTECTED_TYPES } from './cleanup.js'
+import { extractSnippets } from './writer/snippets.js'
 import { createNotifier } from './notify.js'
 import { createRunManager } from './runs.js'
 import { runScout } from './scout/index.js'
@@ -71,6 +74,42 @@ export async function pinCommand(args, { store }) {
   console.log(saved ? `Pinned ${pin.pinned_id} for ${pin.target_date} (${pin.priority}).` : `DRY_RUN: not saved. Would pin ${pin.pinned_id} for ${pin.target_date}.`)
 }
 
+/** Reads one line from the terminal. */
+async function ask(question) {
+  const { createInterface } = await import('node:readline/promises')
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    return (await rl.question(question)).trim()
+  } finally {
+    rl.close()
+  }
+}
+
+/** npm run cleanup -- --list | --delete <memory_id …> | --delete-listed */
+export async function cleanupCommand(args, { store, confirm = ask, print = console.log, table = console.table }) {
+  const show = (list) => {
+    if (!list.length) return print('No candidate test records.')
+    table(list.map((c) => ({ id: c.id, type: c.type, brief_id: c.brief_id ?? '', version: c.version ?? '', status: c.status ?? '', date: c.date ?? '', why: c.reasons.join('; ').slice(0, 80) })))
+    print(`${list.length} candidate record(s). Protected types (${PROTECTED_TYPES.join(', ')}) are never listed.`)
+  }
+  if (args.list) return show(findCandidates(await store.getRecords({})))
+  if (args['delete-listed']) {
+    const list = findCandidates(await store.getRecords({}))
+    show(list)
+    if (!list.length) return
+    if ((await confirm(`Type "yes" to delete these ${list.length} record(s): `)) !== 'yes') return print('Nothing deleted.')
+    const r = await deleteIds(store, list.map((c) => c.id))
+    return print(`Deleted ${r.deleted.length} record(s).${r.failed.length ? ` Failed: ${r.failed.map((f) => `${f.id} (${f.error})`).join(', ')}` : ''}`)
+  }
+  if (args.delete) {
+    const ids = [args.delete, ...args._.slice(1)].filter((x) => typeof x === 'string' && x)
+    if (!ids.length) throw new Error('usage: npm run cleanup -- --delete <memory_id …>')
+    const r = await deleteIds(store, ids)
+    return print(`Deleted ${r.deleted.length} record(s): ${r.deleted.join(', ')}${r.failed.length ? `. Failed: ${r.failed.map((f) => `${f.id} (${f.error})`).join(', ')}` : ''}`)
+  }
+  throw new Error('usage: npm run cleanup -- --list | --delete <memory_id …> | --delete-listed')
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   let config
@@ -87,6 +126,9 @@ async function main() {
   setLevel(config.runtime.logLevel)
   const store = getStore()
   const notifier = createNotifier({ config })
+
+  // Clean-up deletes for real even when DRY_RUN=true: it only removes ids you list or confirm.
+  if (args._[0] === 'cleanup') return cleanupCommand(args, { store: createStore({ config, dryRun: false }) })
 
   if (args._[0] === 'strategist') {
     let scoutResult
@@ -140,7 +182,10 @@ async function main() {
     const id = args.show ?? args.export
     if (!id || id === true) throw new Error('usage: npm run draft -- --show <brief_id> [--version <n>]  |  --export <brief_id> [--version <n>] --out <file.md>')
     const all = await draftsOf(store, id)
-    const d = args.version ? all.find((x) => (x.version ?? x.payload?.version) === Number(args.version)) : all[0]
+    // Versions restart per brief version: --version picks within --brief-version (default: the newest one with that version).
+    const d = args.version
+      ? all.find((x) => draftVersion(x) === Number(args.version) && (!args['brief-version'] || draftBriefVersion(x) === Number(args['brief-version'])))
+      : all[0]
     if (!d) return console.log(`No draft for ${id}${args.version ? ` v${args.version}` : ''}.`)
     if (args.export) {
       if (!args.out || args.out === true) throw new Error('--export needs --out <file.md>')
@@ -161,13 +206,14 @@ async function main() {
     if (!briefRecord) throw new Error(`no brief ${args['brief-id']}`)
     const brief = briefRecord.payload
     const parsed = parseMarkdown(md)
-    const tutorialText = brief.post_type === 'tutorial' || brief.tutorial?.use ? await tutorialSourceText(brief, { config }) : ''
+    const isTutorial = brief.post_type === 'tutorial' || brief.tutorial?.use
+    const { snippets } = extractSnippets(isTutorial ? await tutorialSourceText(brief, { config }) : await citedDocsSourceText(brief, { config }))
     const checker = createUrlChecker({ timeoutMs: config.scout.urlCheckTimeoutMs })
     const linkStatuses = new Map()
     await Promise.all([...new Set(parsed.links.map((l) => l.url))].map(async (u) => linkStatuses.set(urlKey(u), await checker.check(u))))
     // A bare Markdown file has no JSON answer or SEO fields: those two checks don't apply.
     const draft = { title: parsed.h1[0] ?? '', post_markdown: md, tldr: parsed.tldr ?? [], seo: { title_tag: 'n/a', meta_description: 'n/a', slug_suggestion: '' } }
-    const r = runContentChecks({ draft, brief, config, allowedUrls: allowedUrlSet(brief, { ctaUrl: config.m91.ctaUrl }).set, tutorialText, linkStatuses })
+    const r = runContentChecks({ draft, brief, config, allowedUrls: allowedUrlSet(brief, { ctaUrl: config.m91.ctaUrl, snippets }).set, snippets, linkStatuses })
     printChecks(r.results.filter((x) => x.id !== 'schema' && x.id !== 'seo_lengths'))
     console.log(`words ${r.word_count} · grades intro ${r.reading.intro_grade} / post ${r.reading.post_grade} · hard checks ${r.results.filter((x) => x.severity === 'hard' && x.id !== 'schema' && x.id !== 'seo_lengths').every((x) => x.passed) ? 'passed' : 'FAILED'}`)
     return

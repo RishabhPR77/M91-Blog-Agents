@@ -19,13 +19,13 @@ const show = (label, r) => {
 }
 
 export async function strategistSmoke(config) {
-  const store = createStore({ config })
+  const store = createStore({ config, testTag: true })
   const notifier = createNotifier({ config })
   const dryConfig = Object.freeze({ ...config, runtime: Object.freeze({ ...config.runtime, dryRun: true }) })
   const out = {}
 
   // 1. Dry plan, then a live plan.
-  const dry = await runStrategist({ mode: 'plan' }, { config: dryConfig, store: createStore({ config: dryConfig }), notifier: createNotifier({ config: dryConfig }) })
+  const dry = await runStrategist({ mode: 'plan' }, { config: dryConfig, store: createStore({ config: dryConfig, testTag: true }), notifier: createNotifier({ config: dryConfig }) })
   show('1a. plan (DRY_RUN)', dry)
   const first = await runStrategist({ mode: 'plan' }, { config, store, notifier })
   show('1b. plan (live)', first)

@@ -24,7 +24,7 @@ const show = (label, r, ms) => {
 }
 
 export async function writerSmoke(config) {
-  const store = createStore({ config })
+  const store = createStore({ config, testTag: true })
   const notifier = createNotifier({ config })
   const dryConfig = Object.freeze({ ...config, runtime: Object.freeze({ ...config.runtime, dryRun: true }) })
   const briefs = latestBriefs(await store.getRecords({ type: 'brief' }))
@@ -35,7 +35,7 @@ export async function writerSmoke(config) {
 
   // 1. Dry, then real.
   let t = Date.now()
-  const dry = await runWriter({ mode: 'new', briefId, runId: `smoke-${briefId}` }, { config: dryConfig, store: createStore({ config: dryConfig }), notifier: createNotifier({ config: dryConfig }) })
+  const dry = await runWriter({ mode: 'new', briefId, runId: `smoke-${briefId}` }, { config: dryConfig, store: createStore({ config: dryConfig, testTag: true }), notifier: createNotifier({ config: dryConfig }) })
   show('1a. new (DRY_RUN)', dry, Date.now() - t)
   t = Date.now()
   const real = await runWriter({ mode: 'new', briefId, runId: `smoke-${briefId}` }, { config, store, notifier })
