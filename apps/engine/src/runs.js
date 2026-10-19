@@ -69,8 +69,23 @@ export function configForRun(config, { dryRun, params = {} } = {}) {
     if (!Number.isInteger(params.ai_max_retries) || params.ai_max_retries < 0 || params.ai_max_retries > 10) throw new RunError('bad_params', 'params.ai_max_retries must be 0–10')
     viasocket.maxRetries = params.ai_max_retries
   }
+  // Low-cost limits for one run (Phase 5.5): fewer source checks, revisions and rounds, without editing .env.
+  const reviewer = { ...config.reviewer }
+  const limits = { ...config.limits }
+  const intParam = (key, min, max) => {
+    const v = params[key]
+    if (v === undefined) return undefined
+    if (!Number.isInteger(v) || v < min || v > max) throw new RunError('bad_params', `params.${key} must be a whole number ${min}–${max}`)
+    return v
+  }
+  const sc = intParam('reviewer_max_source_checks', 0, 20)
+  if (sc !== undefined) reviewer.maxSourceChecks = sc
+  const wr = intParam('max_writer_revisions', 0, 10)
+  if (wr !== undefined) limits.maxWriterRevisions = wr
+  const ro = intParam('max_ai_rounds_per_post', 1, 20)
+  if (ro !== undefined) limits.maxAiRoundsPerPost = ro
   const runtime = { ...config.runtime, dryRun: dryRun ?? config.runtime.dryRun }
-  return Object.freeze({ ...config, scout: Object.freeze(scout), viasocket: Object.freeze(viasocket), runtime: Object.freeze(runtime) })
+  return Object.freeze({ ...config, scout: Object.freeze(scout), viasocket: Object.freeze(viasocket), reviewer: Object.freeze(reviewer), limits: Object.freeze(limits), runtime: Object.freeze(runtime) })
 }
 
 /**

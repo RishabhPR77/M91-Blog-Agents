@@ -281,3 +281,52 @@ test('reviewer and promo modes: bad params are clear 400s; runs start with 202; 
     assert.equal(promoList.status, 200)
   })
 })
+
+test('approval API: list, detail, approve / revise / reject (202), and the 400 / 404 / 409 cases', async () => {
+  const B = '261018-1400-ABCD'
+  const g = gate()
+  await withApi({ agents: { scout: async () => { await g.wait(); return stubAgents.scout() } } }, async ({ call, store, manager }) => {
+    await store.createRecord({ type: 'brief', briefId: B, payload: { brief_id: B, brief_version: 1, titles: ['T'], lead: { kind: 'cluster', id: 'C-9' } }, status: 'awaiting_human', version: 1 })
+    const v1 = await store.createRecord({ type: 'draft', briefId: B, payload: { title: 'Old T', version: 1, brief_version: 1, post_markdown: '# Old T', human_feedback: { text: 'Shorter.', quotes: [], at: 't0' } }, status: 'changes_requested', version: 1, meta: { brief_version: 1 } })
+    await store.createRecord({ type: 'review', briefId: B, payload: { version: 1, brief_version: 1, total: 86, pass: true, gates: [], areas: [], feedback: [], summary: 'ok' }, status: 'pass', version: 1, meta: { brief_version: 1 } })
+    await store.createRecord({ type: 'draft', briefId: B, payload: { title: 'T', version: 2, brief_version: 1, post_markdown: '# T\n\nA ringing phone gets attention fast.', checks: { hard_passed: true, results: [{ id: 'cta_exact', passed: true, severity: 'hard', value: 1, detail: 'ok' }] } }, status: 'awaiting_human', version: 2, meta: { brief_version: 1, awaiting_since: '2026-10-19T10:00:00+05:30', review_total: 91 } })
+    await store.createRecord({ type: 'review', briefId: B, payload: { version: 2, brief_version: 1, total: 91, pass: true, gates: [{ id: 'checks_hard_passed', passed: true }], areas: [], feedback: [], summary: 'Good.' }, status: 'pass', version: 2, meta: { brief_version: 1 } })
+
+    const list = await call('GET', '/api/approvals')
+    assert.deepEqual(list.json.approvals.map(({ record_id, ...x }) => x), [{ brief_id: B, version: 2, brief_version: 1, title: 'T', total: 91, waiting_since: '2026-10-19T10:00:00+05:30' }])
+    const detail = (await call('GET', `/api/approvals/${B}`)).json
+    assert.equal(detail.draft.version, 2)
+    assert.equal(detail.draft.status, 'awaiting_human')
+    assert.equal(detail.review.total, 91)
+    assert.equal(detail.review.summary, 'Good.')
+    assert.deepEqual(detail.checks.map((c) => c.id), ['cta_exact'])
+    assert.deepEqual(detail.earlier, [{ version: 1, brief_version: 1, status: 'changes_requested', title: 'Old T', score: 86, human_feedback: { text: 'Shorter.', quotes: [], at: 't0' } }])
+    assert.equal((await call('GET', '/api/approvals/not-a-brief')).status, 400)
+    assert.equal((await call('GET', '/api/approvals/261018-1400-ZZZZ')).status, 404)
+
+    // Bad revise bodies → 400 before any run starts.
+    const short = await call('POST', `/api/approvals/${B}/revise`, { feedback: 'no' })
+    assert.equal(short.status, 400)
+    const noQuote = await call('POST', `/api/approvals/${B}/revise`, { feedback: 'Make it shorter.', quotes: ['Not a sentence in this draft.'] })
+    assert.deepEqual([noQuote.status, noQuote.json.error.code], [400, 'quote_not_found'])
+
+    // Another run in progress → 409.
+    const full = await call('POST', '/api/runs', { mode: 'full' })
+    const busy = await call('POST', `/api/approvals/${B}/approve`, {})
+    assert.deepEqual([busy.status, busy.json.error.code], [409, 'run_in_progress'])
+    g.open()
+    await manager.wait(full.json.run_id)
+
+    const ok = await call('POST', `/api/approvals/${B}/approve`, {})
+    assert.equal(ok.status, 202)
+    const done = await manager.wait(ok.json.run_id)
+    assert.equal(done.status, 'succeeded')
+    assert.equal(done.run.result_summary, 'approved by you (v2, score 91)')
+    // No longer awaiting_human → 409 for every decision.
+    for (const [action, body] of [['approve', {}], ['revise', { feedback: 'Make it shorter.' }], ['reject', { reason: 'x' }]]) {
+      const r = await call('POST', `/api/approvals/${B}/${action}`, body)
+      assert.deepEqual([r.status, r.json.error.code], [409, 'not_awaiting_human'], action)
+    }
+    assert.equal(store.records.get(v1.id).status, 'changes_requested')
+  })
+})

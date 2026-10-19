@@ -13,6 +13,8 @@ import { createRunManager, RunError, RUN_ID_RE } from './runs.js'
 import { getStore, RECORD_TYPES } from './store.js'
 import { replay, subscribe, TERMINAL_TYPES } from './events.js'
 import { listPins, addPin, cancelPin, PinError } from './pins.js'
+import { draftsOf, draftVersion, draftBriefVersion } from './writer/save.js'
+import { BRIEF_ID_RE } from './util/ids.js'
 
 const VERSION = (() => {
   try {
@@ -110,6 +112,36 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
   }
   const fail = (res, status, code, message) => send(res, status, { error: { code, message } })
   const isRunning = () => (manager ? manager.isRunning() : Boolean(legacyRunning))
+
+  /**
+   * GET /api/approvals/:brief_id — the newest draft in full, its review, its check results, and the earlier
+   * versions (title, status, score, human feedback) for comparison. 404 when the brief has no draft.
+   */
+  async function approvalDetail(briefId) {
+    const drafts = await draftsOf(store, briefId)
+    if (!drafts.length) throw new ApiError(404, 'not_found', `no draft of brief ${briefId}`)
+    const reviews = await store.getRecords({ type: 'review', brief_id: briefId })
+    const reviewOf = (d) => reviews
+      .filter((r) => Number(r.payload?.version ?? r.version) === draftVersion(d) && Number(r.payload?.brief_version ?? r.metadata?.brief_version ?? 1) === draftBriefVersion(d))
+      .sort((a, b) => String(b.createdAt ?? b.date).localeCompare(String(a.createdAt ?? a.date)))[0]?.payload ?? null
+    const [d, ...earlier] = drafts
+    const p = d.payload ?? {}
+    const review = reviewOf(d)
+    return {
+      brief_id: briefId,
+      draft: {
+        record_id: d.id, version: draftVersion(d), brief_version: draftBriefVersion(d), status: d.status, waiting_since: d.metadata?.awaiting_since ?? null,
+        title: p.title, tldr: p.tldr, seo: p.seo, post_markdown: p.post_markdown, word_count: p.word_count, reading: p.reading,
+        revision_notes: p.revision_notes ?? [], model_used: p.model_used ?? null
+      },
+      review: review && { total: review.total, pass: review.pass, gates: review.gates, areas: review.areas, feedback: review.feedback, summary: review.summary, sources_checked: review.sources_checked },
+      checks: p.checks?.results ?? [],
+      earlier: earlier.map((e) => ({
+        version: draftVersion(e), brief_version: draftBriefVersion(e), status: e.status, title: e.payload?.title ?? '',
+        score: reviewOf(e)?.total ?? e.metadata?.review_total ?? null, human_feedback: e.payload?.human_feedback ?? null
+      }))
+    }
+  }
 
   async function readJson(req) {
     const chunks = []
@@ -249,6 +281,31 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       const s = openStream(req, res)
       s.stream.off = subscribe((e) => s.write(e))
       return
+    }
+
+    // Approvals (Phase 5.5 B7): drafts waiting for the human, and the human's three decisions.
+    if (path === '/api/approvals' && method === 'GET') {
+      const waiting = (await store.getRecords({ type: 'draft', status: 'awaiting_human' }))
+        .sort((a, b) => String(a.metadata?.awaiting_since).localeCompare(String(b.metadata?.awaiting_since)))
+        .map((d) => ({
+          brief_id: d.briefId, version: d.version, brief_version: d.metadata?.brief_version ?? d.payload?.brief_version ?? 1,
+          title: d.payload?.title ?? '', total: d.metadata?.review_total ?? null, waiting_since: d.metadata?.awaiting_since ?? null, record_id: d.id
+        }))
+      return send(res, 200, { approvals: waiting })
+    }
+    if (seg[1] === 'approvals' && seg[2]) {
+      const briefId = seg[2]
+      if (!BRIEF_ID_RE.test(briefId)) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')
+      if (seg.length === 3 && method === 'GET') return send(res, 200, await approvalDetail(briefId))
+      const action = { approve: 'approve', revise: 'human_revise', reject: 'reject_topic' }[seg[3]]
+      if (action && seg.length === 4 && method === 'POST') {
+        const body = await readJson(req)
+        const params = { brief_id: briefId }
+        if (action === 'human_revise') Object.assign(params, { feedback: body.feedback, ...(body.quotes !== undefined && { quotes: body.quotes }) })
+        if (action === 'reject_topic' && body.reason !== undefined) params.reason = body.reason
+        const { run_id } = await manager.startRun({ mode: action, trigger: 'manual', params })
+        return send(res, 202, { run_id })
+      }
     }
 
     // Records

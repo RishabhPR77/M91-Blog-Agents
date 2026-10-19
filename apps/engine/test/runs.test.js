@@ -235,3 +235,12 @@ test('cancel stops rtlayer history polling', async () => {
   await assert.rejects(withRun('R-poll', () => client.aiSend({ agent: 'writer', message: 'M', threadId: 'th' }), { signal: controller.signal }), CancelledError)
   assert.ok(polls <= 2)
 })
+
+test('run params for the low-cost limits: Reviewer source checks, Writer revisions and AI rounds for one run only', () => {
+  const cfg = fakeConfig()
+  const c = configForRun(cfg, { params: { reviewer_max_source_checks: 1, max_writer_revisions: 1, max_ai_rounds_per_post: 2 } })
+  assert.deepEqual([c.reviewer.maxSourceChecks, c.limits.maxWriterRevisions, c.limits.maxAiRoundsPerPost], [1, 1, 2])
+  assert.deepEqual([cfg.reviewer.maxSourceChecks, cfg.limits.maxWriterRevisions, cfg.limits.maxAiRoundsPerPost], [5, 2, 5], 'config itself unchanged')
+  assert.throws(() => configForRun(cfg, { params: { max_ai_rounds_per_post: 0 } }), /max_ai_rounds_per_post must be a whole number 1–20/)
+  assert.throws(() => configForRun(cfg, { params: { max_writer_revisions: 'one' } }), /max_writer_revisions/)
+})

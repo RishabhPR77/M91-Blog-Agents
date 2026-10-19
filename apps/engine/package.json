@@ -33,7 +33,11 @@
     "lessons": "node --env-file=../../.env src/cli.js lessons",
     "reviewer": "node --env-file=../../.env src/cli.js reviewer",
     "reviewer:dry": "cross-env DRY_RUN=true node --env-file=../../.env src/cli.js reviewer",
-    "promo": "node --env-file=../../.env src/cli.js promo"
+    "promo": "node --env-file=../../.env src/cli.js promo",
+    "approvals": "node --env-file=../../.env src/cli.js approvals",
+    "approve": "node --env-file=../../.env src/cli.js approve",
+    "revise": "node --env-file=../../.env src/cli.js revise",
+    "reject": "node --env-file=../../.env src/cli.js reject"
   },
   "dependencies": {
     "@m91/content": "0.1.0",

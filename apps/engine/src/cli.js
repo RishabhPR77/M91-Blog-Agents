@@ -12,6 +12,10 @@
 // npm run lessons -- --list | --delete <memory_id>
 // npm run reviewer -- --brief-id=<id> [--version=<n>] [--brief-version=<n>] [--route]
 // npm run promo -- --brief-id=<id> [--version=<n>]
+// npm run approvals -- --list
+// npm run approve -- --brief-id=<id>
+// npm run revise -- --brief-id=<id> --feedback "<text>" [--quote "<exact sentence>"] …
+// npm run reject -- --brief-id=<id> [--reason "<text>"]
 // npm run checks -- --file <post.md> --brief-id <id>
 // npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"] | --list | --cancel <pinned_id>
 
@@ -283,6 +287,35 @@ async function main() {
     const { calls, ...result } = await scoutCommand(args, { config, store, notifier })
     log.info('scout finished', result)
     console.table(calls.map((c) => ({ call: c.call, model: c.model, delivery: c.delivery, ms: c.ms, returned: c.items_returned, kept: c.items_kept, dropped: c.items_dropped, retries: c.retries, error: c.error ? c.error.slice(0, 60) : '' })))
+    return
+  }
+
+  if (args._[0] === 'approvals') {
+    if (!args.list) throw new Error('usage: npm run approvals -- --list')
+    const waiting = await store.getRecords({ type: 'draft', status: 'awaiting_human' })
+    if (!waiting.length) return console.log('No drafts are waiting for your approval.')
+    console.table(waiting.map((d) => ({ brief_id: d.briefId, version: d.version, title: String(d.payload?.title ?? '').slice(0, 60), score: d.metadata?.review_total ?? '', waiting_since: d.metadata?.awaiting_since ?? '' })))
+    return
+  }
+
+  // The human's decisions on a waiting draft (Phase 5.5): approve | revise | reject.
+  if (['approve', 'revise', 'reject'].includes(args._[0])) {
+    const mode = { approve: 'approve', revise: 'human_revise', reject: 'reject_topic' }[args._[0]]
+    if (typeof args['brief-id'] !== 'string') throw new Error(`usage: npm run ${args._[0]} -- --brief-id=<id>${args._[0] === 'revise' ? ' --feedback "<text>" [--quote "<exact sentence>"]' : args._[0] === 'reject' ? ' [--reason "<text>"]' : ''}`)
+    const params = { brief_id: args['brief-id'] }
+    if (mode === 'human_revise') {
+      params.feedback = typeof args.feedback === 'string' ? args.feedback : ''
+      const quotes = process.argv.slice(2).flatMap((a, i, all) => (a === '--quote' ? [all[i + 1]] : a.startsWith('--quote=') ? [a.slice(8)] : [])).filter(Boolean)
+      if (quotes.length) params.quotes = quotes
+    }
+    if (mode === 'reject_topic' && typeof args.reason === 'string') params.reason = args.reason
+    const manager = createRunManager({ config })
+    const { run_id } = await manager.startRun({ mode, trigger: 'cli', params })
+    const result = await manager.wait(run_id)
+    console.table((result.run?.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, ai_calls: s.ai_calls, summary: String(s.summary).slice(0, 80), error: s.error ? String(s.error).slice(0, 50) : '' })))
+    console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
+    for (const w of result.run?.warnings ?? []) console.log(`WARNING: ${w}`)
+    process.exitCode = result.status === 'succeeded' ? 0 : 1
     return
   }
 
