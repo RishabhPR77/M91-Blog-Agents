@@ -8,8 +8,13 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test",
-    "dev": "node --watch --env-file=../../.env src/server.js",
+    "test": "node --test \"test/**/*.test.js\" && npm --prefix dashboard run test:unit",
+    "test:node": "node --test \"test/**/*.test.js\"",
+    "dev": "concurrently -k -n api,ui -c blue,magenta \"npm:dev:api\" \"npm:dev:ui\"",
+    "dev:api": "node --watch --env-file=../../.env src/server.js",
+    "dev:ui": "node --env-file=../../.env dashboard/scripts/dev.mjs",
+    "build:dashboard": "npm --prefix dashboard run build",
+    "install:dashboard": "npm --prefix dashboard ci",
     "start": "node src/server.js",
     "start:local": "node --env-file=../../.env src/server.js",
     "check": "node viasocket-check.mjs src",
@@ -48,6 +53,7 @@
     "viasocket-apps": "0.6.0"
   },
   "devDependencies": {
-    "cross-env": "7.0.3"
+    "cross-env": "7.0.3",
+    "concurrently": "9.2.4"
   }
 }
