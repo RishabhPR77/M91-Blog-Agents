@@ -249,6 +249,10 @@ export async function findProblems(b, { config, inputs, store, excludeBriefId = 
 
   // Keywords
   if (!b.keyword) P('keyword is empty')
+  // A long keyword must appear in the first 100 words, which pushes the opening above its reading grade (seen live).
+  const kwWords = String(b.keyword ?? '').trim().split(/\s+/).filter(Boolean).length
+  const kwMax = config?.strategist?.keywordMaxWords ?? 6
+  if (kwWords > kwMax) P(`keyword "${b.keyword}" has ${kwWords} words; at most ${kwMax} (KEYWORD_MAX_WORDS): use the short phrase people search for, not a whole question`)
   if (b.supporting_keywords.length < 3 || b.supporting_keywords.length > 6) P(`supporting_keywords has ${b.supporting_keywords.length} items; it must have 3–6`)
 
   // Duplicate of a past brief (Mem0 similarity).

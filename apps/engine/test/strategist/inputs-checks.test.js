@@ -155,6 +155,7 @@ const cases = [
   ['too few question headings', { outline: validBrief().outline.map((s) => ({ ...s, heading: s.heading.replace('?', '') })) }, /headings are questions/],
   ['empty answer_first', { outline: validBrief().outline.map((s, i) => (i === 0 ? { ...s, answer_first: '' } : s)) }, /answer_first is empty/],
   ['empty keyword', { keyword: '' }, /keyword is empty/],
+  ['keyword too long', { keyword: 'How can HumanInTheLoop middleware reliably require human approval' }, /keyword "How can HumanInTheLoop middleware reliably require human approval" has 8 words; at most 6 \(KEYWORD_MAX_WORDS\)/],
   ['too few supporting keywords', { supporting_keywords: ['a', 'b'] }, /supporting_keywords has 2/],
   ['story mismatch', { story: { use: true, story_id: 'S-1', attribution_line: 'from the news', source_url: STORY_URL, how_to_use: 'x' } }, /attribution_line must be copied exactly/],
   ['tutorial off', { post_type: 'tutorial', lead: { kind: 'tutorial', id: 'T-1' } }, /tutorial.use is false/]
@@ -242,4 +243,16 @@ test('brief_id format and slug rules', () => {
   assert.ok(long.length <= 60)
   assert.ok(!long.endsWith('-'))
   assert.equal(long, 'stop-your-ai-agents-from-refunding-the-wrong-customers-when')
+})
+
+test('keyword length: a short keyword passes; KEYWORD_MAX_WORDS is respected; the prompt states the limit', async () => {
+  const long = 'How can HumanInTheLoop middleware reliably require human approval'
+  const ctx = await setup()
+  const ok = await problemsOf(autoFix(validBrief(), { config: ctx.cfg, inputs: ctx.inputs }).brief, ctx)
+  assert.ok(!ok.some((p) => /KEYWORD_MAX_WORDS/.test(p)), 'the 4-word fixture keyword passes')
+  const loose = await setup({ KEYWORD_MAX_WORDS: '8' })
+  const eight = await problemsOf(autoFix(validBrief({ keyword: long }), { config: loose.cfg, inputs: loose.inputs }).brief, loose)
+  assert.ok(!eight.some((p) => /KEYWORD_MAX_WORDS/.test(p)), 'an 8-word keyword passes with KEYWORD_MAX_WORDS=8')
+  const { buildPlanPrompt } = await import('../../src/strategist/prompts.js')
+  assert.match(buildPlanPrompt(ctx.cfg, ctx.inputs), /a short phrase people type into a search box, at most 6 words \(for example "ai agent human approval"\), never a whole question or sentence\./)
 })

@@ -61,7 +61,7 @@ const DEFAULTS = {
   DESIGNER_AI_SERVICE: 'openai', DESIGNER_AI_MODEL: 'gpt-5.6-luna', DESIGNER_DELIVERY: 'rtlayer',
   BLOG_APP_NAME: 'm91-blog', BLOG_BASE_URL: 'https://m91-blog.embarko.app', NOINDEX_FIRST_N_POSTS: '10',
   // Phase 3: Strategist
-  STRATEGIST_MAX_REPAIRS: '1', RECENT_BRIEFS_WINDOW: '10', TITLE_MAX_CHARS: '70', OUTLINE_MIN_SECTIONS: '4',
+  STRATEGIST_MAX_REPAIRS: '1', RECENT_BRIEFS_WINDOW: '10', TITLE_MAX_CHARS: '70', KEYWORD_MAX_WORDS: '6', OUTLINE_MIN_SECTIONS: '4',
   OUTLINE_MAX_SECTIONS: '8', MIN_QUESTION_HEADINGS: '3', LESSONS_LIMIT: '5', ALLOW_UPDATE_BRIEFS: 'false',
   READING_GRADE_INTRO_MAX: '6', READING_GRADE_POST_MAX: '8',
   M91_SKILL_REPO_URL: 'https://github.com/MSG91/m91-skill',
@@ -232,6 +232,7 @@ export function loadConfig(env = process.env) {
       maxRepairs: int('STRATEGIST_MAX_REPAIRS', { max: 5 }),
       recentBriefsWindow: int('RECENT_BRIEFS_WINDOW', { min: 2, max: 100 }),
       titleMaxChars: int('TITLE_MAX_CHARS', { min: 20, max: 200 }),
+      keywordMaxWords: int('KEYWORD_MAX_WORDS', { min: 2, max: 12 }),
       outlineMinSections: int('OUTLINE_MIN_SECTIONS', { min: 1, max: 20 }),
       outlineMaxSections: int('OUTLINE_MAX_SECTIONS', { min: 1, max: 20 }),
       minQuestionHeadings: int('MIN_QUESTION_HEADINGS', { max: 20 }),

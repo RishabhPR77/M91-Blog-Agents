@@ -44,7 +44,7 @@ Topic groups:
 - "lead": the kind and the exact id of the lead you picked, copied from the inputs.
 - "why_today": 1–2 sentences.
 - "titles": exactly 3. Specific and concrete: name the exact situation, tool, amount or mistake. Never generic ("Implementing X", "Streamlining Y", "The Importance of Z", "Ultimate Guide", "Everything You Need to Know"). The first title must be under {{title_max_chars}} characters. Plain and direct, not clickbait.
-- "keyword": the main search keyword, taken from the real questions. "supporting_keywords": 3 to 6, also from the real questions.
+- "keyword": the main search keyword, taken from the real questions: a short phrase people type into a search box, at most {{keyword_max_words}} words (for example "ai agent human approval"), never a whole question or sentence. A short keyword lets the post open with simple sentences. "supporting_keywords": 3 to 6, also from the real questions.
 - "reader": who it is for and what they want. "intent": learn, compare, fix or buy.
 - "format": guide, tutorial, comparison, checklist, myth_buster or explainer.
 - "angle": the one thing this post gives the reader that typical articles on this topic do not.
@@ -118,6 +118,7 @@ export function buildPlanPrompt(config, inputs) {
     blocked_group: inputs.blockedGroup ?? 'none (no group is blocked)',
     least_used_groups: inputs.leastUsedGroups.join(', '),
     title_max_chars: st.titleMaxChars,
+    keyword_max_words: st.keywordMaxWords,
     default_tone: config.content.defaultTone,
     outline_min: st.outlineMinSections,
     outline_max: st.outlineMaxSections,
