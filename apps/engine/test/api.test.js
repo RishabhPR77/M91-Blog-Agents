@@ -323,11 +323,14 @@ test('approval API: list, detail, approve / revise / reject (202), and the 400 /
     const done = await manager.wait(ok.json.run_id)
     assert.equal(done.status, 'succeeded')
     assert.equal(done.run.result_summary, 'approved by you (v2, score 91)')
-    // No longer awaiting_human → 409 for every decision.
-    for (const [action, body] of [['approve', {}], ['revise', { feedback: 'Make it shorter.' }], ['reject', { reason: 'x' }]]) {
+    // No longer awaiting_human → 409 for approve and reject; a counter prompt reopens the approved draft (202).
+    for (const [action, body] of [['approve', {}], ['reject', { reason: 'x' }]]) {
       const r = await call('POST', `/api/approvals/${B}/${action}`, body)
       assert.deepEqual([r.status, r.json.error.code], [409, 'not_awaiting_human'], action)
     }
+    const reopen = await call('POST', `/api/approvals/${B}/revise`, { feedback: 'Make it shorter.' })
+    assert.equal(reopen.status, 202)
+    await manager.wait(reopen.json.run_id)
     assert.equal(store.records.get(v1.id).status, 'changes_requested')
   })
 })
