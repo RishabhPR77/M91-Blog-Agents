@@ -9,6 +9,11 @@ node_modules/
 npm-debug.log*
 coverage/
 apps/engine/dashboard/dist/
+# The blog: build output, Astro's cache, and the post files the Publisher writes (build input only; Mem0 is the source of truth)
+apps/blog/dist/
+apps/blog/.astro/
+apps/blog/src/content/posts/*.json
+apps/blog/test/.tmp/
 
 # OS / editor
 .DS_Store

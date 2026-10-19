@@ -1,0 +1,23 @@
+---
+// Home page 2, 3, … (12 posts per page).
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import TopicChips from '../../components/TopicChips.astro'
+import PostList from '../../components/PostList.astro'
+import { indexedPosts } from '../../lib/posts'
+import { SITE, POSTS_PER_PAGE } from '../../config/site'
+
+export function getStaticPaths() {
+  const pages = Math.ceil(indexedPosts().length / POSTS_PER_PAGE)
+  return Array.from({ length: Math.max(0, pages - 1) }, (_, i) => ({ params: { page: String(i + 2) } }))
+}
+const page = Number(Astro.params.page)
+const posts = indexedPosts()
+const pages = Math.ceil(posts.length / POSTS_PER_PAGE)
+---
+<BaseLayout title={`${SITE.name}: page ${page}`} description={SITE.description} path={`/page/${page}/`}>
+  <div class="shell py-12">
+    <h1 class="text-3xl font-bold tracking-tight">The M91 blog: page {page}</h1>
+    <div class="mt-8"><TopicChips /></div>
+    <div class="mt-10"><PostList posts={posts.slice((page - 1) * POSTS_PER_PAGE, page * POSTS_PER_PAGE)} page={page} pages={pages} /></div>
+  </div>
+</BaseLayout>

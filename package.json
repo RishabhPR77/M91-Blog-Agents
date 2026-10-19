@@ -4,15 +4,20 @@
   "description": "M91 Blog Engine v2: engine app, blog app and shared content package",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "workspaces": [
-    "apps/*",
+    "apps/engine",
     "packages/*"
   ],
   "scripts": {
+    "install:dashboard": "npm run install:dashboard --workspace @m91/engine",
+    "install:blog": "npm --prefix apps/blog ci",
     "dev:engine": "npm run dev --workspace @m91/engine",
-    "test": "npm test --workspaces --if-present",
+    "dev:blog": "npm --prefix apps/blog run dev",
+    "build:blog": "npm --prefix apps/blog run build",
+    "test": "npm test --workspaces --if-present && npm run test:blog",
+    "test:blog": "npm --prefix apps/blog test",
     "check": "npm run check --workspace @m91/engine"
   },
   "overrides": {

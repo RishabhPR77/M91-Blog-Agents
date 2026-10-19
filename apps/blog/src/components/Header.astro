@@ -1,0 +1,26 @@
+---
+import Logo from './Logo.astro'
+import ThemeToggle from './ThemeToggle.astro'
+import { M91_URL, CTA, TOPICS } from '../config/site'
+import { url } from '../lib/posts'
+---
+<header class="sticky top-0 z-40 border-b border-line bg-bg/90 backdrop-blur">
+  <div class="shell flex h-16 items-center gap-4">
+    <a href={M91_URL} class="flex items-center gap-2 font-bold tracking-tight" aria-label="M91 home">
+      <Logo />
+      <span class="text-lg">M91</span>
+    </a>
+    <a href={url('/')} class="rounded-full px-2 py-1 font-semibold hover:bg-bg-2">Blog</a>
+    <nav aria-label="Topics" class="hidden min-w-0 flex-1 lg:block">
+      <ul class="flex items-center gap-1 text-sm text-fg-2">
+        {TOPICS.map((t) => (
+          <li><a href={url(`/topics/${t.slug}/`)} class="whitespace-nowrap rounded-full px-3 py-1.5 hover:bg-bg-2 hover:text-fg">{t.short}</a></li>
+        ))}
+      </ul>
+    </nav>
+    <div class="ml-auto flex items-center gap-2">
+      <ThemeToggle />
+      <a href={M91_URL} class="btn">{CTA.text}</a>
+    </div>
+  </div>
+</header>

@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import { url } from '../lib/posts'
+import { SITE } from '../config/site'
+---
+<BaseLayout title={`Page not found · ${SITE.name}`} description="This page does not exist." path="/404/" canonical={false} noindex>
+  <div class="shell py-24 text-center">
+    <p class="text-sm font-bold uppercase tracking-wider text-fg-2">404</p>
+    <h1 class="mt-3 text-4xl font-bold tracking-tight">This page is not here</h1>
+    <p class="mt-4 text-lg text-fg-2">It may have been moved or taken down.</p>
+    <a href={url('/')} class="btn mt-8">Go to the blog</a>
+  </div>
+</BaseLayout>

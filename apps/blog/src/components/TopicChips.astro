@@ -1,0 +1,18 @@
+---
+import { TOPICS } from '../config/site'
+import { url } from '../lib/posts'
+interface Props { current?: string }
+const { current } = Astro.props
+---
+<nav aria-label="Topics">
+  <ul class="flex flex-wrap gap-2">
+    <li>
+      <a href={url('/')} class={`inline-flex rounded-full border px-3.5 py-1.5 text-sm font-semibold ${!current ? 'border-fg bg-fg text-bg' : 'border-line hover:border-line-2'}`} aria-current={!current ? 'page' : undefined}>All posts</a>
+    </li>
+    {TOPICS.map((t) => (
+      <li>
+        <a href={url(`/topics/${t.slug}/`)} class={`inline-flex rounded-full border px-3.5 py-1.5 text-sm font-semibold ${current === t.slug ? 'border-fg bg-fg text-bg' : 'border-line hover:border-line-2'}`} aria-current={current === t.slug ? 'page' : undefined}>{t.name}</a>
+      </li>
+    ))}
+  </ul>
+</nav>

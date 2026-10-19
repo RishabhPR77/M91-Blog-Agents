@@ -1,0 +1,12 @@
+---
+// The M91 corner-bracket logo, as on the M91 site.
+interface Props { size?: number }
+const { size = 28 } = Astro.props
+---
+<svg width={size} height={size} viewBox="0 0 120 120" fill="none" aria-hidden="true">
+  <polyline points="20,20 44,20 20,20 20,44" stroke="currentColor" stroke-width="13" stroke-linecap="square" />
+  <polyline points="76,20 100,20 100,20 100,44" stroke="currentColor" stroke-width="13" stroke-linecap="square" />
+  <polyline points="20,76 20,100 20,100 44,100" stroke="currentColor" stroke-width="13" stroke-linecap="square" />
+  <polyline points="100,76 100,100 100,100 76,100" stroke="currentColor" stroke-width="13" stroke-linecap="square" />
+  <rect x="45" y="45" width="30" height="30" fill="var(--mark)" />
+</svg>

@@ -1,0 +1,11 @@
+---
+// Every post gets a page, noindex posts too (they work by direct link; they are only left out of lists).
+import PostLayout from '../../layouts/PostLayout.astro'
+import { getPosts } from '../../lib/posts'
+
+export function getStaticPaths() {
+  return getPosts().posts.map((post) => ({ params: { slug: post.slug }, props: { post } }))
+}
+const { post } = Astro.props
+---
+<PostLayout post={post} />

@@ -1,0 +1,24 @@
+{
+  "slug": "fixture-hidden-post",
+  "title": "Fixture: a noindex post",
+  "description": "Fixture for the build tests: a noindex post that must stay out of lists, feeds and the sitemap.",
+  "tldr": ["Hidden one.", "Hidden two.", "Hidden three."],
+  "published_at": "2026-10-12T10:00:00+05:30",
+  "updated_at": "2026-10-12T10:00:00+05:30",
+  "topic_group": 1,
+  "tags": ["hidden"],
+  "reading_time_min": 1,
+  "markdown": "A hidden post.\n\n## What to do next\n\n[Try M91](https://m91-site.embarko.app/)",
+  "blocks": null,
+  "seo": {
+    "title_tag": "Fixture: a noindex post",
+    "meta_description": "Fixture: a noindex post.",
+    "og_image": "https://m91-blog.embarko.app/og/fixture-hidden-post.png"
+  },
+  "sources": [],
+  "related_slugs": [],
+  "noindex": true,
+  "canonical_url": "https://m91-blog.embarko.app/posts/fixture-hidden-post/",
+  "brief_id": "261012-1000-FXTR",
+  "version": 1
+}

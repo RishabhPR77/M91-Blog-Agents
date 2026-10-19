@@ -1,0 +1,120 @@
+/* The M91 blog's look, taken from the M91 site (m91-site.embarko.app): its colours, its system font stack,
+   pill buttons and the corner-bracket logo. All brand tokens live here, once. */
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Light theme: the M91 site's own tokens. */
+:root {
+  --bg: #ffffff;
+  --bg-2: #f6f7f9;
+  --bg-warm: #fffcf6;
+  --fg: #0b0e12;
+  --fg-2: #5a646f;
+  --line: #e4e8ed;
+  --line-2: #c9cfd6;
+  --accent: #d91f26;
+  --mark: #d91f26;
+  --chip-bg: #f4fbd3;
+  --chip-fg: #55651a;
+  --btn-bg: #0b0e12;
+  --btn-fg: #ffffff;
+  --btn-hover: #22282f;
+  --cta-bg: #0b1119;
+  --cta-fg: #edf0f3;
+  --cta-fg-2: #9aa4b0;
+  color-scheme: light;
+}
+
+/* Dark theme: the M91 site's dark-section colours (it has no dark theme of its own). */
+.dark {
+  --bg: #0b1119;
+  --bg-2: #121a25;
+  --bg-warm: #121a25;
+  --fg: #edf0f3;
+  --fg-2: #9aa4b0;
+  --line: rgba(255, 255, 255, 0.12);
+  --line-2: rgba(255, 255, 255, 0.24);
+  --accent: #ff6b70;
+  --mark: #ff5257;
+  --chip-bg: rgba(223, 245, 107, 0.12);
+  --chip-fg: #dff56b;
+  --btn-bg: #dff56b;
+  --btn-fg: #0b0e12;
+  --btn-hover: #e9f79a;
+  --cta-bg: #182231;
+  --cta-fg: #edf0f3;
+  --cta-fg-2: #b3bcc6;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-bg-warm: var(--bg-warm);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-accent: var(--accent);
+  --color-mark: var(--mark);
+  --color-chip-bg: var(--chip-bg);
+  --color-chip-fg: var(--chip-fg);
+  --color-btn-bg: var(--btn-bg);
+  --color-btn-fg: var(--btn-fg);
+  --color-btn-hover: var(--btn-hover);
+  --color-cta-bg: var(--cta-bg);
+  --color-cta-fg: var(--cta-fg);
+  --color-cta-fg-2: var(--cta-fg-2);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html { background: var(--bg); color: var(--fg); -webkit-text-size-adjust: 100%; }
+  body { font-family: var(--font-sans); line-height: 1.6; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  ::selection { background: #dff56b; color: #0b0e12; }
+}
+
+@layer components {
+  .shell { width: 100%; max-width: 72rem; margin-inline: auto; padding-inline: 1.25rem; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+    border-radius: 999px; padding: 0.65rem 1.4rem; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em;
+    background: var(--btn-bg); color: var(--btn-fg); transition: background 160ms;
+  }
+  .btn:hover { background: var(--btn-hover); }
+  .chip {
+    display: inline-flex; align-items: center; border-radius: 999px; padding: 0.15rem 0.7rem;
+    font-size: 0.8rem; font-weight: 600; background: var(--chip-bg); color: var(--chip-fg);
+  }
+
+  /* Post body: a comfortable reading width and generous line height. */
+  .prose-m91 { max-width: 44rem; font-size: 1.125rem; line-height: 1.75; color: var(--fg); }
+  .prose-m91 > * + * { margin-top: 1.25em; }
+  .prose-m91 h2 { font-size: 1.6rem; line-height: 1.25; font-weight: 700; letter-spacing: -0.02em; margin-top: 2.2em; scroll-margin-top: 5rem; }
+  .prose-m91 h3 { font-size: 1.25rem; line-height: 1.35; font-weight: 700; margin-top: 1.8em; scroll-margin-top: 5rem; }
+  .prose-m91 a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  .prose-m91 .heading-anchor { color: var(--fg-2); text-decoration: none; margin-left: 0.4rem; opacity: 0; font-weight: 400; }
+  .prose-m91 h2:hover .heading-anchor, .prose-m91 h3:hover .heading-anchor, .prose-m91 .heading-anchor:focus { opacity: 1; }
+  .prose-m91 ul { list-style: disc; padding-left: 1.4em; }
+  .prose-m91 ol { list-style: decimal; padding-left: 1.4em; }
+  .prose-m91 li + li { margin-top: 0.4em; }
+  .prose-m91 strong { font-weight: 700; }
+  .prose-m91 blockquote { border-left: 3px solid var(--line-2); padding-left: 1rem; color: var(--fg-2); }
+  .prose-m91 :not(pre) > code { font-family: var(--font-mono); font-size: 0.88em; background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px; padding: 0.1em 0.35em; }
+  .prose-m91 pre { position: relative; font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.6; border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; overflow-x: auto; }
+  .prose-m91 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+  .prose-m91 table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  .prose-m91 th, .prose-m91 td { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .prose-m91 th { background: var(--bg-2); font-weight: 600; }
+  .prose-m91 hr { border-color: var(--line); }
+  .copy-code {
+    position: absolute; top: 0.5rem; right: 0.5rem; font-family: var(--font-sans); font-size: 0.75rem; font-weight: 600;
+    border: 1px solid var(--line); border-radius: 999px; padding: 0.15rem 0.6rem; background: var(--bg); color: var(--fg-2);
+  }
+}
+
+/* Shiki: light colours by default, its dark colours in the dark theme. */
+.dark .shiki, .dark .shiki span { color: var(--shiki-dark) !important; background-color: var(--shiki-dark-bg) !important; }

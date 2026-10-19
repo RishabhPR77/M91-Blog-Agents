@@ -1,0 +1,14 @@
+---
+import PostCard from './PostCard.astro'
+import type { Post } from '../lib/posts'
+interface Props { posts: Post[] }
+const { posts } = Astro.props
+---
+{posts.length > 0 && (
+  <section aria-labelledby="related-title">
+    <h2 id="related-title" class="text-xl font-bold">Related posts</h2>
+    <div class="mt-4 grid gap-4 md:grid-cols-3">
+      {posts.map((p) => <PostCard post={p} />)}
+    </div>
+  </section>
+)}

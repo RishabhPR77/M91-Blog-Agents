@@ -1,0 +1,73 @@
+---
+// Every page: SEO head (title, description, canonical, robots, Open Graph, Twitter, JSON-LD), the CSP meta
+// tag, theme setup before paint, header and footer. No third-party request anywhere.
+import '../styles/global.css'
+import Header from '../components/Header.astro'
+import Footer from '../components/Footer.astro'
+import { SITE, SITE_URL } from '../config/site'
+import { isSample, url } from '../lib/posts'
+
+interface Props {
+  title: string
+  description: string
+  path: string
+  canonical?: string | false
+  ogImage?: string
+  ogType?: 'website' | 'article'
+  noindex?: boolean
+  jsonLd?: object[]
+}
+const { title, description, path, canonical, ogImage, ogType = 'website', noindex = false, jsonLd = [] } = Astro.props
+// canonical={false}: no canonical link (the 404 page).
+const canonicalUrl = canonical === false ? null : canonical ?? new URL(url(path), SITE_URL).href
+const image = ogImage ?? new URL(url('/og/default.png'), SITE_URL).href
+const csp = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'none'"
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content={csp} />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
+    <meta property="og:image" content={image} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={image} />
+    <link rel="icon" type="image/svg+xml" href={url('/favicon.svg')} />
+    <link rel="alternate" type="application/rss+xml" title={`${SITE.name} RSS`} href={url('/rss.xml')} />
+    <meta name="color-scheme" content="light dark" />
+    <script is:inline>
+      // Theme before paint: a saved choice, else the system setting.
+      try {
+        var saved = localStorage.getItem('m91-theme')
+        var dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
+        document.documentElement.classList.toggle('dark', dark)
+      } catch (e) {}
+    </script>
+    {jsonLd.map((data) => <script type="application/ld+json" set:html={JSON.stringify(data).replace(/</g, '\\u003c')} />)}
+  </head>
+  <body class="min-h-screen bg-bg text-fg antialiased flex flex-col">
+    <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-bg focus:px-4 focus:py-2">Skip to content</a>
+    <Header />
+    {isSample() && (
+      <div class="shell pt-3"><span class="chip" data-sample-badge>Sample content</span></div>
+    )}
+    <main id="main" class="flex-1">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

@@ -1,0 +1,24 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import TopicChips from '../../components/TopicChips.astro'
+import PostList from '../../components/PostList.astro'
+import { indexedPosts, url } from '../../lib/posts'
+import { TOPICS, SITE } from '../../config/site'
+
+export function getStaticPaths() {
+  return TOPICS.map((topic) => ({ params: { topic: topic.slug }, props: { topic } }))
+}
+const { topic } = Astro.props
+const posts = indexedPosts().filter((p) => p.topic_group === topic.group)
+---
+<BaseLayout title={`${topic.name} · ${SITE.name}`} description={topic.description} path={`/topics/${topic.slug}/`}>
+  <div class="shell py-12">
+    <nav aria-label="Breadcrumb" class="text-sm text-fg-2">
+      <ol class="flex items-center gap-2"><li><a href={url('/')} class="hover:underline">Blog</a></li><li aria-hidden="true">›</li><li aria-current="page" class="text-fg">{topic.name}</li></ol>
+    </nav>
+    <h1 class="mt-4 text-4xl font-bold tracking-tight">{topic.name}</h1>
+    <p class="mt-3 max-w-2xl text-lg text-fg-2">{topic.description}</p>
+    <div class="mt-8"><TopicChips current={topic.slug} /></div>
+    <div class="mt-10"><PostList posts={posts} page={1} pages={1} /></div>
+  </div>
+</BaseLayout>

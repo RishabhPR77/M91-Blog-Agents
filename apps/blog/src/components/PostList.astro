@@ -1,0 +1,27 @@
+---
+// A page of the post list: the newest post featured (page 1 only), the rest in a grid, then pagination.
+import PostCard from './PostCard.astro'
+import type { Post } from '../lib/posts'
+import { url } from '../lib/posts'
+interface Props { posts: Post[]; page: number; pages: number; featureFirst?: boolean; basePath?: string }
+const { posts, page, pages, featureFirst = false, basePath = '/' } = Astro.props
+const [first, ...rest] = posts
+const pagePath = (n: number) => (n === 1 ? url(basePath) : url(`${basePath}page/${n}/`))
+---
+{posts.length === 0 ? (
+  <p class="rounded-2xl border border-dashed border-line-2 p-8 text-fg-2">No posts here yet.</p>
+) : (
+  <div class="space-y-6">
+    {featureFirst && first && <PostCard post={first} featured headingLevel={2} />}
+    <div class="grid gap-5 md:grid-cols-2">
+      {(featureFirst ? rest : posts).map((p) => <PostCard post={p} headingLevel={featureFirst ? 3 : 2} />)}
+    </div>
+  </div>
+)}
+{pages > 1 && (
+  <nav aria-label="Pagination" class="mt-10 flex items-center justify-between text-sm font-semibold">
+    {page > 1 ? <a href={pagePath(page - 1)} rel="prev" class="rounded-full border border-line px-4 py-2 hover:border-line-2">← Newer posts</a> : <span></span>}
+    <span class="text-fg-2">Page {page} of {pages}</span>
+    {page < pages ? <a href={pagePath(page + 1)} rel="next" class="rounded-full border border-line px-4 py-2 hover:border-line-2">Older posts →</a> : <span></span>}
+  </nav>
+)}

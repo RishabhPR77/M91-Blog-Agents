@@ -1,0 +1,9 @@
+---
+// Phase 8 stub: interactive blocks are not built yet. A post with blocks shows this note, and the page
+// falls back to its Markdown (rendered right after this component).
+interface Props { blocks: { type: string; id: string }[] }
+const { blocks } = Astro.props
+---
+<p class="rounded-xl border border-dashed border-line-2 p-4 text-sm text-fg-2" data-blocks-unsupported={blocks.length}>
+  Interactive blocks are not supported yet: this post is shown as plain text.
+</p>

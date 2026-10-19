@@ -5,20 +5,38 @@ agent needs a human decision.
 
 | Part | What it is |
 | --- | --- |
-| [apps/engine](apps/engine/README.md) | The agents (Scout, Strategist, …), orchestrator, API, CLI and tests |
-| [apps/blog](apps/blog/README.md) | The blog website (Phase 7) |
-| [packages/content](packages/content) | Post format v1 and block names, shared by both apps |
+| [apps/engine](apps/engine/README.md) | The agents (Scout, Strategist, …), orchestrator, API, CLI, Publisher and tests |
+| [apps/engine/dashboard](apps/engine/dashboard) | The control dashboard (its own npm project) |
+| [apps/blog](apps/blog/README.md) | The blog website: a static Astro site (its own npm project) |
+| [packages/content](packages/content) | Post format v1 and block names, shared by the engine and the blog |
 
-## Setup
+## Setup on a fresh checkout
 
-1. Node.js 20 or newer, then `npm install` at the repo root (npm workspaces).
-2. Copy `env.example` to `.env` at the repo root and fill in the blanks. Never commit `.env`.
+Node.js 22.12 or newer (the blog's Astro needs it). From the repo root, in this order:
+
+```bash
+npm install
+```
+
+```bash
+npm run install:dashboard
+```
+
+```bash
+npm run install:blog
+```
+
+Then copy `env.example` to `.env` at the repo root and fill in the blanks. Never commit `.env`.
+The dashboard and the blog are separate npm projects (not workspaces), so each needs its own install.
 
 ## Commands (from the repo root)
 
 | What | Command |
 | --- | --- |
-| All unit tests | `npm test` |
+| All unit tests (engine, dashboard, content, blog) | `npm test` |
+| Blog tests only | `npm run test:blog` |
 | viaSocket id/URL check | `npm run check` |
-| Engine server with file watching | `npm run dev:engine` |
+| Engine + dashboard dev servers | `npm run dev:engine` |
+| Blog dev server (http://localhost:4321, sample posts when there are none) | `npm run dev:blog` |
+| Blog production build (into `apps/blog/dist`) | `npm run build:blog` |
 | Any engine script | `npm run <script> --workspace @m91/engine` (e.g. `pipeline:lite`, `scout`, `strategist`, `pin`) |

@@ -1,0 +1,24 @@
+{
+  "slug": "fixture-indexed-post",
+  "title": "Fixture: an indexed post about agent approval",
+  "description": "Fixture for the build tests: an indexed post with a code block, a table and raw HTML that must not render.",
+  "tldr": ["First point.", "Second point.", "Third point."],
+  "published_at": "2026-10-10T10:00:00+05:30",
+  "updated_at": "2026-10-11T10:00:00+05:30",
+  "topic_group": 1,
+  "tags": ["agent approval"],
+  "reading_time_min": 2,
+  "markdown": "An opening paragraph with a [source link](https://m91.msg91.com/llms.txt) and an [internal link](/posts/fixture-hidden-post/).\n\n## What is in this post?\n\nRaw HTML that must not render: <script>alert(1)</script> and <b>bold-raw-html</b>.\n\n<div class=\"evil\">a raw div block</div>\n\n## Is there code?\n\n```bash\necho \"hello\"\n```\n\n## Is there a table?\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n## What to do next\n\n[Try M91](https://m91-site.embarko.app/)",
+  "blocks": null,
+  "seo": {
+    "title_tag": "Fixture: an indexed post about agent approval",
+    "meta_description": "Fixture for the build tests: an indexed post.",
+    "og_image": "https://m91-blog.embarko.app/og/fixture-indexed-post.png"
+  },
+  "sources": [{ "url": "https://m91.msg91.com/llms.txt", "title": "source link" }],
+  "related_slugs": ["fixture-hidden-post"],
+  "noindex": false,
+  "canonical_url": "https://m91-blog.embarko.app/posts/fixture-indexed-post/",
+  "brief_id": "261010-1000-FXTR",
+  "version": 1
+}

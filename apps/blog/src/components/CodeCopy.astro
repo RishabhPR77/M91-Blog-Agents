@@ -1,0 +1,20 @@
+---
+// Adds a "Copy" button to every code block in the post body (a tiny inline script; no library).
+---
+<script is:inline>
+  document.querySelectorAll('.prose-m91 pre').forEach(function (pre) {
+    var b = document.createElement('button')
+    b.type = 'button'
+    b.className = 'copy-code'
+    b.textContent = 'Copy'
+    b.setAttribute('aria-label', 'Copy this code')
+    b.addEventListener('click', function () {
+      var code = pre.querySelector('code')
+      navigator.clipboard.writeText((code || pre).innerText).then(function () {
+        b.textContent = 'Copied'
+        setTimeout(function () { b.textContent = 'Copy' }, 1500)
+      })
+    })
+    pre.appendChild(b)
+  })
+</script>

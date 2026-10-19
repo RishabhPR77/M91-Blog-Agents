@@ -1,0 +1,28 @@
+{
+  "slug": "sample-what-is-worth-waking-someone-for",
+  "title": "Sample: what is worth waking someone up for?",
+  "description": "Sample post for local development: a simple test for which alerts should ring a phone at night and which can wait.",
+  "tldr": [
+    "Wake someone only when a person must act now.",
+    "Everything else can wait for the morning.",
+    "Write the alert so the person knows what to do."
+  ],
+  "published_at": "2026-10-12T09:00:00+05:30",
+  "updated_at": "2026-10-12T09:00:00+05:30",
+  "topic_group": 4,
+  "tags": ["alerting", "on-call", "alert fatigue"],
+  "reading_time_min": 2,
+  "markdown": "Too many night alerts teach people to ignore them. A good rule keeps the phone quiet unless a person must act now.\n\n## When should a phone ring?\n\nRing a phone when waiting would cause real harm and a person can stop it.\n\n1. Money is about to move the wrong way.\n2. Customers cannot use the product.\n3. An agent needs a yes before a risky step.\n\n## What can wait until morning?\n\nSlow pages, single failed jobs and warnings that fix themselves can wait.\n\n## How do I write a good alert?\n\nSay what happened, what it affects, and the one thing to do first.\n\n## What to do next\n\n[Try M91: send your first alert in a few minutes.](https://m91-site.embarko.app/)",
+  "blocks": null,
+  "seo": {
+    "title_tag": "Sample: what is worth waking someone up for?",
+    "meta_description": "Sample post: a simple test for which alerts should ring a phone at night and which can wait.",
+    "og_image": "https://m91-blog.embarko.app/og/sample-what-is-worth-waking-someone-for.png"
+  },
+  "sources": [],
+  "related_slugs": [],
+  "noindex": false,
+  "canonical_url": "https://m91-blog.embarko.app/posts/sample-what-is-worth-waking-someone-for/",
+  "brief_id": "261012-0900-SMPL",
+  "version": 1
+}

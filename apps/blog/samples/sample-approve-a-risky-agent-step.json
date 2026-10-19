@@ -1,0 +1,28 @@
+{
+  "slug": "sample-approve-a-risky-agent-step",
+  "title": "Sample: how to make an AI agent wait for a human yes",
+  "description": "Sample post for local development: pausing an AI agent before a risky step until a person approves it on their phone.",
+  "tldr": [
+    "A risky agent step should wait for a person to say yes.",
+    "A phone call gets an answer faster than a chat message.",
+    "Your software reads the answer and then continues or stops."
+  ],
+  "published_at": "2026-10-15T10:00:00+05:30",
+  "updated_at": "2026-10-17T09:30:00+05:30",
+  "topic_group": 1,
+  "tags": ["ai agent approval", "human in the loop", "langgraph"],
+  "reading_time_min": 3,
+  "markdown": "Agents can now take real actions: send money, delete data, email customers. Some of those actions need a person to say yes first.\n\n## What is a human approval step?\n\nIt is a pause in your agent. The agent stops before the risky action and asks one person to decide.\n\n- The agent describes the action in one sentence.\n- A person reads it and picks approve or reject.\n- The agent continues only after a yes.\n\n## Why does the phone need to ring?\n\nA chat message can sit unread for hours. A ringing phone gets attention in seconds, even at night. [The M91 docs](https://m91.msg91.com/llms.txt) describe how the alert rings until someone answers.\n\n## How does the answer get back to the agent?\n\nYour code waits for the decision, then acts on it.\n\nThis command checks the decision for one alert:\n\n```bash\n./m91.sh decision --phone 919876543210 --custom-id deploy-42\n```\n\n| Answer | What the agent does |\n| --- | --- |\n| Approve | Runs the step |\n| Reject | Skips the step and logs why |\n\n## What should I try first?\n\nPick one risky step, add the pause, and test it with your own phone.\n\n### What if nobody answers?\n\nDecide a timeout and a safe default, such as \"do nothing\".\n\n## What to do next\n\n[Try M91: send your first alert in a few minutes.](https://m91-site.embarko.app/)",
+  "blocks": null,
+  "seo": {
+    "title_tag": "Sample: make an AI agent wait for a human yes",
+    "meta_description": "Sample post: pausing an AI agent before a risky step until a person approves it on their phone.",
+    "og_image": "https://m91-blog.embarko.app/og/sample-approve-a-risky-agent-step.png"
+  },
+  "sources": [{ "url": "https://m91.msg91.com/llms.txt", "title": "The M91 docs" }],
+  "related_slugs": ["sample-what-is-worth-waking-someone-for"],
+  "noindex": false,
+  "canonical_url": "https://m91-blog.embarko.app/posts/sample-approve-a-risky-agent-step/",
+  "brief_id": "261015-1000-SMPL",
+  "version": 1
+}

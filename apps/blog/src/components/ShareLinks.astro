@@ -1,0 +1,24 @@
+---
+// Plain share links (no third-party scripts) and a copy-link button.
+interface Props { url: string; title: string }
+const { url: link, title } = Astro.props
+const linkedin = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(link)}`
+const x = `https://x.com/intent/post?url=${encodeURIComponent(link)}&text=${encodeURIComponent(title)}`
+---
+<div class="flex flex-wrap items-center gap-2 text-sm" aria-label="Share this post">
+  <span class="font-semibold text-fg-2">Share:</span>
+  <button type="button" class="rounded-full border border-line px-3 py-1.5 hover:border-line-2" data-copy-link={link}>Copy link</button>
+  <a href={linkedin} target="_blank" rel="noopener noreferrer" class="rounded-full border border-line px-3 py-1.5 hover:border-line-2">LinkedIn</a>
+  <a href={x} target="_blank" rel="noopener noreferrer" class="rounded-full border border-line px-3 py-1.5 hover:border-line-2">X</a>
+</div>
+<script is:inline>
+  document.querySelectorAll('[data-copy-link]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      navigator.clipboard.writeText(b.getAttribute('data-copy-link')).then(function () {
+        var t = b.textContent
+        b.textContent = 'Link copied'
+        setTimeout(function () { b.textContent = t }, 1500)
+      })
+    })
+  })
+</script>

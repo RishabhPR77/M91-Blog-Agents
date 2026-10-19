@@ -1,0 +1,10 @@
+---
+import Logo from './Logo.astro'
+import { CTA, M91_URL } from '../config/site'
+---
+<section class="rounded-3xl bg-cta-bg p-8 text-cta-fg md:p-10" aria-labelledby="cta-title">
+  <div class="flex items-center gap-2 text-cta-fg"><Logo size={26} /><span class="font-bold">M91</span></div>
+  <h2 id="cta-title" class="mt-4 text-2xl font-bold tracking-tight md:text-3xl">{CTA.title}</h2>
+  <p class="mt-3 max-w-xl text-cta-fg-2">{CTA.body}</p>
+  <a href={M91_URL} class="mt-6 inline-flex items-center rounded-full bg-[#dff56b] px-6 py-3 font-semibold text-[#0b0e12] hover:bg-[#e9f79a]">{CTA.text}</a>
+</section>
