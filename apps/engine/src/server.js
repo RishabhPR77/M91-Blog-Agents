@@ -1,11 +1,15 @@
 // HTTP server.
 //   GET  /health, POST /run (x-trigger-key)  — manual runs from a terminal or a cloud trigger
 //   /api/*                                   — dashboard API (Phase 3.5, Task 5)
+//   GET  anything else                       — the built dashboard (dashboard/dist, Phase 6), SPA fallback
 // With DASHBOARD_AUTH=false the server binds to 127.0.0.1 only and /api needs no login.
 
 import http from 'node:http'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { readFile, stat } from 'node:fs/promises'
+import { extname, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { pathToFileURL } from 'node:url'
 import { getConfig, ConfigError } from './config.js'
 import { log, mask, registerSecrets, setLevel } from './util/log.js'
@@ -102,13 +106,88 @@ const runSummary = (r) => {
   }
 }
 
+// ---------- the built dashboard (Phase 6) ----------
+
+export const DEFAULT_DASHBOARD_DIR = fileURLToPath(new URL('../dashboard/dist', import.meta.url))
+
+/** Headers on every dashboard file: no inline scripts, same-origin API only, never framed. */
+export const DASHBOARD_HEADERS = Object.freeze({
+  'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'same-origin'
+})
+
+const CONTENT_TYPES = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.map': 'application/json; charset=utf-8'
+}
+
+export const NOT_BUILT_TEXT = 'Dashboard not built. Run `npm run build:dashboard`.\n'
+
+/** A file inside dir for a URL path, or null when the path escapes dir or is malformed. */
+export function resolveInside(dir, urlPath) {
+  let decoded
+  try {
+    decoded = decodeURIComponent(urlPath)
+  } catch {
+    return null
+  }
+  if (decoded.includes('\0')) return null
+  const root = resolve(dir)
+  const file = resolve(root, `.${decoded.startsWith('/') ? decoded : `/${decoded}`}`)
+  return file === root || file.startsWith(root + sep) ? file : null
+}
+
+async function isFile(p) {
+  try {
+    return (await stat(p)).isFile()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Serves the built dashboard for a GET/HEAD request. Returns false when it did not answer (the caller sends
+ * its own 404). Hashed files under /assets/ are cached for a year; index.html never.
+ */
+export async function serveDashboard(req, res, url, dir) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false
+  const index = resolve(dir, 'index.html')
+  const built = await isFile(index)
+  if (!built) {
+    if (url.pathname !== '/') return false
+    res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', ...DASHBOARD_HEADERS })
+    res.end(req.method === 'HEAD' ? undefined : NOT_BUILT_TEXT)
+    return true
+  }
+  let file = url.pathname === '/' ? index : resolveInside(dir, url.pathname)
+  if (!file) return false
+  if (!(await isFile(file))) {
+    // SPA fallback for app routes (/approvals/…); a missing file with an extension is a real 404.
+    if (extname(url.pathname)) return false
+    file = index
+  }
+  const body = await readFile(file)
+  const hashed = url.pathname.startsWith('/assets/') && file !== index
+  res.writeHead(200, {
+    'content-type': CONTENT_TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream',
+    'content-length': body.length,
+    'cache-control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache',
+    ...DASHBOARD_HEADERS
+  })
+  res.end(req.method === 'HEAD' ? undefined : body)
+  return true
+}
+
 const parseCookies = (header = '') => Object.fromEntries(header.split(';').map((c) => c.trim().split('=')).filter(([k, v]) => k && v).map(([k, v]) => [k, decodeURIComponent(v)]))
 
 /**
- * @param {{ triggerKey, run?, manager?, store?, config?, now?, keepAliveMs?, sessionMs? }} deps
+ * @param {{ triggerKey, run?, manager?, store?, config?, now?, keepAliveMs?, sessionMs?, dashboardDir? }} deps
  *   `run` alone keeps the Phase 1 behaviour (POST /run runs it); with `manager`, /run and /api use the run manager.
+ *   dashboardDir: the built dashboard (default dashboard/dist); null serves none.
  */
-export function createServer({ triggerKey, run, manager, store, config, now = Date.now, keepAliveMs = 15000, sessionMs = 12 * 3600 * 1000 } = {}) {
+export function createServer({ triggerKey, run, manager, store, config, now = Date.now, keepAliveMs = 15000, sessionMs = 12 * 3600 * 1000, dashboardDir = DEFAULT_DASHBOARD_DIR } = {}) {
   let legacyRunning = null
   const auth = Boolean(config?.dashboard?.auth)
   const password = config?.dashboard?.password ?? ''
@@ -391,6 +470,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
           .finally(() => { legacyRunning = null })
         return send(res, 202, { accepted: true })
       }
+      if (dashboardDir && (await serveDashboard(req, res, url, dashboardDir))) return
       return send(res, 404, { error: 'not found' })
     } catch (error) {
       if (res.headersSent) return res.end()

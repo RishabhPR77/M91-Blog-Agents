@@ -3,6 +3,7 @@
 **/.env
 **/.env.*
 **/node_modules
+apps/engine/dashboard/dist
 npm-debug.log*
 coverage
 .git

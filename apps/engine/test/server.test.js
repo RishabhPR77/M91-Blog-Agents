@@ -5,7 +5,7 @@ import { createServer, keysMatch } from '../src/server.js'
 const KEY = 'fake-trigger-key-0123456789'
 
 async function withServer(run, fn) {
-  const server = createServer({ triggerKey: KEY, run })
+  const server = createServer({ triggerKey: KEY, run, dashboardDir: null })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${server.address().port}`
   try {
