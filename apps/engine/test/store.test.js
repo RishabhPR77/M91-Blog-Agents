@@ -187,3 +187,30 @@ test('versions come back as numbers even when Mem0 returns metadata as strings (
   assert.equal(toRecord({ id: 'a', memory: '{}', metadata: { type: 'draft', version: null } }).version, null)
   assert.equal(toRecord({ id: 'a', memory: '{}', metadata: { type: 'draft', version: '1' } }).version + 1, 2)
 })
+
+test('numeric and boolean metadata from Mem0 come back typed (brief_version, review_total, total, pass, test, dry_run)', async () => {
+  const { toRecord, normalizeMetadata } = await import('../src/store.js')
+  const md = { type: 'draft', version: '3', brief_version: '1', review_total: '78', total: '91', pass: 'false', test: 'true', dry_run: 'false', status: 'awaiting_human', topic_group: 'g' }
+  const r = toRecord({ id: 'a', memory: '{}', metadata: md })
+  assert.equal(r.version, 3)
+  assert.equal(r.metadata.version, 3)
+  assert.equal(r.metadata.brief_version, 1)
+  assert.equal(r.metadata.review_total, 78)
+  assert.equal(r.metadata.total, 91)
+  assert.equal(r.metadata.pass, false)
+  assert.equal(r.metadata.test, true)
+  assert.equal(r.metadata.dry_run, false)
+  assert.equal(r.metadata.status, 'awaiting_human')
+  assert.equal(r.metadata.topic_group, 'g')
+  assert.equal(normalizeMetadata({ review_total: null }).review_total, null)
+  assert.equal(normalizeMetadata({ review_total: '' }).review_total, null)
+  assert.deepEqual(normalizeMetadata({}), {})
+
+  // Through the store: records listed from Mem0 with string metadata are typed too.
+  const { mem0, store } = setup()
+  mem0.memories.set('uuid-9', { id: 'uuid-9', memory: '{"title":"T"}', metadata: md })
+  const [listed] = await store.getRecords({ type: 'draft', status: 'awaiting_human' })
+  assert.equal(listed.metadata.brief_version, 1)
+  assert.equal(listed.metadata.review_total, 78)
+  assert.equal(listed.version, 3)
+})

@@ -60,16 +60,33 @@ function tryParse(text) {
   }
 }
 
+// Mem0 can hand metadata numbers and booleans back as strings ("1", "false"); these keys are turned back
+// into numbers / booleans so "1" + 1 is 2 (not "11") and "false" is not truthy.
+const NUMERIC_META = ['version', 'brief_version', 'review_total', 'total']
+const BOOLEAN_META = ['pass', 'test', 'dry_run']
+
+function toNumber(v) {
+  if (v == null || v === '') return null
+  return Number.isNaN(Number(v)) ? v : Number(v)
+}
+
+/** Metadata with the numeric and boolean keys above restored to their real types. */
+export function normalizeMetadata(md = {}) {
+  const out = { ...md }
+  for (const k of NUMERIC_META) if (k in out) out[k] = toNumber(out[k])
+  for (const k of BOOLEAN_META) if (out[k] === 'true' || out[k] === 'false') out[k] = out[k] === 'true'
+  return out
+}
+
 /** A Mem0 memory → our record shape. */
 export function toRecord(memory) {
-  const md = memory?.metadata ?? {}
+  const md = normalizeMetadata(memory?.metadata ?? {})
   return {
     id: memory.id,
     type: md.type,
     briefId: md.brief_id ?? null,
     status: md.status ?? null,
-    // Mem0 can hand metadata numbers back as strings ("1"); keep versions numeric so "1" + 1 is 2, not "11".
-    version: md.version == null || md.version === '' ? null : Number.isNaN(Number(md.version)) ? md.version : Number(md.version),
+    version: md.version ?? null,
     topicGroup: md.topic_group ?? null,
     date: md.date ?? null,
     payload: tryParse(memory.memory ?? memory.data?.memory),
