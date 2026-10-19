@@ -117,7 +117,7 @@ All steps used 0 AI calls. Slack and M91 URLs were blanked for the live runs, so
 | DRY_RUN publish of 261019-1055-BZ89 | Built locally (18 files); nothing deployed. Found whole-question tags, fixed (`f414060`). |
 | First real deploy (noindex) | Live, verified: noindex meta, canonical, OG image, CSP; left out of the home page, sitemap and RSS; `/.env` is a 404. |
 | Unpublish | The post URL became 404; the blog home stayed 200. |
-| `rebuild_blog` (new, empty Mem0 account) | Deployed 16 files. Mem0: 14 requests (8 reads, 0 searches, 6 writes), plus 1 write for the final run record save. |
+| `rebuild_blog` (new, empty Mem0 account) | Deployed 16 files. Mem0: 14 requests (8 reads, 0 searches, 6 writes) in the run record. This was before the queued-save fix, so the full count was a little higher. |
 | Lighthouse 12.6.1, local preview with the samples (home and a post) | Performance, accessibility, best practices and SEO all 100. LCP 0.9 s, CLS 0.002, TBT 0 ms. Only note: the one CSS file blocks rendering. |
 
 The old Mem0 account ran out of its search quota during these tests; Mem0 counted list (`getAll`) calls as
@@ -129,9 +129,29 @@ empty Mem0 account.
 - Every request the store sends to Mem0 is counted (each retry counts): **reads** (gets, list pages,
   add-event polls), **searches**, **writes** (adds, updates, deletes), plus **cache hits** (no request).
 - **Per run:** the totals are saved in the run record (`mem0`), sent in `run.finished`, and logged as
-  "run Mem0 calls". The run record's totals are taken just before its final save, so `run.finished` has one
-  more write. The dashboard's run page shows them in the "Mem0 calls" row.
+  "run Mem0 calls". The run record's totals are taken after the queued record saves, just before its final
+  save, so `run.finished` and the log line have 2 more requests (the final save's read and write). The dashboard's
+  run page shows them in the "Mem0 calls" row: it takes the `run.finished` count when it saw the event, and the
+  record's count otherwise.
 - **Per API request:** logged only, as "api Mem0 calls" (method, path, status, ms, counts; never headers or the
   query string). The line is at info level when Mem0 was used, otherwise debug. A run started by a request
   counts in its own scope, not in the request's.
 - Mem0's quota may count list calls as searches, so compare a quota with reads + searches.
+
+## Combined test (2026-10-19, new Mem0 account)
+
+Slack and M91 URLs were blanked on the 8080 engine for the test, so nothing was sent. Counts are full totals from
+"run Mem0 calls" (they include the final record save).
+
+| Run | Mode | AI calls | Mem0 requests (reads / searches / writes) | Result |
+|---|---|---|---|---|
+| R-261019-1622-M2LU | full, low-cost | 11 | 157 (97 / 2 / 58) | Failed: MAX_WRITER_REVISIONS (1); v2 scored 79.5 (pass mark 85). Scout's stories call got no answer in 300 s. |
+| (CLI) | test:await on v2 | 0 | not counted (CLI command, not a run) | v2 marked test data, waiting for you |
+| R-261019-1648-J6EV | approval_review | 1 | 28 (16 / 0 / 12) | Score 82: still a fail |
+| R-261019-1649-38FB | approve (force_unreviewed) | 1 | 34 (20 / 0 / 14) | Approved; promo pack ok |
+| R-261019-1650-65YP | publish | 0 | 28 (17 / 0 / 11) | Live as noindex, verified; tags are short phrases |
+| R-261019-1651-B4DH | unpublish | 0 | 25 (15 / 0 / 10) | The post URL is a 404; the home page is 200 |
+| **Total** | | **13** | **272 (165 / 2 / 105)** | |
+
+The dashboard's polling while a page is open adds about 1 read per list endpoint every 30 s (the read cache
+answers the rest).

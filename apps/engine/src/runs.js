@@ -219,6 +219,8 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       await lock?.release().catch((error) => log.error('could not release run lock', { runId, error }))
     }
 
+    // Let queued run-record saves finish first, so the saved Mem0 count misses only the final save itself.
+    await queue
     Object.assign(run, {
       status: result.status,
       finished_at: istIso(new Date(now())),
@@ -228,7 +230,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       warnings: result.warnings ?? [],
       // Extra facts a mode records on its run (e.g. approve: approved_unreviewed).
       ...(result.run_fields ?? {}),
-      // Mem0 requests up to this final save (the save itself is one more write; run.finished has the full count).
+      // Mem0 requests up to this final save (the save itself adds 1 read + 1 write; run.finished has the full count).
       ...(mem0 && { mem0: { ...mem0, requests: mem0Requests(mem0) } })
     })
     for (const s of run.steps) if (s.status === 'running') Object.assign(s, { status: result.status === 'cancelled' ? 'cancelled' : 'failed', finished_at: run.finished_at })
