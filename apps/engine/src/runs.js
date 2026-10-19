@@ -23,6 +23,7 @@ import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
 import { loadBrief } from './writer/inputs.js'
+import { addToTimeline } from './timeline.js'
 
 export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'publish'])
 export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review'])
@@ -145,7 +146,9 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     const dry = runConfig.runtime.dryRun
     const run = {
       run_id: runId, trigger, mode, dry_run: dry, status: 'running', started_at: istIso(new Date(startedAt)), finished_at: null, ms: null,
-      steps: [], brief_id: null, result_summary: '', warnings: []
+      steps: [], brief_id: null, result_summary: '', warnings: [],
+      // Compact timeline (Phase 6): saved with the step-boundary writes and at the end, not per event.
+      timeline: []
     }
 
     // The run record follows the step events; writes are queued so they happen in order.
@@ -165,6 +168,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     const stepFor = (name) => run.steps.find((s) => s.name === name && s.status === 'running') ?? run.steps.findLast((s) => s.name === name)
     const topOf = (e) => (e.step ? String(e.step).split('.')[0] : e.agent)
     const unsubscribe = subscribe((e) => {
+      addToTimeline(run, e)
       if (e.type === 'step.started' && TOP_STEPS.includes(e.step)) {
         run.steps.push({ name: e.step, status: 'running', started_at: e.ts, finished_at: null, ms: null, ai_calls: 0, models: [], retries: 0, record_ids: [], summary: '', error: null })
         save()
