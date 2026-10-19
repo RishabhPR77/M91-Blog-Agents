@@ -18,16 +18,19 @@ type Props = {
 export function ConfirmDialog({ open, title, children, expectedCalls, confirmLabel = 'Confirm', danger, requireTick, busy, onConfirm, onCancel }: Props) {
   const [ticked, setTicked] = useState(false)
   const cancelRef = useRef<HTMLButtonElement>(null)
+  // The latest props for the Escape handler, so re-renders of the page never re-run the open-time setup.
+  const latest = useRef({ busy, onCancel })
+  latest.current = { busy, onCancel }
   useEffect(() => {
     if (!open) return
     setTicked(false)
     cancelRef.current?.focus()
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onCancel()
+      if (e.key === 'Escape' && !latest.current.busy) latest.current.onCancel()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, busy, onCancel])
+  }, [open])
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
