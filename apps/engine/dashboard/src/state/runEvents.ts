@@ -35,6 +35,16 @@ export type LogLine = { seq: number; ts: string; type: string; step: string | nu
 export type RunSource = 'live' | 'timeline' | 'record' | 'none'
 export type RunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'
 
+/** Mem0 requests a run made (apps/engine/src/util/mem0count.js); cache hits sent no request. */
+export type Mem0Counts = { reads: number; searches: number; writes: number; cache_hits: number; requests: number }
+
+const mem0Of = (v: unknown): Mem0Counts | null => {
+  const o = v as Partial<Mem0Counts> | null | undefined
+  return o && typeof o.reads === 'number' && typeof o.writes === 'number'
+    ? { reads: o.reads, searches: o.searches ?? 0, writes: o.writes, cache_hits: o.cache_hits ?? 0, requests: o.requests ?? o.reads + (o.searches ?? 0) + o.writes }
+    : null
+}
+
 export type RunView = {
   runId: string
   mode: string | null
@@ -54,6 +64,8 @@ export type RunView = {
   log: LogLine[]
   logDropped: number
   totals: { aiCalls: number; retries: number }
+  /** null until the run ends (and for runs from before the counter). */
+  mem0: Mem0Counts | null
   lastSeq: number
   seen: number
   source: RunSource
@@ -75,6 +87,7 @@ export type RunRecord = {
   steps?: { name: string; status: string; started_at?: string | null; finished_at?: string | null; ms?: number | null; ai_calls?: number; models?: string[]; retries?: number; record_ids?: string[]; summary?: string; error?: string | null }[]
   timeline?: TimelineEntry[]
   timeline_dropped?: number
+  mem0?: Mem0Counts
 }
 
 /** One entry of the saved timeline (apps/engine/src/timeline.js). */
@@ -103,7 +116,7 @@ export type Action =
 export function initialRunView(runId: string): RunView {
   return {
     runId, mode: null, trigger: null, dryRun: null, status: 'unknown', startedAt: null, finishedAt: null, ms: null, resultSummary: null, briefId: null,
-    steps: {}, order: [], routes: [], approvals: [], outputs: [], log: [], logDropped: 0, totals: { aiCalls: 0, retries: 0 }, lastSeq: 0, seen: 0, source: 'none', timelineDropped: 0
+    steps: {}, order: [], routes: [], approvals: [], outputs: [], log: [], logDropped: 0, totals: { aiCalls: 0, retries: 0 }, mem0: null, lastSeq: 0, seen: 0, source: 'none', timelineDropped: 0
   }
 }
 
@@ -169,7 +182,7 @@ export function applyEvent(state: RunView, e: EngineEvent): RunView {
     case 'run.failed':
     case 'run.cancelled': {
       const status: RunStatus = e.type === 'run.finished' ? 'succeeded' : e.type === 'run.failed' ? 'failed' : 'cancelled'
-      s = finishStepsOnEnd({ ...s, status, finishedAt: e.ts, ms: num(d.ms) ?? s.ms, resultSummary: e.message ?? s.resultSummary, briefId: str(d.brief_id) ?? s.briefId }, status, e.ts)
+      s = finishStepsOnEnd({ ...s, status, finishedAt: e.ts, ms: num(d.ms) ?? s.ms, resultSummary: e.message ?? s.resultSummary, briefId: str(d.brief_id) ?? s.briefId, mem0: mem0Of(d.mem0) ?? s.mem0 }, status, e.ts)
       break
     }
     case 'step.started': {
@@ -238,7 +251,9 @@ export function applyRecord(state: RunView, r: RunRecord): RunView {
     mode: r.mode ?? state.mode, trigger: r.trigger ?? state.trigger, dryRun: typeof r.dry_run === 'boolean' ? r.dry_run : state.dryRun,
     startedAt: state.startedAt ?? r.started_at ?? null, finishedAt: r.finished_at ?? state.finishedAt, ms: r.ms ?? state.ms,
     resultSummary: r.result_summary || state.resultSummary, briefId: r.brief_id ?? state.briefId, status: next,
-    timelineDropped: r.timeline_dropped ?? state.timelineDropped
+    timelineDropped: r.timeline_dropped ?? state.timelineDropped,
+    // run.finished counts the record's own final save too, so a count from the event wins.
+    mem0: state.mem0 ?? mem0Of(r.mem0)
   }
   if (next !== 'running' && next !== 'unknown' && state.status === 'running') s = finishStepsOnEnd(s, next, r.finished_at ?? new Date().toISOString())
   return s

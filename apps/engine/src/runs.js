@@ -9,6 +9,7 @@ import { istIso } from './util/time.js'
 import { createStore } from './store.js'
 import { createNotifier } from './notify.js'
 import { withRun, emit, subscribe, isCancel } from './events.js'
+import { withMem0Count, currentMem0Counts, mem0Requests } from './util/mem0count.js'
 
 /** The event for a step that threw: step.cancelled when a cancel interrupted it, else step.failed. */
 const stepEnded = (agent, error, signal) => (isCancel(error, signal)
@@ -133,7 +134,9 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     const controller = new AbortController()
     const entry = { runId, controller, done: null }
     active = entry
-    entry.done = withRun(runId, () => execute({ runId, mode, trigger, params, runConfig, signal: controller.signal }), { signal: controller.signal })
+    // Every Mem0 request the run makes is counted in its own scope (util/mem0count.js).
+    const { result: running } = withMem0Count(() => withRun(runId, () => execute({ runId, mode, trigger, params, runConfig, signal: controller.signal, mem0: currentMem0Counts() }), { signal: controller.signal }))
+    entry.done = running
       .catch((error) => ({ status: 'failed', error: error.message }))
       .then((result) => {
         finished.set(runId, result)
@@ -144,7 +147,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     return { run_id: runId }
   }
 
-  async function execute({ runId, mode, trigger, params, runConfig, signal }) {
+  async function execute({ runId, mode, trigger, params, runConfig, signal, mem0 }) {
     const store = storeFactory(runConfig)
     const notifier = notifierFactory(runConfig)
     const startedAt = now()
@@ -224,14 +227,18 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       result_summary: result.summary ?? result.error ?? '',
       warnings: result.warnings ?? [],
       // Extra facts a mode records on its run (e.g. approve: approved_unreviewed).
-      ...(result.run_fields ?? {})
+      ...(result.run_fields ?? {}),
+      // Mem0 requests up to this final save (the save itself is one more write; run.finished has the full count).
+      ...(mem0 && { mem0: { ...mem0, requests: mem0Requests(mem0) } })
     })
     for (const s of run.steps) if (s.status === 'running') Object.assign(s, { status: result.status === 'cancelled' ? 'cancelled' : 'failed', finished_at: run.finished_at })
     const type = result.status === 'succeeded' ? 'run.finished' : result.status === 'cancelled' ? 'run.cancelled' : 'run.failed'
     await save()
     await queue
     unsubscribe()
-    emit(type, { message: run.result_summary, data: { status: run.status, ms: run.ms, brief_id: run.brief_id } })
+    // Logged before the terminal event: run.finished / run.failed / run.cancelled must stay the run's last event.
+    if (mem0) log.info('run Mem0 calls', { runId, mode, ...mem0, requests: mem0Requests(mem0) })
+    emit(type, { message: run.result_summary, data: { status: run.status, ms: run.ms, brief_id: run.brief_id, ...(mem0 && { mem0: { ...mem0, requests: mem0Requests(mem0) } }) } })
     if (result.status === 'cancelled') {
       try {
         await notifier.slack(`⏹️ Run ${runId} cancelled`)

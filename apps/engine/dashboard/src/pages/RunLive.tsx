@@ -78,7 +78,8 @@ export default function RunLive() {
     ['Dry run', view.dryRun == null ? '—' : view.dryRun ? 'yes' : 'no'],
     ['Started', fmtDateTime(view.startedAt)],
     [running ? 'Elapsed' : 'Total time', fmtDuration(elapsed)],
-    ['AI calls', String(view.totals.aiCalls) + (view.totals.retries ? ` (+${view.totals.retries} retries)` : '')]
+    ['AI calls', String(view.totals.aiCalls) + (view.totals.retries ? ` (+${view.totals.retries} retries)` : '')],
+    ['Mem0 calls', view.mem0 ? `${view.mem0.requests} (${view.mem0.reads} reads · ${view.mem0.searches} searches · ${view.mem0.writes} writes · ${view.mem0.cache_hits} cached)` : running ? 'counted at the end' : 'not counted (older run)']
   ]
   const warnings = detail?.run?.warnings ?? []
 

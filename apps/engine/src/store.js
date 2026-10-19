@@ -7,6 +7,7 @@ import { getConfig } from './config.js'
 import { log } from './util/log.js'
 import { sleep, retry } from './util/retry.js'
 import { istDate } from './util/time.js'
+import { countMem0 } from './util/mem0count.js'
 
 export const RECORD_TYPES = Object.freeze([
   'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'draft',
@@ -147,7 +148,12 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
   // retries with "equal jitter" (each wait is half to all of 2, 4, 8, 15, 15 s), so a blip of
   // ~22–55 s is ridden out. New-record writes are not retried, since a retry after a lost reply
   // could save a second copy.
-  const net = (fn, what) => retry(fn, {
+  // Each attempt is one request to Mem0, so retries are counted too (util/mem0count.js).
+  const KIND = { list: 'reads', get: 'reads', event: 'reads', search: 'searches', update: 'writes', delete: 'writes', add: 'writes' }
+  const net = (fn, what) => retry(() => {
+    countMem0(KIND[what] ?? 'reads')
+    return fn()
+  }, {
     ...MEM0_RETRY,
     sleepFn,
     shouldRetry: isNetworkError,
@@ -207,7 +213,10 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
   async function listAll(briefId, f = {}) {
     const key = JSON.stringify([briefId ?? null, f.type ?? null, f.status ?? null, cache.metadataFilters])
     const hit = cache.lists.get(key)
-    if (fresh(hit)) return hit.value
+    if (fresh(hit)) {
+      countMem0('cache_hits')
+      return hit.value
+    }
     let value
     try {
       value = await fetchAll(serverFilters(briefId, f))
@@ -241,6 +250,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
       return { id: `${DRY_ID}${recordKey}`, type, briefId: briefId ?? null, status, version, topicGroup, date, payload, metadata, dryRun: true }
     }
     const c = await client()
+    countMem0('writes')
     const added = await c.add([{ role: 'user', content: JSON.stringify(payload ?? {}) }], {
       agentId,
       ...(briefId && { runId: briefId }),
@@ -284,7 +294,10 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
   /** One record by memory id, or null (also null for another agent's memory). Cached like the lists. */
   async function getRecord(id) {
     const hit = cache.records.get(id)
-    if (fresh(hit)) return hit.value
+    if (fresh(hit)) {
+      countMem0('cache_hits')
+      return hit.value
+    }
     const c = await client()
     let m
     try {
@@ -328,6 +341,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
       return { eventId: null, status: 'DRY_RUN' }
     }
     const c = await client()
+    countMem0('writes')
     const added = await c.add([{ role: 'user', content: text }], { agentId, metadata: { ...meta, ...(testTag && { test: true }), type: 'lesson', date: istDate() }, infer: true })
     forgetLists()
     return { eventId: added?.eventId ?? added?.event_id ?? null, status: added?.status ?? null }

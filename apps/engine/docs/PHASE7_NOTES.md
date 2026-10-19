@@ -105,12 +105,33 @@ PUBLISH_VERIFY_TIMEOUT_MS=120000
   - `docker build -f apps/engine/Dockerfile .` succeeds;
   - in the container (Node 22.23, user `node`), the Publisher modules load and the blog builds (7 pages, no `.env` in `dist`);
   - not checked: the engine serving requests in the container with your real `.env`, and a deploy from it.
-- **The engine on 8080 is still the Phase 6 build.** It needs a restart (only when you say so) for the
-  Phase 7 API; until then, the dashboard's Posts page and publish buttons ask for a restart.
-- **Smoke steps (E4) not run yet:**
-  - a DRY_RUN publish;
-  - the first real deploy (noindex), then unpublish;
-  - `rebuild_blog`;
-  - Lighthouse.
+- **Not covered by the smoke tests:** the full flow from a new pipeline run to approve, publish and
+  unpublish. The combined test waits for your ok.
 
-  Each live deploy waits for your ok.
+## Smoke results (E4, 2026-10-19)
+
+All steps used 0 AI calls. Slack and M91 URLs were blanked for the live runs, so nothing was sent.
+
+| Step | Result |
+|---|---|
+| DRY_RUN publish of 261019-1055-BZ89 | Built locally (18 files); nothing deployed. Found whole-question tags, fixed (`f414060`). |
+| First real deploy (noindex) | Live, verified: noindex meta, canonical, OG image, CSP; left out of the home page, sitemap and RSS; `/.env` is a 404. |
+| Unpublish | The post URL became 404; the blog home stayed 200. |
+| `rebuild_blog` (new, empty Mem0 account) | Deployed 16 files. Mem0: 14 requests (8 reads, 0 searches, 6 writes), plus 1 write for the final run record save. |
+| Lighthouse 12.6.1, local preview with the samples (home and a post) | Performance, accessibility, best practices and SEO all 100. LCP 0.9 s, CLS 0.002, TBT 0 ms. Only note: the one CSS file blocks rendering. |
+
+The old Mem0 account ran out of its search quota during these tests; Mem0 counted list (`getAll`) calls as
+"SEARCH" events. The store no longer turns its filters off on a 429 (`3204c0e`). The engine now uses a new,
+empty Mem0 account.
+
+## Mem0 call counter
+
+- Every request the store sends to Mem0 is counted (each retry counts): **reads** (gets, list pages,
+  add-event polls), **searches**, **writes** (adds, updates, deletes), plus **cache hits** (no request).
+- **Per run:** the totals are saved in the run record (`mem0`), sent in `run.finished`, and logged as
+  "run Mem0 calls". The run record's totals are taken just before its final save, so `run.finished` has one
+  more write. The dashboard's run page shows them in the "Mem0 calls" row.
+- **Per API request:** logged only, as "api Mem0 calls" (method, path, status, ms, counts; never headers or the
+  query string). The line is at info level when Mem0 was used, otherwise debug. A run started by a request
+  counts in its own scope, not in the request's.
+- Mem0's quota may count list calls as searches, so compare a quota with reads + searches.

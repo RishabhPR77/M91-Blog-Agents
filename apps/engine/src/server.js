@@ -21,6 +21,7 @@ import { draftsOf, draftVersion, draftBriefVersion } from './writer/save.js'
 import { BRIEF_ID_RE } from './util/ids.js'
 import { reviewOfDraft, hardChecksPassed } from './approval.js'
 import { lessonText } from './lessons.js'
+import { withMem0Count, mem0Requests } from './util/mem0count.js'
 
 const VERSION = (() => {
   try {
@@ -466,7 +467,22 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     return fail(res, 404, 'not_found', `no route ${method} ${path}`)
   }
 
-  const server = http.createServer(async (req, res) => {
+  // Mem0 calls per API request: logged when the response ends (path and method only; never headers).
+  // A run started by a request counts in its own scope, not here.
+  const server = http.createServer((req, res) => {
+    const started = now()
+    const { counts, result } = withMem0Count(() => handle(req, res))
+    res.on('finish', () => {
+      if (!req.url?.startsWith('/api/')) return
+      const requests = mem0Requests(counts)
+      const line = { method: req.method, path: new URL(req.url, 'http://localhost').pathname, status: res.statusCode, ms: now() - started, mem0: { ...counts, requests } }
+      if (requests || counts.cache_hits) log.info('api Mem0 calls', line)
+      else log.debug('api Mem0 calls', line)
+    })
+    return result
+  })
+
+  async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost')
     try {
       if (url.pathname.startsWith('/api/')) return await api(req, res, url)
@@ -497,7 +513,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       log.error('request failed', { path: url.pathname, error })
       return fail(res, 500, 'internal', 'internal error')
     }
-  })
+  }
   server.isRunning = isRunning
   // Close open event streams so the server can stop cleanly.
   const close = server.close.bind(server)

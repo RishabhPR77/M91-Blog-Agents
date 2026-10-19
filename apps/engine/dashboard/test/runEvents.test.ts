@@ -140,3 +140,18 @@ describe('rebuild without live events', () => {
     expect(s.log).toHaveLength(live.log.length)
   })
 })
+
+describe('Mem0 call counts', () => {
+  const M = { reads: 12, searches: 0, writes: 9, cache_hits: 4, requests: 21 }
+  it('come from run.finished, and the event count wins over the saved record (it includes the final save)', () => {
+    let s = initialRunView('R-261019-1600-ABCD')
+    expect(s.mem0).toBeNull()
+    s = applyEvent(s, { run_id: s.runId, seq: 1, ts: '2026-10-19T10:00:00Z', type: 'run.finished', message: 'ok', data: { status: 'succeeded', mem0: M } } as EngineEvent)
+    expect(s.mem0).toEqual(M)
+    const rec = { run_id: s.runId, status: 'succeeded', mem0: { ...M, writes: 8, requests: 20 } } as RunRecord
+    expect(rebuildFromRecord(s.runId, rec).mem0).toEqual({ ...M, writes: 8, requests: 20 })
+  })
+  it('older runs have none', () => {
+    expect(rebuildFromRecord('R-261019-1600-ABCD', { run_id: 'R-261019-1600-ABCD', status: 'succeeded' } as RunRecord).mem0).toBeNull()
+  })
+})
