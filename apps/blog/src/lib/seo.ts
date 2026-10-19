@@ -19,7 +19,7 @@ export function blogPostingLd(post: Post) {
     mainEntityOfPage: { '@type': 'WebPage', '@id': post.canonical_url },
     author: { '@type': 'Organization', name: SITE.author, url: M91_URL },
     publisher: { '@type': 'Organization', name: SITE.publisher, url: M91_URL, logo: { '@type': 'ImageObject', url: logo() } },
-    keywords: post.tags.join(', '),
+    ...(post.tags.length > 0 && { keywords: post.tags.join(', ') }),
     inLanguage: 'en'
   }
 }

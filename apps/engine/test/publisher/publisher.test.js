@@ -68,6 +68,7 @@ test('readingTime, tagsOf, sourcesOf, relatedSlugs', () => {
   assert.equal(readingTime('word '.repeat(10)), 1)
   assert.equal(readingTime('word '.repeat(401)), 3)
   assert.deepEqual(tagsOf({ keyword: 'Agent Approval', supporting_keywords: ['agent approval', 'a', 'b', 'c', 'd', 'e', 'f'] }), ['agent approval', 'a', 'b', 'c', 'd', 'e'])
+  assert.deepEqual(tagsOf({ keyword: 'How can HumanInTheLoop middleware reliably require human approval?', supporting_keywords: ['`interrupt_on` config', 'Human-in-the-loop!'] }), ['interrupt on config', 'human-in-the-loop'], 'questions are not tags; punctuation removed')
   const md = `See [the issue](https://github.com/x/y/issues/1), [again](https://github.com/x/y/issues/1/), [our post](${BASE}/posts/older/), [rel](/posts/other/) and [Try M91](${CTA}).`
   assert.deepEqual(sourcesOf(md, { baseUrl: BASE, ctaUrl: CTA }), [{ url: 'https://github.com/x/y/issues/1', title: 'the issue' }])
   const published = [rec('older', { payload: { topic_group: 2 } }), rec('other', { payload: { topic_group: 2 } }), rec('same-1'), rec('same-2'), rec('gone', { status: 'unpublished' })]

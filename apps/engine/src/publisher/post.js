@@ -69,9 +69,14 @@ export function stripTitleAndTldr(markdown) {
 /** Prose words ÷ 200, rounded up, at least 1. */
 export const readingTime = (markdown) => Math.max(1, Math.ceil(words(parseMarkdown(markdown).prose).length / 200))
 
-/** keyword + supporting keywords: lowercase, unique, at most 6. */
+/**
+ * keyword + supporting keywords: lowercase, punctuation removed, unique, at most 6. Only short phrases
+ * (at most 4 words and 40 characters) become tags: older briefs used whole questions as keywords.
+ */
 export function tagsOf(brief) {
-  const all = [brief?.keyword, ...(brief?.supporting_keywords ?? [])].map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean)
+  const all = [brief?.keyword, ...(brief?.supporting_keywords ?? [])]
+    .map((t) => String(t ?? '').toLowerCase().replace(/[^\p{L}\p{N}\s-]+/gu, ' ').replace(/\s+/g, ' ').trim())
+    .filter((t) => t && t.length <= 40 && t.split(' ').length <= 4)
   return [...new Set(all)].slice(0, 6)
 }
 
