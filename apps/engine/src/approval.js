@@ -32,6 +32,19 @@ export async function requireAwaiting(store, briefId) {
   return d
 }
 
+/** The newest review record of this draft version (and brief version), or null. */
+export async function reviewOfDraft(store, d) {
+  const reviews = await store.getRecords({ type: 'review', brief_id: d.briefId ?? d.payload?.brief_id })
+  return reviews
+    .filter((r) => Number(r.payload?.version ?? r.version) === draftVersion(d) && Number(r.payload?.brief_version ?? r.metadata?.brief_version ?? 1) === draftBriefVersion(d))
+    .sort((a, b) => String(b.createdAt ?? b.date).localeCompare(String(a.createdAt ?? a.date)))[0] ?? null
+}
+
+/** True when the draft's own hard content checks passed (missing results count as not passed). */
+export const hardChecksPassed = (d) => d?.payload?.checks?.hard_passed === true
+
+export const NOT_REVIEWED_MESSAGE = 'This version was not checked by the Reviewer. Review it first, or approve with force_unreviewed.'
+
 /** Counter prompts already used for a brief: drafts that carry human_feedback. */
 export async function humanRevisionsUsed(store, briefId) {
   return (await draftsOf(store, briefId)).filter((d) => d.payload?.human_feedback).length
@@ -45,10 +58,15 @@ export function humanFeedbackItems(text, quotes = []) {
 
 /**
  * Checks a decision before its run starts (so the API can answer 400 / 404 / 409 at once).
- * mode: approve | human_revise | reject_topic.
+ * mode: approve | human_revise | reject_topic | approval_review.
+ * approve: the draft's hard content checks must have passed (always; force_unreviewed never overrides that),
+ * and with REREVIEW_AFTER_HUMAN=true it needs a passing review unless params.force_unreviewed is true.
  */
 export async function checkDecision(mode, params, { store, config }) {
   if (typeof params.brief_id !== 'string' || !params.brief_id.trim()) throw new ApprovalError('bad_params', `${mode} needs params.brief_id`)
+  if (mode === 'approve' && params.force_unreviewed !== undefined && typeof params.force_unreviewed !== 'boolean') {
+    throw new ApprovalError('bad_params', 'force_unreviewed must be true or false')
+  }
   if (mode === 'human_revise') {
     const fb = params.feedback
     if (typeof fb !== 'string' || fb.trim().length < FEEDBACK_MIN_CHARS || fb.length > FEEDBACK_MAX_CHARS) {
@@ -68,6 +86,15 @@ export async function checkDecision(mode, params, { store, config }) {
     const used = await humanRevisionsUsed(store, params.brief_id)
     if (used >= config.approval.maxHumanRevisions) {
       throw new ApprovalError('max_human_revisions', `MAX_HUMAN_REVISIONS (${config.approval.maxHumanRevisions}) counter prompts already used for ${params.brief_id}: approve or reject the topic`, 409)
+    }
+  }
+  if (mode === 'approve') {
+    if (!hardChecksPassed(d)) {
+      throw new ApprovalError('hard_checks_failed', `v${draftVersion(d)} of ${params.brief_id} did not pass the hard content checks: send a counter prompt or reject the topic (force_unreviewed does not override this)`, 409)
+    }
+    const review = await reviewOfDraft(store, d)
+    if (config.approval.rereviewAfterHuman && review?.payload?.pass !== true && params.force_unreviewed !== true) {
+      throw new ApprovalError('not_reviewed', NOT_REVIEWED_MESSAGE, 409)
     }
   }
   return d
@@ -98,14 +125,18 @@ async function notifySafe(notifier, warnings, kind, args) {
  * blocks), placeholder Designer and Publisher steps, Slack, approval.approved.
  * ctx: { briefId, runId, config, store, notifier, agents?, runStep(agent, fn), now }
  */
-export async function runApprove({ briefId, runId, config, store, notifier, agents, runStep, now = Date.now }) {
+export async function runApprove({ briefId, runId, params = {}, config, store, notifier, agents, runStep, now = Date.now }) {
   const warnings = []
-  const d = await requireAwaiting(store, briefId)
+  // The same gate as before the run starts: awaiting_human, hard checks passed, reviewed (or force_unreviewed).
+  const d = await checkDecision('approve', { ...params, brief_id: briefId }, { store, config })
   const version = draftVersion(d)
   const briefVersion = draftBriefVersion(d)
   const at = istIso(new Date(now()))
   const briefRec = await loadBrief(store, briefId, briefVersion)
-  await store.updateRecord(d.id, undefined, { status: 'approved', approved_by: 'human', approved_at: at })
+  // approved_unreviewed: no passing review of this version (force_unreviewed, or REREVIEW_AFTER_HUMAN=false).
+  const unreviewed = (await reviewOfDraft(store, d))?.payload?.pass !== true
+  if (unreviewed) warnings.push(`v${version} approved without a Reviewer pass (${params.force_unreviewed === true ? 'force_unreviewed' : 'REREVIEW_AFTER_HUMAN=false'})`)
+  await store.updateRecord(d.id, undefined, { status: 'approved', approved_by: 'human', approved_at: at, approved_unreviewed: unreviewed })
   if (briefRec?.id) await store.updateRecord(briefRec.id, undefined, { status: 'approved', approved_by: 'human', approved_at: at })
   const total = d.metadata?.review_total ?? null
 
@@ -131,8 +162,31 @@ export async function runApprove({ briefId, runId, config, store, notifier, agen
   const title = d.payload?.title ?? briefRec?.payload?.titles?.[0] ?? briefId
   await notifySafe(notifier, warnings, 'slack', `✅ Approved by you: *${title}* · v${version}`)
   if (promo?.pack) await notifySafe(notifier, warnings, 'slack', `Promo pack preview (${promo.status}):\n\nLinkedIn:\n${promo.pack.linkedin_post}\n\nNewsletter:\n${promo.pack.newsletter_blurb}`)
-  emit('approval.approved', { agent: 'human', message: `approved by you (v${version})`, data: { brief_id: briefId, version, total } })
-  return { status: 'succeeded', brief_id: briefId, summary: `approved by you (v${version}${total === null ? '' : `, score ${total}`})`, warnings }
+  emit('approval.approved', { agent: 'human', message: `approved by you (v${version}${unreviewed ? ', unreviewed' : ''})`, data: { brief_id: briefId, version, total, approved_unreviewed: unreviewed } })
+  const scoreText = unreviewed ? ', not reviewed' : total === null ? '' : `, score ${total}`
+  return { status: 'succeeded', brief_id: briefId, summary: `approved by you (v${version}${scoreText})`, warnings, run_fields: { approved_unreviewed: unreviewed } }
+}
+
+/**
+ * The human asks for one review of the waiting version (no routing loop): 1 Reviewer call. The review is
+ * recorded and the draft stays awaiting_human, on a pass or a fail; the score is saved on the draft.
+ * ctx: { briefId, runId, config, store, agents, runStep, now }
+ */
+export async function runApprovalReview({ briefId, runId, config, store, agents, runStep, now = Date.now }) {
+  const d = await checkDecision('approval_review', { brief_id: briefId }, { store, config })
+  const version = draftVersion(d)
+  const briefVersion = draftBriefVersion(d)
+  const briefRec = await loadBrief(store, briefId, briefVersion)
+  const draft = { record_id: d.id, version, brief_version: briefVersion, title: d.payload?.title, draft: d.payload }
+  const review = await runStep('reviewer', async () => (await agents.reviewer({ runId, briefId, version, briefVersion, draft, brief: briefRec?.payload, config })).output)
+  // The real Reviewer saves its own review record; a mock's review is saved here.
+  if (!review?.record_id) await store.createRecord({ type: 'review', briefId, payload: { ...review, version, brief_version: briefVersion }, status: review?.pass ? 'pass' : 'fail', version, meta: { brief_version: briefVersion, pass: Boolean(review?.pass), total: review?.total ?? null } })
+  const total = review?.total ?? review?.score ?? null
+  await store.updateRecord(d.id, undefined, { review_total: total, reviewed_at: istIso(new Date(now())) })
+  const verdict = review?.pass ? 'pass' : 'fail'
+  emit('approval.reviewed', { agent: 'reviewer', message: `v${version} reviewed: ${verdict}`, data: { brief_id: briefId, version, total, pass: Boolean(review?.pass) } })
+  const next = review?.pass ? 'still awaiting your approval' : 'still awaiting you: send a counter prompt, reject the topic, or approve with force_unreviewed'
+  return { status: 'succeeded', brief_id: briefId, summary: `review of v${version}: ${verdict}${total === null ? '' : ` (score ${total})`}; ${next}`, warnings: review?.warnings ?? [] }
 }
 
 /**

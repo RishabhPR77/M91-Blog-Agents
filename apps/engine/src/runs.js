@@ -18,16 +18,16 @@ import { runPipeline, defaultAgents, acquireLock, LockedError, summariseOutput }
 import { runReviewer } from './reviewer/index.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { runPromo, approvedDraft } from './promo/index.js'
-import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopic } from './approval.js'
+import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopic, runApprovalReview } from './approval.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
 import { loadBrief } from './writer/inputs.js'
 
-export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'publish'])
-export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic'])
+export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'publish'])
+export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review'])
 // The human's decisions on a draft that waits at awaiting_human (Phase 5.5).
-export const DECISION_MODES = Object.freeze(['approve', 'human_revise', 'reject_topic'])
+export const DECISION_MODES = Object.freeze(['approve', 'human_revise', 'reject_topic', 'approval_review'])
 export const TRIGGERS = Object.freeze(['manual', 'cron', 'api', 'cli'])
 const TOP_STEPS = ['scout', 'strategist', 'writer', 'checks', 'reviewer', 'promo', 'designer', 'publisher']
 
@@ -213,7 +213,9 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       ms: now() - startedAt,
       brief_id: run.brief_id ?? result.brief_id ?? null,
       result_summary: result.summary ?? result.error ?? '',
-      warnings: result.warnings ?? []
+      warnings: result.warnings ?? [],
+      // Extra facts a mode records on its run (e.g. approve: approved_unreviewed).
+      ...(result.run_fields ?? {})
     })
     for (const s of run.steps) if (s.status === 'running') Object.assign(s, { status: result.status === 'cancelled' ? 'cancelled' : 'failed', finished_at: run.finished_at })
     const type = result.status === 'succeeded' ? 'run.finished' : result.status === 'cancelled' ? 'run.cancelled' : 'run.failed'
@@ -252,6 +254,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       const ctx = { briefId: params.brief_id, runId, params, config: runConfig, store, notifier, agents, runStep, runPipeline, signal, now }
       if (mode === 'approve') return runApprove(ctx)
       if (mode === 'human_revise') return runHumanRevise(ctx)
+      if (mode === 'approval_review') return runApprovalReview(ctx)
       return runRejectTopic(ctx)
     }
     if (mode === 'full') {

@@ -38,6 +38,7 @@
     "approve": "node --env-file=../../.env src/cli.js approve",
     "revise": "node --env-file=../../.env src/cli.js revise",
     "reject": "node --env-file=../../.env src/cli.js reject",
+    "review": "node --env-file=../../.env src/cli.js review",
     "test:await": "node --env-file=../../.env src/cli.js test-await"
   },
   "dependencies": {

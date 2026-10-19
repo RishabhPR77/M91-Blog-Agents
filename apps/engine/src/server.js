@@ -297,7 +297,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       const briefId = seg[2]
       if (!BRIEF_ID_RE.test(briefId)) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')
       if (seg.length === 3 && method === 'GET') return send(res, 200, await approvalDetail(briefId))
-      const action = { approve: 'approve', revise: 'human_revise', reject: 'reject_topic' }[seg[3]]
+      const action = { approve: 'approve', revise: 'human_revise', reject: 'reject_topic', review: 'approval_review' }[seg[3]]
       if (action && seg.length === 4 && method === 'POST') {
         const body = await readJson(req)
         // Optional one-run settings (e.g. { rereview_after_human: false }); configForRun validates them.
@@ -306,8 +306,10 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         delete params.feedback
         delete params.quotes
         delete params.reason
+        delete params.force_unreviewed
         if (action === 'human_revise') Object.assign(params, { feedback: body.feedback, ...(body.quotes !== undefined && { quotes: body.quotes }) })
         if (action === 'reject_topic' && body.reason !== undefined) params.reason = body.reason
+        if (action === 'approve' && body.force_unreviewed !== undefined) params.force_unreviewed = body.force_unreviewed
         const { run_id } = await manager.startRun({ mode: action, trigger: 'manual', params })
         return send(res, 202, { run_id })
       }

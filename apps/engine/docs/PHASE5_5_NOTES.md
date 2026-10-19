@@ -37,6 +37,19 @@
 
 **B2–B4, run modes**
 - `approve`: promo pack → placeholder `designer` and `publisher` steps → Slack.
+  - **Gate (open issue #2):** the draft's hard content checks must have passed, always: missing
+    results count as failed, and `force_unreviewed` never overrides this (409 `hard_checks_failed`).
+  - With `REREVIEW_AFTER_HUMAN=true` the version also needs a passing review: its newest review
+    record must be a pass. Otherwise you get 409 `not_reviewed`: "This version was not checked by
+    the Reviewer. Review it first, or approve with force_unreviewed."
+  - `force_unreviewed: true` approves anyway. The draft gets `approved_unreviewed: true`, and the
+    run record shows `approved_unreviewed: true`, a warning, and "(v…, not reviewed)".
+  - `approved_unreviewed` is saved on every approval: false after a passing review, and also true
+    with `REREVIEW_AFTER_HUMAN=false`, where no review is needed.
+- `approval_review`: one Reviewer call on the waiting version, with no routing loop. The review
+  is recorded, `review_total` is saved on the draft, and the draft stays `awaiting_human` on a
+  pass or a fail. Event `approval.reviewed` carries `brief_id`, `version`, `total` and `pass`.
+  After a fail: send a counter prompt, reject the topic, or approve with `force_unreviewed`.
 - `human_revise`: a Writer revision from your feedback, then the Reviewer and the normal routing
   loop (`REREVIEW_AFTER_HUMAN`).
 - `reject_topic`: brief and draft → `rejected`, the lead → `discarded`, the reason → a lesson.
@@ -80,15 +93,17 @@ M91_NOTIFY_ON_AWAITING=false
 |---|---|
 | `GET /api/approvals` | Drafts waiting for you: brief_id, version, title, score, waiting since |
 | `GET /api/approvals/<brief_id>` | The newest draft in full, its review, its checks, earlier versions |
-| `POST /api/approvals/<brief_id>/approve` | Starts an `approve` run → `202 { run_id }` |
+| `POST /api/approvals/<brief_id>/approve` | Body `{ "force_unreviewed": true }` (optional) → `approve` run → `202 { run_id }` |
+| `POST /api/approvals/<brief_id>/review` | One Reviewer call on the waiting version → `approval_review` run → `202 { run_id }` |
 | `POST /api/approvals/<brief_id>/revise` | Body `{ "feedback": "…", "quotes": ["…"] }` → `human_revise` run |
 | `POST /api/approvals/<brief_id>/reject` | Body `{ "reason": "…" }` (optional) → `reject_topic` run |
 
-All three POST routes return 409 when the draft is no longer waiting or another run is in progress.
+All POST routes return 409 when the draft is no longer waiting or another run is in progress.
 
 ```text
 npm run approvals -- --list
-npm run approve -- --brief-id=<id>
+npm run approve -- --brief-id=<id> [--force-unreviewed]
+npm run review -- --brief-id=<id>
 npm run revise -- --brief-id=<id> --feedback "<text>" [--quote "<exact sentence>"]
 npm run reject -- --brief-id=<id> [--reason "<text>"]
 ```

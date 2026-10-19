@@ -6,7 +6,7 @@ import { defaultAgents } from '../src/orchestrator.js'
 import { stubAgents } from '../src/agents/stubs.js'
 import { replay, resetEvents } from '../src/events.js'
 import { createNotifier } from '../src/notify.js'
-import { humanFeedbackItems } from '../src/approval.js'
+import { humanFeedbackItems, NOT_REVIEWED_MESSAGE } from '../src/approval.js'
 import { setSink } from '../src/util/log.js'
 import { memoryStore, fakeNotifier, fakeFetch, mockReviewer } from './helpers.js'
 import { NOW, BRIEF_ID, config, brief, draftAnswer, fakeAi, okChecker, GOOD_MD } from './writer/fixtures.js'
@@ -17,13 +17,15 @@ const now = () => NOW
 const recordsOf = (store, type) => [...store.records.values()].filter((r) => r.type === type)
 
 /** A brief whose v1 draft waits for the human, its cluster lead, and a run manager (fake Writer AI, mock Reviewer, stub promo). */
-async function setup({ env = {}, reviewer = mockReviewer(), writerAnswers = {}, notifier = fakeNotifier(), draftStatus = 'awaiting_human' } = {}) {
+/** reviewed: 'pass' | 'fail' | null — the review record of v1; hardPassed: v1's hard content checks (null = no results). */
+async function setup({ env = {}, reviewer = mockReviewer(), writerAnswers = {}, notifier = fakeNotifier(), draftStatus = 'awaiting_human', reviewed = 'pass', hardPassed = true } = {}) {
   const cfg = config(env)
   const store = memoryStore()
   await store.createRecord({ type: 'question_cluster', payload: { cluster_id: 'C-1', main_question: 'How does agent approval work?' }, status: 'used' })
   await store.createRecord({ type: 'brief', briefId: BRIEF_ID, payload: brief(), status: 'awaiting_human', version: 1 })
-  const d = { ...draftAnswer(), brief_id: BRIEF_ID, version: 1, brief_version: 1, checks: { hard_passed: true, results: [] } }
+  const d = { ...draftAnswer(), brief_id: BRIEF_ID, version: 1, brief_version: 1, ...(hardPassed !== null && { checks: { hard_passed: hardPassed, results: [] } }) }
   const draft = await store.createRecord({ type: 'draft', briefId: BRIEF_ID, payload: d, status: draftStatus, version: 1, meta: { brief_version: 1, review_total: 88 } })
+  if (reviewed) await store.createRecord({ type: 'review', briefId: BRIEF_ID, payload: { brief_id: BRIEF_ID, version: 1, brief_version: 1, pass: reviewed === 'pass', total: reviewed === 'pass' ? 88 : 70, feedback: [] }, status: reviewed, version: 1, meta: { brief_version: 1 } })
   const ai = fakeAi(writerAnswers)
   const manager = createRunManager({
     config: cfg,
@@ -61,7 +63,7 @@ test('approve: statuses approved (by human, with time), promo pack, placeholder 
   assert.equal(recordsOf(s.store, 'brief')[0].status, 'approved')
   assert.equal(s.notifier.sent.slack[0], '✅ Approved by you: *How agent approval works with a phone call* · v1')
   assert.match(s.notifier.sent.slack[1], /^Promo pack preview \(ok\):\n\nLinkedIn:\n/)
-  assert.deepEqual(replay(r.run_id).find((e) => e.type === 'approval.approved').data, { brief_id: BRIEF_ID, version: 1, total: 88 })
+  assert.deepEqual(replay(r.run_id).find((e) => e.type === 'approval.approved').data, { brief_id: BRIEF_ID, version: 1, total: 88, approved_unreviewed: false })
   assert.ok(!JSON.stringify(replay(r.run_id)).includes('A pause keeps a person in charge'), 'no post text in events')
 })
 
@@ -184,4 +186,90 @@ test('human_revise with the run param rereview_after_human: false skips the Revi
   assert.equal(r.run.result_summary, 'awaiting human approval (v2, not re-reviewed)')
   assert.equal(reviewer.count(), 0)
   assert.equal(s.cfg.approval.rereviewAfterHuman, true, 'config unchanged')
+})
+
+// Open issue #2: approving a version the Reviewer never passed.
+test('approve refuses a version without a passing review (REREVIEW_AFTER_HUMAN=true): 409 not_reviewed, nothing changes', async () => {
+  const restore = quiet()
+  for (const reviewed of [null, 'fail']) {
+    const s = await setup({ reviewed })
+    await assert.rejects(s.run('approve'), (e) => e.code === 'not_reviewed' && e.status === 409 && e.message === NOT_REVIEWED_MESSAGE, String(reviewed))
+    assert.equal(s.store.records.get(s.draft.id).status, 'awaiting_human')
+    assert.equal(recordsOf(s.store, 'promo_pack').length, 0)
+    assert.equal(s.notifier.sent.slack.length, 0)
+  }
+  restore()
+  assert.equal(NOT_REVIEWED_MESSAGE, 'This version was not checked by the Reviewer. Review it first, or approve with force_unreviewed.')
+})
+
+test('approve with force_unreviewed: approved, approved_unreviewed saved on the draft and shown in the run record', async () => {
+  const restore = quiet()
+  const s = await setup({ reviewed: null })
+  await assert.rejects(s.run('approve', { force_unreviewed: 'yes' }), (e) => e.code === 'bad_params' && e.status === 400)
+  const r = await s.run('approve', { force_unreviewed: true })
+  // REREVIEW_AFTER_HUMAN=false: no review needed, but the approval is still marked unreviewed.
+  const off = await setup({ reviewed: null, env: { REREVIEW_AFTER_HUMAN: 'false' } })
+  const r2 = await off.run('approve')
+  // A reviewed version: approved_unreviewed is false.
+  const ok = await setup()
+  const r3 = await ok.run('approve')
+  restore()
+  assert.equal(r.status, 'succeeded')
+  const d = s.store.records.get(s.draft.id)
+  assert.equal(d.status, 'approved')
+  assert.equal(d.metadata.approved_unreviewed, true)
+  assert.equal(r.run.approved_unreviewed, true)
+  assert.equal(r.run.result_summary, 'approved by you (v1, not reviewed)')
+  assert.ok(r.run.warnings.includes('v1 approved without a Reviewer pass (force_unreviewed)'))
+  assert.equal(replay(r.run_id).find((e) => e.type === 'approval.approved').data.approved_unreviewed, true)
+  assert.equal(r2.status, 'succeeded')
+  assert.equal(off.store.records.get(off.draft.id).metadata.approved_unreviewed, true)
+  assert.ok(r2.run.warnings.includes('v1 approved without a Reviewer pass (REREVIEW_AFTER_HUMAN=false)'))
+  assert.equal(r3.run.approved_unreviewed, false)
+  assert.equal(ok.store.records.get(ok.draft.id).metadata.approved_unreviewed, false)
+})
+
+test('approval_review: one Reviewer call, review recorded, the draft stays awaiting_human (pass and fail); a pass unlocks approve', async () => {
+  const restore = quiet()
+  const pass = await setup({ reviewed: null, reviewer: mockReviewer(['pass']) })
+  const r = await pass.run('approval_review')
+  const after = await pass.run('approve')
+  const failing = await setup({ reviewed: null, reviewer: mockReviewer(['fail']) })
+  const f = await failing.run('approval_review')
+  const notAwaiting = await setup({ draftStatus: 'approved' })
+  await assert.rejects(notAwaiting.run('approval_review'), (e) => e.code === 'not_awaiting_human' && e.status === 409)
+  await assert.rejects(failing.run('approve'), (e) => e.code === 'not_reviewed')
+  restore()
+  assert.equal(r.status, 'succeeded')
+  assert.equal(r.run.result_summary, 'review of v1: pass (score 90); still awaiting your approval')
+  assert.deepEqual(r.run.steps.map((x) => [x.name, x.status]), [['reviewer', 'succeeded']])
+  assert.equal(pass.ai.requests.length, 0, 'no Writer call')
+  const reviews = recordsOf(pass.store, 'review')
+  assert.equal(reviews.length, 1)
+  assert.equal(reviews[0].payload.pass, true)
+  assert.equal(reviews[0].payload.version, 1)
+  assert.equal(pass.store.records.get(pass.draft.id).metadata.review_total, 90)
+  assert.deepEqual(replay(r.run_id).find((e) => e.type === 'approval.reviewed').data, { brief_id: BRIEF_ID, version: 1, total: 90, pass: true })
+  assert.equal(after.status, 'succeeded')
+  assert.equal(after.run.approved_unreviewed, false)
+  assert.equal(f.status, 'succeeded')
+  assert.match(f.run.result_summary, /^review of v1: fail \(score 70\); still awaiting you/)
+  assert.equal(failing.store.records.get(failing.draft.id).status, 'awaiting_human')
+  assert.equal(recordsOf(failing.store, 'review')[0].payload.pass, false)
+})
+
+test('hard content checks must pass in every case: force_unreviewed, a passing review or REREVIEW_AFTER_HUMAN=false never override them', async () => {
+  const restore = quiet()
+  const cases = [
+    [{ hardPassed: false }, {}],
+    [{ hardPassed: false }, { force_unreviewed: true }],
+    [{ hardPassed: false, reviewed: null, env: { REREVIEW_AFTER_HUMAN: 'false' } }, {}],
+    [{ hardPassed: null }, { force_unreviewed: true }]
+  ]
+  for (const [opts, params] of cases) {
+    const s = await setup(opts)
+    await assert.rejects(s.run('approve', params), (e) => e.code === 'hard_checks_failed' && e.status === 409 && /force_unreviewed does not override/.test(e.message), JSON.stringify([opts, params]))
+    assert.equal(s.store.records.get(s.draft.id).status, 'awaiting_human')
+  }
+  restore()
 })

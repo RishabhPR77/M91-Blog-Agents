@@ -11,7 +11,7 @@ export const EVENT_TYPES = Object.freeze([
   'run.started', 'run.finished', 'run.failed', 'run.cancelled',
   'step.started', 'step.finished', 'step.failed', 'step.cancelled', 'step.output',
   'ai.call', 'loop.route', 'log',
-  'approval.waiting', 'approval.approved', 'approval.changes_requested', 'approval.rejected'
+  'approval.waiting', 'approval.approved', 'approval.changes_requested', 'approval.rejected', 'approval.reviewed'
 ])
 export const TERMINAL_TYPES = Object.freeze(['run.finished', 'run.failed', 'run.cancelled'])
 

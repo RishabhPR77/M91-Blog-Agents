@@ -14,7 +14,8 @@
 // npm run promo -- --brief-id=<id> [--version=<n>]
 // npm run test:await -- --brief-id=<id> [--version=<n>]   TEST-ONLY, needs ALLOW_TEST_COMMANDS=true
 // npm run approvals -- --list
-// npm run approve -- --brief-id=<id>
+// npm run approve -- --brief-id=<id> [--force-unreviewed]
+// npm run review -- --brief-id=<id>   one Reviewer call on the waiting version (no routing)
 // npm run revise -- --brief-id=<id> --feedback "<text>" [--quote "<exact sentence>"] …
 // npm run reject -- --brief-id=<id> [--reason "<text>"]
 // npm run checks -- --file <post.md> --brief-id <id>
@@ -308,8 +309,8 @@ async function main() {
   }
 
   // The human's decisions on a waiting draft (Phase 5.5): approve | revise | reject.
-  if (['approve', 'revise', 'reject'].includes(args._[0])) {
-    const mode = { approve: 'approve', revise: 'human_revise', reject: 'reject_topic' }[args._[0]]
+  if (['approve', 'revise', 'reject', 'review'].includes(args._[0])) {
+    const mode = { approve: 'approve', revise: 'human_revise', reject: 'reject_topic', review: 'approval_review' }[args._[0]]
     if (typeof args['brief-id'] !== 'string') throw new Error(`usage: npm run ${args._[0]} -- --brief-id=<id>${args._[0] === 'revise' ? ' --feedback "<text>" [--quote "<exact sentence>"]' : args._[0] === 'reject' ? ' [--reason "<text>"]' : ''}`)
     const params = { brief_id: args['brief-id'] }
     if (mode === 'human_revise') {
@@ -318,6 +319,7 @@ async function main() {
       if (quotes.length) params.quotes = quotes
     }
     if (mode === 'reject_topic' && typeof args.reason === 'string') params.reason = args.reason
+    if (mode === 'approve' && args['force-unreviewed']) params.force_unreviewed = true
     const manager = createRunManager({ config })
     const { run_id } = await manager.startRun({ mode, trigger: 'cli', params })
     const result = await manager.wait(run_id)

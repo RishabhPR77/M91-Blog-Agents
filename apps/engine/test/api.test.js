@@ -330,3 +330,42 @@ test('approval API: list, detail, approve / revise / reject (202), and the 400 /
     assert.equal(store.records.get(v1.id).status, 'changes_requested')
   })
 })
+
+test('approval API: approve refuses an unreviewed version (409), force_unreviewed (400 / 202, shown in the run), review action (202), hard checks (409)', async () => {
+  const A = '261018-1500-AAAA'
+  const F = '261018-1500-FFFF'
+  const H = '261018-1500-HHHH'
+  await withApi({}, async ({ call, store, manager }) => {
+    for (const [b, hard] of [[A, true], [F, true], [H, false]]) {
+      await store.createRecord({ type: 'brief', briefId: b, payload: { brief_id: b, brief_version: 1, titles: ['T'] }, status: 'awaiting_human', version: 1 })
+      await store.createRecord({ type: 'draft', briefId: b, payload: { title: 'T', version: 1, brief_version: 1, post_markdown: '# T\n\nA ringing phone gets attention fast.', checks: { hard_passed: hard, results: [] } }, status: 'awaiting_human', version: 1, meta: { brief_version: 1, awaiting_since: '2026-10-19T10:00:00+05:30', review_total: null } })
+    }
+    const refused = await call('POST', `/api/approvals/${A}/approve`, {})
+    assert.deepEqual([refused.status, refused.json.error.code, refused.json.error.message], [409, 'not_reviewed', 'This version was not checked by the Reviewer. Review it first, or approve with force_unreviewed.'])
+    const badForce = await call('POST', `/api/approvals/${A}/approve`, { force_unreviewed: 'yes' })
+    assert.deepEqual([badForce.status, badForce.json.error.code], [400, 'bad_params'])
+
+    // Review first (1 Reviewer call), then approve without force.
+    const review = await call('POST', `/api/approvals/${A}/review`, {})
+    assert.equal(review.status, 202)
+    const reviewed = await manager.wait(review.json.run_id)
+    assert.equal(reviewed.run.mode, 'approval_review')
+    assert.equal(reviewed.run.result_summary, 'review of v1: pass (score 90); still awaiting your approval')
+    assert.equal((await call('GET', '/api/approvals')).json.approvals.find((x) => x.brief_id === A).total, 90)
+    const approved = await call('POST', `/api/approvals/${A}/approve`, {})
+    assert.equal(approved.status, 202)
+    assert.equal((await manager.wait(approved.json.run_id)).run.approved_unreviewed, false)
+
+    // The explicit override, visible in the run record.
+    const forced = await call('POST', `/api/approvals/${F}/approve`, { force_unreviewed: true })
+    assert.equal(forced.status, 202)
+    await manager.wait(forced.json.run_id)
+    const run = (await call('GET', `/api/runs/${forced.json.run_id}`)).json.run
+    assert.equal(run.approved_unreviewed, true)
+    assert.equal(run.result_summary, 'approved by you (v1, not reviewed)')
+
+    // Hard checks failed: never approvable, not even with force_unreviewed.
+    const hard = await call('POST', `/api/approvals/${H}/approve`, { force_unreviewed: true })
+    assert.deepEqual([hard.status, hard.json.error.code], [409, 'hard_checks_failed'])
+  })
+})
