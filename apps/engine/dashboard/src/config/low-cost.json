@@ -1,0 +1,7 @@
+{
+  "scout": { "question_groups": [1], "questions_per_group": 3, "max_calls": 6, "docs_max_chars": 15000, "docs_max_pages": 5 },
+  "ai_max_retries": 1,
+  "reviewer_max_source_checks": 1,
+  "max_writer_revisions": 1,
+  "max_ai_rounds_per_post": 2
+}
