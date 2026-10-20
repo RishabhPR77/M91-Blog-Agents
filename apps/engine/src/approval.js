@@ -10,6 +10,7 @@ import { loadDraft } from './reviewer/inputs.js'
 import { quoteFound } from './reviewer/decide.js'
 import { draftVersion, draftBriefVersion, draftsOf } from './writer/save.js'
 import { runPromo } from './promo/index.js'
+import { runDesigner, isInteractive } from './designer/index.js'
 import { createPublisher } from './publisher/index.js'
 import { setLeadStatus } from './strategist/save.js'
 
@@ -131,7 +132,7 @@ async function notifySafe(notifier, warnings, kind, args) {
 
 /**
  * B2: the human approves. Statuses → approved (approved_by "human", approved_at), the promo pack (never
- * blocks), placeholder Designer and Publisher steps, Slack, approval.approved.
+ * blocks), the Designer (never blocks), the Publisher step, Slack, approval.approved.
  * ctx: { briefId, runId, config, store, notifier, agents?, runStep(agent, fn), now }
  */
 export async function runApprove({ briefId, runId, params = {}, config, store, notifier, agents, runStep, now = Date.now, publisher = null }) {
@@ -160,12 +161,26 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
     if (isCancel(error)) throw error
     warnings.push(`promo pack failed (approval stands): ${error.message}`)
   }
-  // Phase 8 replaces the Designer placeholder; until then the post goes out as Markdown.
-  await runStep('designer', async () => {
-    const message = 'Designer: not built yet (Phase 8)'
-    log.info(message, { briefId, version })
-    return { placeholder: true, message }
-  })
+  // Phase 8: the Designer chooses interactive blocks for the approved post. It never blocks the approval:
+  // a failure saves a "fallback" block_doc (or is a warning) and the post goes out as plain Markdown.
+  if (!isInteractive(d, config)) {
+    await runStep('designer', async () => {
+      const message = 'Interactive blocks are off for this post: the Designer did not run'
+      log.info(message, { briefId, version })
+      return { placeholder: true, message }
+    })
+  } else {
+    try {
+      const inMemory = config.runtime.dryRun ? { ...d.payload, version, brief_version: briefVersion } : null
+      const designed = await runStep('designer', async () => (agents?.designer
+        ? (await agents.designer({ runId, briefId, briefVersion, draft: { version, brief_version: briefVersion, draft: inMemory }, brief: briefRec?.payload, config })).output
+        : runDesigner({ briefId, runId, version, draft: inMemory, brief: briefRec?.payload }, { config, store })))
+      warnings.push(...(designed?.warnings ?? []))
+    } catch (error) {
+      if (isCancel(error)) throw error
+      warnings.push(`Designer failed (the post stays plain Markdown): ${error.message}`)
+    }
+  }
 
   const title = d.payload?.title ?? briefRec?.payload?.titles?.[0] ?? briefId
   await notifySafe(notifier, warnings, 'slack', `✅ Approved by you: *${title}* · v${version}`)

@@ -12,6 +12,7 @@
 // npm run lessons -- --list | --delete <memory_id>
 // npm run reviewer -- --brief-id=<id> [--version=<n>] [--brief-version=<n>] [--route]
 // npm run promo -- --brief-id=<id> [--version=<n>]
+// npm run designer -- --brief-id=<id> [--version=<n>]   the Designer for an approved or published draft (1–2 AI calls)
 // npm run test:await -- --brief-id=<id> [--version=<n>]   TEST-ONLY, needs ALLOW_TEST_COMMANDS=true
 // npm run publish -- --brief-id=<id> · unpublish -- --slug=<slug> · set-index -- --slug=<slug> --noindex=true|false · rebuild-blog
 // npm run blog:sync   (published posts from Mem0 → apps/blog/src/content/posts; no build, no deploy)
@@ -88,6 +89,19 @@ export async function pinCommand(args, { store }) {
   if (typeof args.topic !== 'string' || !DATE_RE.test(String(args.date))) throw new Error('usage: npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"]')
   const { pin, saved } = await addPin(store, { topic: args.topic, date: args.date, priority: args.priority === 'high' ? 'high' : undefined, notes: typeof args.notes === 'string' ? args.notes : undefined })
   console.log(saved ? `Pinned ${pin.pinned_id} for ${pin.target_date} (${pin.priority}).` : `DRY_RUN: not saved. Would pin ${pin.pinned_id} for ${pin.target_date}.`)
+}
+
+/** The Designer's result: the blocks it kept (with why), dropped segments (with reasons), integrity, calls. */
+export function printDesigner(d, print = console.log) {
+  print(`--- Designer for ${d.brief_id} v${d.version} · ${d.status} · ${d.model_used} · repairs ${d.repairs_used} · block_doc ${d.record_id} ---`)
+  print(d.summary_line)
+  print(`KEPT (${d.kept.length})`)
+  for (const k of d.kept) print(`  ${k.block_type} ${k.part_ids.join(',')}: ${k.why}`)
+  print(`DROPPED (${d.dropped.length})`)
+  for (const x of d.dropped) print(`  ${x.block_type} ${x.part_ids.join(',')}: ${x.reason}`)
+  print(`INTEGRITY ${d.integrity?.passed ? 'passed' : 'FAILED'}${d.integrity?.details?.length ? `: ${d.integrity.details.join(' | ')}` : ''}`)
+  print(`BLOCKS ${d.blocks ? d.blocks.map((b) => `${b.id} ${b.type}`).join(' · ') : 'none (the post stays plain Markdown)'}`)
+  if (d.error) print(`FALLBACK: ${d.error}`)
 }
 
 /** A review in full: gates and areas with evidence, total, feedback with quote_found, sources, lessons. */
@@ -357,6 +371,18 @@ async function main() {
     console.table((result.run?.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, ai_calls: s.ai_calls, summary: String(s.summary).slice(0, 80), error: s.error ? String(s.error).slice(0, 50) : '' })))
     console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
     for (const w of result.run?.warnings ?? []) console.log(`WARNING: ${w}`)
+    process.exitCode = result.status === 'succeeded' ? 0 : 1
+    return
+  }
+
+  if (args._[0] === 'designer') {
+    if (typeof args['brief-id'] !== 'string') throw new Error('usage: npm run designer -- --brief-id=<id> [--version=<n>]')
+    const params = { brief_id: args['brief-id'], ...(args.version && { version: Number(args.version) }) }
+    const manager = createRunManager({ config })
+    const { run_id } = await manager.startRun({ mode: 'designer', trigger: 'cli', params })
+    const result = await manager.wait(run_id)
+    if (result.output) printDesigner(result.output)
+    else console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
     process.exitCode = result.status === 'succeeded' ? 0 : 1
     return
   }

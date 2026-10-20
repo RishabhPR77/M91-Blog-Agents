@@ -36,7 +36,10 @@ test('the defaults written in env.example are valid config values', () => {
 
 test('Phase 3.5 keys: designer validated, blog settings, dashboard password only with auth', () => {
   const c = loadConfig(fakeEnv())
-  assert.deepEqual(c.designer, { service: 'openai', model: 'gpt-5.6-luna', delivery: 'rtlayer' })
+  assert.deepEqual(c.designer, { service: 'openai', model: 'gpt-5.6-luna', delivery: 'sync', maxInteractiveBlocks: 6, maxRepairs: 1, interactiveDefault: true })
+  assert.throws(() => loadConfig(fakeEnv({ DESIGNER_MAX_INTERACTIVE_BLOCKS: '21' })), /DESIGNER_MAX_INTERACTIVE_BLOCKS/)
+  assert.throws(() => loadConfig(fakeEnv({ INTERACTIVE_DEFAULT: 'maybe' })), /INTERACTIVE_DEFAULT/)
+  assert.equal(loadConfig(fakeEnv({ INTERACTIVE_DEFAULT: 'false', DESIGNER_MAX_REPAIRS: '0' })).designer.interactiveDefault, false)
   assert.deepEqual(c.blog, { appName: 'm91-blog', baseUrl: 'https://m91-blog.embarko.app', embarkoDeployToken: undefined, noindexFirstNPosts: 10, embarkoApiBase: 'https://ship.embarko.ai', embarkoAgentName: 'm91-blog-engine', buildTimeoutMs: 300000, publishVerifyTimeoutMs: 120000 })
   assert.equal(c.dashboard.port, 5173)
   assert.equal(c.schedule, undefined, 'no scheduler for now')

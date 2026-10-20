@@ -63,7 +63,8 @@ const DEFAULTS = {
   // Phase 3.5: dashboard API
   DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', PORT: '8080',
   // Designer (Phase 8) and blog + Embarko (Phase 7)
-  DESIGNER_AI_SERVICE: 'openai', DESIGNER_AI_MODEL: 'gpt-5.6-luna', DESIGNER_DELIVERY: 'rtlayer',
+  DESIGNER_AI_SERVICE: 'openai', DESIGNER_AI_MODEL: 'gpt-5.6-luna', DESIGNER_DELIVERY: 'sync',
+  DESIGNER_MAX_INTERACTIVE_BLOCKS: '6', DESIGNER_MAX_REPAIRS: '1', INTERACTIVE_DEFAULT: 'true',
   BLOG_APP_NAME: 'm91-blog', BLOG_BASE_URL: 'https://m91-blog.embarko.app', NOINDEX_FIRST_N_POSTS: '10',
   // Phase 3: Strategist
   STRATEGIST_MAX_REPAIRS: '1', RECENT_BRIEFS_WINDOW: '10', TITLE_MAX_CHARS: '70', KEYWORD_MAX_WORDS: '6', OUTLINE_MIN_SECTIONS: '4',
@@ -329,8 +330,13 @@ export function loadConfig(env = process.env) {
       auth: dashboardAuth,
       password: str('DASHBOARD_PASSWORD', { required: dashboardAuth === true })
     },
-    // Used from Phase 8 (validated now).
-    designer: agent('designer'),
+    // Phase 8: the Designer chooses interactive blocks (it never writes text).
+    designer: {
+      ...agent('designer'),
+      maxInteractiveBlocks: int('DESIGNER_MAX_INTERACTIVE_BLOCKS', { max: 20 }),
+      maxRepairs: int('DESIGNER_MAX_REPAIRS', { max: 3 }),
+      interactiveDefault: bool('INTERACTIVE_DEFAULT')
+    },
     // Blog + Embarko, used from Phase 7. The deploy token is optional until then.
     blog: {
       appName: str('BLOG_APP_NAME', { required: true }),

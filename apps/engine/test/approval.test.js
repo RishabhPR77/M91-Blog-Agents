@@ -18,13 +18,13 @@ const recordsOf = (store, type) => [...store.records.values()].filter((r) => r.t
 
 /** A brief whose v1 draft waits for the human, its cluster lead, and a run manager (fake Writer AI, mock Reviewer, stub promo). */
 /** reviewed: 'pass' | 'fail' | null — the review record of v1; hardPassed: v1's hard content checks (null = no results). */
-async function setup({ env = {}, reviewer = mockReviewer(), writerAnswers = {}, notifier = fakeNotifier(), draftStatus = 'awaiting_human', reviewed = 'pass', hardPassed = true } = {}) {
+async function setup({ env = {}, reviewer = mockReviewer(), writerAnswers = {}, notifier = fakeNotifier(), draftStatus = 'awaiting_human', reviewed = 'pass', hardPassed = true, designer = stubAgents.designer, interactive } = {}) {
   const cfg = config(env)
   const store = memoryStore()
   await store.createRecord({ type: 'question_cluster', payload: { cluster_id: 'C-1', main_question: 'How does agent approval work?' }, status: 'used' })
   await store.createRecord({ type: 'brief', briefId: BRIEF_ID, payload: brief(), status: 'awaiting_human', version: 1 })
   const d = { ...draftAnswer(), brief_id: BRIEF_ID, version: 1, brief_version: 1, ...(hardPassed !== null && { checks: { hard_passed: hardPassed, results: [] } }) }
-  const draft = await store.createRecord({ type: 'draft', briefId: BRIEF_ID, payload: d, status: draftStatus, version: 1, meta: { brief_version: 1, review_total: 88 } })
+  const draft = await store.createRecord({ type: 'draft', briefId: BRIEF_ID, payload: d, status: draftStatus, version: 1, meta: { brief_version: 1, review_total: 88, ...(interactive !== undefined && { interactive }) } })
   if (reviewed) await store.createRecord({ type: 'review', briefId: BRIEF_ID, payload: { brief_id: BRIEF_ID, version: 1, brief_version: 1, pass: reviewed === 'pass', total: reviewed === 'pass' ? 88 : 70, feedback: [] }, status: reviewed, version: 1, meta: { brief_version: 1 } })
   const ai = fakeAi(writerAnswers)
   const manager = createRunManager({
@@ -34,7 +34,7 @@ async function setup({ env = {}, reviewer = mockReviewer(), writerAnswers = {}, 
     agentsFactory: (rc, { store: st, notifier: nt }) => ({
       ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend: ai, urlChecker: okChecker(), now } }),
       reviewer,
-      promo: stubAgents.promo
+      promo: stubAgents.promo, designer
     })
   })
   const run = async (mode, params = {}) => {
@@ -53,7 +53,7 @@ test('approve: statuses approved (by human, with time), promo pack, placeholder 
   assert.equal(r.run.result_summary, 'approved by you (v1, score 88)')
   assert.deepEqual(r.run.steps.map((x) => [x.name, x.status, x.summary]), [
     ['promo', 'succeeded', 'Promo pack ok: LinkedIn 65 chars · X thread 3 posts · 3 video scenes · 0 issue(s)'],
-    ['designer', 'succeeded', 'Designer: not built yet (Phase 8)'],
+    ['designer', 'succeeded', 'no interactive blocks · integrity passed'],
     ['publisher', 'succeeded', 'Publishing is off (AUTO_PUBLISH=false): use Publish in the dashboard']
   ])
   const d = s.store.records.get(s.draft.id)
@@ -308,4 +308,25 @@ test('a counter prompt never reopens a published draft (unpublish first); approv
   await assert.rejects(s.run('human_revise', { feedback: 'Shorter please.' }), (e) => e.code === 'published' && e.status === 409 && /unpublish it first/.test(e.message))
   assert.equal(s.ai.requests.length, 0)
   restore()
+})
+
+test('approve runs the Designer after the promo pack; interactive off skips it; a Designer crash never blocks the approval', async () => {
+  const restore = quiet()
+  let seen = null
+  const on = await setup({ designer: async (ctx) => { seen = ctx; return stubAgents.designer(ctx) } })
+  const r1 = await on.run('approve')
+  assert.equal(seen.briefId, BRIEF_ID)
+  assert.equal(seen.draft.version, 1)
+  assert.deepEqual(r1.run.steps.map((x) => x.name), ['promo', 'designer', 'publisher'])
+  const off = await setup({ interactive: false, designer: async () => { throw new Error('must not run') } })
+  const r2 = await off.run('approve')
+  assert.equal(r2.status, 'succeeded')
+  assert.equal(r2.run.steps.find((x) => x.name === 'designer').summary, 'Interactive blocks are off for this post: the Designer did not run')
+  const crash = await setup({ designer: async () => { throw new Error('designer exploded') } })
+  const r3 = await crash.run('approve')
+  restore()
+  assert.equal(r3.status, 'succeeded')
+  assert.equal(crash.store.records.get(crash.draft.id).status, 'approved')
+  assert.ok(r3.run.warnings.includes('Designer failed (the post stays plain Markdown): designer exploded'))
+  assert.equal(r3.run.steps.find((x) => x.name === 'designer').status, 'failed')
 })

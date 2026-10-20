@@ -39,6 +39,7 @@
     "reviewer": "node --env-file=../../.env src/cli.js reviewer",
     "reviewer:dry": "cross-env DRY_RUN=true node --env-file=../../.env src/cli.js reviewer",
     "promo": "node --env-file=../../.env src/cli.js promo",
+    "designer": "node --env-file=../../.env src/cli.js designer",
     "approvals": "node --env-file=../../.env src/cli.js approvals",
     "approve": "node --env-file=../../.env src/cli.js approve",
     "revise": "node --env-file=../../.env src/cli.js revise",

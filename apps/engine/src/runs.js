@@ -19,6 +19,7 @@ import { runPipeline, defaultAgents, acquireLock, LockedError, summariseOutput }
 import { runReviewer } from './reviewer/index.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { runPromo, approvedDraft } from './promo/index.js'
+import { runDesigner, designableDraft } from './designer/index.js'
 import { createPublisher, publishPreflight, PublishError } from './publisher/index.js'
 import { draftsOf } from './writer/save.js'
 import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopic, runApprovalReview } from './approval.js'
@@ -28,8 +29,8 @@ import { runWriter } from './writer/index.js'
 import { loadBrief } from './writer/inputs.js'
 import { addToTimeline } from './timeline.js'
 
-export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'publish', 'unpublish', 'set_index', 'rebuild_blog'])
-export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'publish', 'unpublish', 'set_index', 'rebuild_blog'])
+export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog'])
+export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog'])
 // The Publisher's modes (Phase 7): code only, no AI calls.
 export const PUBLISH_MODES = Object.freeze(['publish', 'unpublish', 'set_index', 'rebuild_blog'])
 // The human's decisions on a draft that waits at awaiting_human (Phase 5.5).
@@ -118,6 +119,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (mode === 'writer') await checkWriterParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'reviewer') await checkReviewerParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'promo') await checkPromoParams(params, configForRun(config, { dryRun, params }))
+    if (mode === 'designer') await checkDesignerParams(params, configForRun(config, { dryRun, params }))
     if (PUBLISH_MODES.includes(mode)) await checkPublishParams(mode, params, configForRun(config, { dryRun, params }))
     if (DECISION_MODES.includes(mode)) {
       const runConfig0 = configForRun(config, { dryRun, params })
@@ -329,6 +331,22 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       const status = r.state === 'awaiting_human' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
       return { status, brief_id: params.brief_id, summary: r.error ?? r.summary ?? `review loop ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
     }
+    if (mode === 'designer') {
+      // Phase 8: re-run the Designer for a brief's approved (or published) draft. A fallback is not a failure.
+      emit('step.started', { agent: 'designer', step: 'designer' })
+      try {
+        const out = agents?.designer
+          ? (await agents.designer({ runId, briefId: params.brief_id, draft: { version: params.version }, config: runConfig })).output
+          : await runDesigner({ briefId: params.brief_id, version: params.version, runId }, { config: runConfig, store })
+        emit('step.finished', { agent: 'designer', step: 'designer' })
+        const s = summariseOutput('designer', out)
+        if (s) emit('step.output', { agent: 'designer', step: 'designer', ...s })
+        return { status: 'succeeded', brief_id: params.brief_id, summary: `Designer for ${params.brief_id} v${out.version}: ${out.summary_line}`, warnings: out.warnings, output: out }
+      } catch (error) {
+        stepEnded('designer', error, signal)
+        throw error
+      }
+    }
     if (mode === 'reviewer' || mode === 'promo') {
       const agent = mode
       emit('step.started', { agent, step: agent })
@@ -395,6 +413,13 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     checkDraftParams(params, 'promo')
     const draft = await approvedDraft(storeFactory(runConfig), params.brief_id, { version: params.version, briefVersion: params.brief_version })
     if (!draft) throw new RunError('no_approved_draft', `brief ${params.brief_id} has no approved draft${params.version ? ` v${params.version}` : ''}`)
+  }
+
+  /** designer mode: params.brief_id of a brief with an approved or published draft (params.version optional). */
+  async function checkDesignerParams(params, runConfig) {
+    checkDraftParams(params, 'designer')
+    const draft = await designableDraft(storeFactory(runConfig), params.brief_id, { version: params.version })
+    if (!draft) throw new RunError('no_draft', `brief ${params.brief_id} has no approved or published draft${params.version ? ` v${params.version}` : ''}`, 409)
   }
 
   /** The Publisher's modes: preflight (token, site URL) and params, before the run starts. */

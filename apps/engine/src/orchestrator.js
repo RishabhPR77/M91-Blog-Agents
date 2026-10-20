@@ -11,6 +11,7 @@ import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
 import { runReviewer } from './reviewer/index.js'
 import { runPromo } from './promo/index.js'
+import { runDesigner } from './designer/index.js'
 import { loadBrief } from './writer/inputs.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { draftVersion, draftBriefVersion } from './writer/save.js'
@@ -55,6 +56,11 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
       const dry = config.runtime.dryRun
       const output = await runPromo({ briefId: ctx.briefId, runId: ctx.runId, version: ctx.draft?.version, briefVersion: ctx.draft?.brief_version ?? ctx.briefVersion, draft: dry ? inMemoryDraft(ctx) : null, brief: ctx.brief }, deps)
       return { model: output.model_used ?? config.promo.model, output }
+    },
+    async designer(ctx) {
+      const dry = config.runtime.dryRun
+      const output = await runDesigner({ briefId: ctx.briefId, runId: ctx.runId, version: ctx.draft?.version, draft: dry ? inMemoryDraft(ctx) : null, brief: ctx.brief }, deps)
+      return { model: output.model_used ?? config.designer.model, output }
     },
     async strategist(ctx) {
       const output = ctx.strategistMode === 'rebrief'
@@ -108,6 +114,12 @@ export function summariseOutput(agent, out) {
     }
   }
   if (out.placeholder) return { message: out.message, data: { placeholder: true } }
+  if (agent === 'designer' && out.summary_line) {
+    return {
+      message: out.summary_line,
+      data: { record_id: out.record_id ?? null, status: out.status, blocks: out.kept?.length ?? 0, dropped: out.dropped?.length ?? 0, integrity: out.integrity?.passed ?? null, repairs_used: out.repairs_used ?? 0 }
+    }
+  }
   if (agent === 'publisher' && out.summary) return { message: out.summary, data: { url: out.url ?? null, dist: out.dist ?? null } }
   if (agent === 'promo' && out.pack) {
     return {

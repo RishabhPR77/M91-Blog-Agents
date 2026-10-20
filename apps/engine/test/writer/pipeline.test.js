@@ -29,7 +29,7 @@ function setup(env = {}, reviewer = mockReviewer()) {
     agentsFactory: (rc, { store: st, notifier: nt }) => ({
       ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend: ai, urlChecker: okChecker(), now } }),
       scout: stubAgents.scout,
-      promo: stubAgents.promo,
+      promo: stubAgents.promo, designer: stubAgents.designer,
       reviewer,
       async strategist(ctx) {
         const b = brief({ brief_id: ctx.briefId })
@@ -139,7 +139,7 @@ test('DRY_RUN pipeline with fail_once: the Writer works from the in-memory brief
     agentsFactory: (rc, { store: st, notifier: nt }) => ({
       ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend: ai, urlChecker: okChecker(), now } }),
       scout: stubAgents.scout,
-      promo: stubAgents.promo,
+      promo: stubAgents.promo, designer: stubAgents.designer,
       reviewer: mockReviewer(['fail', 'pass']),
       async strategist(ctx) {
         const b = brief({ brief_id: ctx.briefId })

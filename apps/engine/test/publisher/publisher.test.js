@@ -411,7 +411,7 @@ function manager(s, env, blog = fakeBlog()) {
     storeFactory: () => s.store,
     notifierFactory: () => notifier,
     publisherFactory: (rc, d) => createPublisher({ config: rc, ...d, fetch: blog.fetch, now, sleepFn: blog.sleepFn ?? (async () => {}), build: blog.build, deployFn: blog.deployFn, blogDir: blog.blogDir, contentDir: blog.contentDir }),
-    agentsFactory: (rc, { store, notifier: nt }) => ({ ...defaultAgents({ config: rc, store, notifier: nt, agentDeps: { aiSend: fakeAi(), urlChecker: okChecker(), now } }), reviewer: mockReviewer(), promo: stubAgents.promo })
+    agentsFactory: (rc, { store, notifier: nt }) => ({ ...defaultAgents({ config: rc, store, notifier: nt, agentDeps: { aiSend: fakeAi(), urlChecker: okChecker(), now } }), reviewer: mockReviewer(), promo: stubAgents.promo, designer: stubAgents.designer })
   })
   const run = async (mode, params = {}) => {
     const { run_id } = await m.startRun({ mode, params })
