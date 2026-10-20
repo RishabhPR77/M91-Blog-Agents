@@ -63,7 +63,7 @@ export function publicSettings(config) {
     scout: {
       max_calls: sc.maxCalls, reuse_hours: sc.reuseHours, min_open_clusters: sc.minOpenClusters, questions_per_group: sc.questionsPerGroup,
       question_groups: sc.questionGroups, story_lookback_days: sc.storyLookbackDays, rapid_response_days: sc.rapidResponseDays,
-      style_reuse_days: sc.styleReuseDays, docs_max_pages: sc.docsMaxPages, docs_max_chars: sc.docsMaxChars, dedupe_similarity: sc.dedupeSimilarity
+      style_reuse_days: sc.styleReuseDays, docs_max_pages: sc.docsMaxPages, docs_max_chars: sc.docsMaxChars, dedupe_similarity: sc.dedupeSimilarity, dedupe_mode: sc.dedupeMode, dedupe_similarity_local: sc.dedupeSimilarityLocal
     },
     strategist: {
       max_repairs: st.maxRepairs, recent_briefs_window: st.recentBriefsWindow, title_max_chars: st.titleMaxChars,

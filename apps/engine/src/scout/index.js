@@ -13,6 +13,7 @@ import { classifyCluster, mergeClusterPayload, storedStoryUrls, isDuplicateTutor
 import { rankClusters } from './rank.js'
 import { emit, scoutStepName, throwIfCancelled, CancelledError } from '../events.js'
 import { saveRunLog } from '../util/runlog.js'
+import { dedupeSettings } from '../dedupe.js'
 
 /** An error that fails the pipeline run (brief 13). */
 export class ScoutError extends Error {
@@ -169,6 +170,7 @@ export async function runScout(params = {}, deps = {}) {
   // ======================= research mode =======================
 
   async function researchMode() {
+    const dedupe = dedupeSettings(config)
     const counts = { questions: 0, clusters_new: 0, clusters_merged: 0, stories: 0, tutorials: 0, dropped_dead_links: 0 }
     await housekeeping()
 
@@ -273,7 +275,7 @@ export async function runScout(params = {}, deps = {}) {
             if (url && isAllowed(url)) supporting.push({ ...f, source_url: url })
           }
           protectFields(t, [], ['reader_outcome'])
-          if (await isDuplicateTutorial(store, t, sc.dedupeSimilarity)) continue
+          if (await isDuplicateTutorial(store, t, dedupe.threshold, dedupe.mode)) continue
           const payload = { tutorial_id: newRecordId('T', new Date(now())), ...t, supporting_facts: supporting, steps_outline: steps }
           const rec = await store.createRecord({ type: 'tutorial_lead', briefId: null, payload, status: 'open', topicGroup: t.topic_group, date: today })
           newTutorials.push({ ...payload, id: rec.id })
@@ -316,7 +318,7 @@ export async function runScout(params = {}, deps = {}) {
           protectFields(c.demand, [], ['reason'])
           protectFields(c.m91_fit, [], ['reason'])
           const cluster = { ...c, source_urls: urls, freshness: freshnessFromDates(urls.map((u) => dateByUrl.get(urlKey(u.url))).filter(Boolean), today) }
-          const decision = await classifyCluster(store, cluster, sc.dedupeSimilarity)
+          const decision = await classifyCluster(store, cluster, dedupe.threshold, dedupe.mode)
           if (decision.action === 'merge') {
             pendingMerges.set(decision.match.id, mergeClusterPayload(pendingMerges.get(decision.match.id) ?? decision.match.payload, cluster, today))
             counts.clusters_merged++

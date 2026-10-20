@@ -48,6 +48,8 @@ const DEFAULTS = {
   SCOUT_QUESTIONS_PER_GROUP: '8', SCOUT_QUESTION_GROUPS: '1,2,3,4,5', STORY_LOOKBACK_DAYS: '30', RAPID_RESPONSE_DAYS: '7', STYLE_REUSE_DAYS: '14',
   // viaSocket refuses a `message` over 50,000 characters; the docs bundle must leave room for the rest.
   DOCS_MAX_PAGES: '15', DOCS_MAX_CHARS: '45000', M91_DOCS_HOSTS: 'm91-api.msg91.com,m91.msg91.com', DEDUPE_SIMILARITY: '0.85',
+  // Phase 9 A3: duplicate checks in memory (trigram similarity) or with a Mem0 search
+  DEDUPE_MODE: 'local', DEDUPE_SIMILARITY_LOCAL: '0.65',
   URL_CHECK_TIMEOUT_MS: '10000',
   // Phase 4: Writer
   WRITER_MAX_REPAIRS: '1', WRITER_REVISION_INPUT: 'context', TUTORIAL_SOURCE_MAX_CHARS: '40000', SLACK_POST_DRAFTS: 'false',
@@ -232,6 +234,8 @@ export function loadConfig(env = process.env) {
       docsMaxChars: int('DOCS_MAX_CHARS', { min: 1000, max: 48000 }),
       docsHosts: list('M91_DOCS_HOSTS').map((h) => h.toLowerCase()),
       dedupeSimilarity: num('DEDUPE_SIMILARITY', { min: 0, max: 1 }),
+      dedupeMode: oneOf('DEDUPE_MODE', ['local', 'mem0']),
+      dedupeSimilarityLocal: num('DEDUPE_SIMILARITY_LOCAL', { min: 0, max: 1 }),
       urlCheckTimeoutMs: int('URL_CHECK_TIMEOUT_MS', { min: 100 }),
       competitors: list('COMPETITORS')
     },

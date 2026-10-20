@@ -21,7 +21,7 @@ test('rank: sorted high first; ties go to the least-used topic group in the last
 test('dedupe: match to an approved brief → covered (update candidate)', async () => {
   const store = memoryStore({ similarity: () => 0.9 })
   await store.createRecord({ type: 'brief', briefId: '261001-0900-ABCD', payload: { topic: 'x' }, status: 'approved' })
-  const d = await classifyCluster(store, { main_question: 'x?' }, 0.85)
+  const d = await classifyCluster(store, { main_question: 'x?' }, 0.85, 'mem0')
   assert.equal(d.action, 'covered')
   assert.equal(d.coveredBy, '261001-0900-ABCD')
 })
@@ -29,12 +29,12 @@ test('dedupe: match to an approved brief → covered (update candidate)', async 
 test('dedupe: match to an open cluster → merge; below threshold → new; active brief → new', async () => {
   const store = memoryStore({ similarity: () => 0.9 })
   await store.createRecord({ type: 'question_cluster', payload: { main_question: 'x' }, status: 'open' })
-  assert.equal((await classifyCluster(store, { main_question: 'x?' }, 0.85)).action, 'merge')
-  assert.equal((await classifyCluster(store, { main_question: 'x?' }, 0.95)).action, 'new')
+  assert.equal((await classifyCluster(store, { main_question: 'x?' }, 0.85, 'mem0')).action, 'merge')
+  assert.equal((await classifyCluster(store, { main_question: 'x?' }, 0.95, 'mem0')).action, 'new')
 
   const s2 = memoryStore({ similarity: () => 0.99 })
   await s2.createRecord({ type: 'brief', briefId: 'b', payload: { topic: 'x' }, status: 'active' })
-  assert.equal((await classifyCluster(s2, { main_question: 'x' }, 0.85)).action, 'new')
+  assert.equal((await classifyCluster(s2, { main_question: 'x' }, 0.85, 'mem0')).action, 'new')
 })
 
 test('merge payload appends questions and URLs without duplicates', () => {
@@ -52,6 +52,6 @@ test('merge payload appends questions and URLs without duplicates', () => {
 test('tutorial duplicate: same target and similar title', async () => {
   const store = memoryStore({ similarity: () => 0.9 })
   await store.createRecord({ type: 'tutorial_lead', payload: { title: 't', target: 'Claude Code' }, status: 'open' })
-  assert.equal(await isDuplicateTutorial(store, { title: 't2', target: 'claude code' }, 0.85), true)
-  assert.equal(await isDuplicateTutorial(store, { title: 't2', target: 'Cursor' }, 0.85), false)
+  assert.equal(await isDuplicateTutorial(store, { title: 't2', target: 'claude code' }, 0.85, 'mem0'), true)
+  assert.equal(await isDuplicateTutorial(store, { title: 't2', target: 'Cursor' }, 0.85, 'mem0'), false)
 })

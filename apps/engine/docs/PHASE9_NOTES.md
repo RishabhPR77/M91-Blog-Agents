@@ -67,9 +67,40 @@ Decision runs (measured): Reviewer check 28, approve 34, publish 28, unpublish 2
   update, together with its new rank. New clusters are created after ranking, with their rank already set:
   before, each was created and then updated with its rank.
 
+## A3: duplicate checks in memory
+
+- `src/dedupe.js` compares titles with a character-trigram (Dice) similarity, against lists the run already
+  holds: briefs, drafts, clusters and tutorials. The run store reads each list once. It is used by:
+  - the Scout's cluster check (merge, covered, or new);
+  - the Scout's tutorial check (a similar title for the same target);
+  - the Strategist's "already covered" check.
+
+  None of them sends a Mem0 search any more: yesterday's run used 2.
+- **DEDUPE_MODE=mem0** brings back the Mem0 search (with `DEDUPE_SIMILARITY`, 0.85).
+- **Threshold: 0.65, not the 0.45 the brief suggested.** These are the scores on real-looking titles:
+
+  | Pair | Score |
+  |---|---|
+  | "Send a One-Person Approval Alert" / "Send an approval alert to one person" | 1.000 |
+  | "How to Gate Destructive AI Agent Actions" / "Gating destructive actions of AI agents" (with keyword) | 0.902 |
+  | "How can HumanInTheLoop middleware reliably require human approval?" / "How do I make human-in-the-loop middleware reliably require approval?" | 0.869 |
+  | "How do I make my agent ask before deleting data?" / "How can I make my AI agent ask before it deletes data?" | 0.833 |
+  | "Bind Every AI Agent Human Approval to One Tool Call" / "Bind each human approval to a single tool call" | 0.697 |
+  | "How to set up M91 with Claude Code" / "How to set up M91 with Cursor" (different) | 0.615 |
+  | "How M91 Rings Through Silent Mode" / "Why does M91 ring through Do Not Disturb?" (close) | 0.552 |
+  | "Approve a risky agent step from your phone" / "Approve a refund over $500 from Slack" (different) | 0.435 |
+  | Other different topics | 0.03–0.25 |
+
+  Duplicates scored 0.70 or more, and different topics 0.62 or less. With 0.45, the Claude Code and Cursor
+  pair would count as a duplicate, and the "Approve …" pair was only 0.015 below the line. With 0.65, every
+  pair falls on the right side. The silent-mode pair counts as different: it is a close topic, but a
+  different question. The tests pin these pairs.
+
 ## New settings
 
 | Key | Default | Meaning |
 |---|---|---|
 | `ENGINE_DATA_DIR` | empty (`apps/engine/data`) | The engine's local data folder: the run lock and, from A5, the Mem0 usage numbers. Never content. |
 | `RUN_LOCK_STALE_MIN` | `10` | A run lock whose heartbeat is older than this (minutes) is taken over. |
+| `DEDUPE_MODE` | `local` | `local` (in-memory trigram similarity) or `mem0` (a Mem0 search per check). |
+| `DEDUPE_SIMILARITY_LOCAL` | `0.65` | The threshold for local duplicate checks (see A3). |

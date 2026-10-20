@@ -6,6 +6,7 @@ import { STANDING_CLAIMS, DEFAULT_CTA_TEXT } from './prompts.js'
 import { urlKey } from './inputs.js'
 import { storyDateRule } from '../scout/checks.js'
 import { isBlockType } from '@m91/content'
+import { findSimilar, dedupeSettings } from '../dedupe.js'
 
 const validate = new Ajv({ allErrors: true, strict: false }).compile(strategist_brief.schema)
 
@@ -255,10 +256,11 @@ export async function findProblems(b, { config, inputs, store, excludeBriefId = 
   if (kwWords > kwMax) P(`keyword "${b.keyword}" has ${kwWords} words; at most ${kwMax} (KEYWORD_MAX_WORDS): use the short phrase people search for, not a whole question`)
   if (b.supporting_keywords.length < 3 || b.supporting_keywords.length > 6) P(`supporting_keywords has ${b.supporting_keywords.length} items; it must have 3–6`)
 
-  // Duplicate of a past brief (Mem0 similarity).
-  if (b.titles[0] && store?.searchSimilar) {
-    const hits = await store.searchSimilar(`${b.titles[0]} — ${b.keyword}`, { type: 'brief', topK: 10 })
-    const dup = hits.find((h) => typeof h.score === 'number' && h.score >= config.scout.dedupeSimilarity && (h.briefId ?? h.payload?.brief_id) !== excludeBriefId && h.status !== 'superseded')
+  // Duplicate of a past brief: in memory against the briefs the run already listed (Phase 9 A3), or a Mem0 search.
+  if (b.titles[0] && store?.getRecords) {
+    const { mode, threshold } = dedupeSettings(config)
+    const hits = await findSimilar(store, `${b.titles[0]} — ${b.keyword}`, { types: ['brief'], mode, topK: 10 })
+    const dup = hits.find((h) => typeof h.score === 'number' && h.score >= threshold && (h.briefId ?? h.payload?.brief_id) !== excludeBriefId && h.status !== 'superseded')
     if (dup) P(`This topic is already covered by ${dup.briefId ?? dup.payload?.brief_id}: pick a different lead.`)
   }
 

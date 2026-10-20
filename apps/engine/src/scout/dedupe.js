@@ -1,15 +1,13 @@
-// Duplicate checks against Mem0 (brief 11.6).
+// Duplicate checks (brief 11.6): in memory by default (Phase 9 A3), or with a Mem0 search (DEDUPE_MODE=mem0).
 
 import { istDate } from '../util/time.js'
+import { findSimilar } from '../dedupe.js'
 
 const COVERED_STATUSES = ['approved', 'published']
 
 /** Best similar record of the given types for `text`. */
-async function topMatch(store, text, types) {
-  const hits = await store.searchSimilar(text, { topK: 20 })
-  return hits
-    .filter((h) => types.includes(h.type) && typeof h.score === 'number')
-    .sort((a, b) => b.score - a.score)[0] ?? null
+async function topMatch(store, text, types, mode) {
+  return (await findSimilar(store, text, { types, mode, topK: 1 }))[0] ?? null
 }
 
 const unique = (xs) => [...new Set(xs)]
@@ -26,8 +24,8 @@ const byUrl = (items) => {
  * - new:     otherwise
  * @returns {{ action: 'new'|'merge'|'covered', match?: object, coveredBy?: string }}
  */
-export async function classifyCluster(store, cluster, threshold) {
-  const match = await topMatch(store, cluster.main_question, ['brief', 'draft', 'question_cluster'])
+export async function classifyCluster(store, cluster, threshold, mode = 'local') {
+  const match = await topMatch(store, cluster.main_question, ['brief', 'draft', 'question_cluster'], mode)
   if (!match || match.score < threshold) return { action: 'new' }
   if (match.type === 'question_cluster' && match.status === 'open') return { action: 'merge', match }
   const covered = COVERED_STATUSES.includes(match.status) || (match.type === 'question_cluster' && match.status === 'used')
@@ -57,8 +55,8 @@ export async function storedStoryUrls(store) {
 }
 
 /** A tutorial with the same target and a similar title already exists. */
-export async function isDuplicateTutorial(store, tutorial, threshold) {
-  const hits = await store.searchSimilar(tutorial.title, { type: 'tutorial_lead', topK: 20 })
+export async function isDuplicateTutorial(store, tutorial, threshold, mode = 'local') {
+  const hits = await findSimilar(store, tutorial.title, { types: ['tutorial_lead'], mode })
   const target = String(tutorial.target).trim().toLowerCase()
   return hits.some((h) => h.score >= threshold && String(h.payload?.target ?? '').trim().toLowerCase() === target)
 }

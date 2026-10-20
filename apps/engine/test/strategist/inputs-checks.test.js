@@ -225,8 +225,8 @@ test('URL allowlist: input URLs and M91_CTA_URL pass, invented fails', async () 
   assert.deepEqual(await problemsOf(b, ctx), [])
 })
 
-test('duplicate check: a similar past brief is a problem (ignored for the brief being revised)', async () => {
-  const cfg = config()
+test('duplicate check (DEDUPE_MODE=mem0): a similar past brief is a problem (ignored for the brief being revised)', async () => {
+  const cfg = config({ DEDUPE_MODE: 'mem0' })
   const store = await seededStore({ similarity: (text, r) => (r.type === 'brief' ? 0.9 : 0) })
   await store.createRecord({ type: 'brief', briefId: 'B-OLD', status: 'approved', payload: { brief_id: 'B-OLD', titles: ['x'] } })
   const inputs = await buildInputs({ config: cfg, store, now })
@@ -268,4 +268,15 @@ test('auto-fix: http → https on both M91 docs hosts (m91-api.msg91.com and m91
   })
   const { brief } = autoFix(raw, { config: cfg, inputs })
   assert.deepEqual(brief.m91_facts_to_use.map((f) => f.source_url), ['https://m91-api.msg91.com/llms.txt', 'https://m91.msg91.com/llms.txt'])
+})
+
+test('duplicate check (local, Phase 9 A3): a past brief with a similar title is a problem; no Mem0 search', async () => {
+  const cfg = config()
+  const store = await seededStore()
+  store.searchSimilar = async () => { throw new Error('Mem0 search called in local mode') }
+  const b = validBrief()
+  await store.createRecord({ type: 'brief', briefId: 'B-OLD', status: 'approved', payload: { brief_id: 'B-OLD', titles: [b.titles[0]], keyword: b.keyword } })
+  const inputs = await buildInputs({ config: cfg, store, now })
+  assert.ok((await findProblems(b, { config: cfg, inputs, store })).some((p) => /already covered by B-OLD/.test(p)))
+  assert.deepEqual(await findProblems(b, { config: cfg, inputs, store, excludeBriefId: 'B-OLD' }), [])
 })
