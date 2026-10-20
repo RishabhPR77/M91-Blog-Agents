@@ -8,7 +8,7 @@
   "topic_group": 1,
   "tags": ["agent approval"],
   "reading_time_min": 2,
-  "markdown": "An opening paragraph with a [source link](https://m91.msg91.com/llms.txt) and an [internal link](/posts/fixture-hidden-post/).\n\n## What is in this post?\n\nRaw HTML that must not render: <script>alert(1)</script> and <b>bold-raw-html</b>.\n\n<div class=\"evil\">a raw div block</div>\n\n## Is there code?\n\n```bash\necho \"hello\"\n```\n\n## Is there a table?\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n## What to do next\n\n[Try M91](https://m91-site.embarko.app/)",
+  "markdown": "An opening paragraph with a [source link](https://m91.msg91.com/llms.txt) and an [internal link](/posts/fixture-hidden-post/).\n\n## What is in this post?\n\nRaw HTML that must not render: <script>alert(1)</script> and <b>bold-raw-html</b>.\n\n<div class=\"evil\">a raw div block</div>\n\n## Is there code?\n\n```bash\necho \"hello\"\n```\n\n## Is there a table?\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n## What to do next\n\n[Try M91](https://m91.msg91.com/)",
   "blocks": null,
   "seo": {
     "title_tag": "Fixture: an indexed post about agent approval",

@@ -82,7 +82,7 @@ export async function renderMarkdown(markdown: string, options: { ids?: string[]
         return /^https?:\/\//.test(href) && new URL(href).host !== ownHost
       }
     })
-    .use(rehypeShiki, { themes: { light: 'github-light', dark: 'github-dark' }, defaultColor: 'light' })
+    .use(rehypeShiki, { theme: 'github-light' })
     .use(rehypeStringify)
     .process(markdown)
   return { html: String(file), headings }

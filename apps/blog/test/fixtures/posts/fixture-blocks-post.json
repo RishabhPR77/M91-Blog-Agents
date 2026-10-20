@@ -14,7 +14,7 @@
     "blocks"
   ],
   "reading_time_min": 1,
-  "markdown": "The Markdown fallback for a post with blocks.\n\n## What to do next\n\n[Try M91](https://m91-site.embarko.app/)",
+  "markdown": "The Markdown fallback for a post with blocks.\n\n## What to do next\n\n[Try M91](https://m91.msg91.com/)",
   "blocks": [
     {
       "type": "rich_text",

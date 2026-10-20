@@ -201,7 +201,7 @@ test('raw HTML inside block Markdown is not rendered; external links in blocks o
   assert.ok(!html.includes('<b>raw-in-block</b>'))
   assert.ok(!/<script[^>]*>[^<]*alert\(2\)/.test(html))
   assert.match(html, /Add the link to your server raw-in-block/)
-  assert.match(html, /<a href="https:\/\/m91-site\.embarko\.app\/" rel="noopener noreferrer" target="_blank">Try M91<\/a>/)
+  assert.match(html, /<a href="https:\/\/m91\.msg91\.com\/" rel="noopener noreferrer" target="_blank">Try M91<\/a>/)
 })
 
 test('fallbacks: a block type that is not built shows the whole Markdown; invalid block data is dropped at load; both warn', () => {

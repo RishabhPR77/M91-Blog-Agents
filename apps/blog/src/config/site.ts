@@ -18,7 +18,7 @@ export const SITE = {
 } as const
 
 // The M91 product site: the logo, the footer links and every call to action point here.
-export const M91_URL = 'https://m91-site.embarko.app/'
+export const M91_URL = 'https://m91.msg91.com/'
 export const CTA = {
   text: 'Try M91',
   title: 'Get a real answer when your software needs one',

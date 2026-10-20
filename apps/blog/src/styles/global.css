@@ -1,10 +1,8 @@
-/* The M91 blog's look, taken from the M91 site (m91-site.embarko.app): its colours, its system font stack,
+/* The M91 blog's look, taken from the M91 site (m91.msg91.com): its colours, its system font stack,
    pill buttons and the corner-bracket logo. All brand tokens live here, once. */
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
-/* Light theme: the M91 site's own tokens. */
+/* The M91 site's own tokens. Light only, like the site. */
 :root {
   --bg: #ffffff;
   --bg-2: #f6f7f9;
@@ -24,28 +22,6 @@
   --cta-fg: #edf0f3;
   --cta-fg-2: #9aa4b0;
   color-scheme: light;
-}
-
-/* Dark theme: the M91 site's dark-section colours (it has no dark theme of its own). */
-.dark {
-  --bg: #0b1119;
-  --bg-2: #121a25;
-  --bg-warm: #121a25;
-  --fg: #edf0f3;
-  --fg-2: #9aa4b0;
-  --line: rgba(255, 255, 255, 0.12);
-  --line-2: rgba(255, 255, 255, 0.24);
-  --accent: #ff6b70;
-  --mark: #ff5257;
-  --chip-bg: rgba(223, 245, 107, 0.12);
-  --chip-fg: #dff56b;
-  --btn-bg: #dff56b;
-  --btn-fg: #0b0e12;
-  --btn-hover: #e9f79a;
-  --cta-bg: #182231;
-  --cta-fg: #edf0f3;
-  --cta-fg-2: #b3bcc6;
-  color-scheme: dark;
 }
 
 @theme inline {
@@ -116,8 +92,6 @@
   }
 }
 
-/* Shiki: light colours by default, its dark colours in the dark theme. */
-.dark .shiki, .dark .shiki span { color: var(--shiki-dark) !important; background-color: var(--shiki-dark-bg) !important; }
 
 /* ---------- Interactive blocks (Phase 8) ----------
    Every block reads well without JavaScript. Controls that need JS are rendered too, but shown only once the
@@ -137,8 +111,6 @@ html:not(.js) .js-only { display: none !important; }
   .callout-info { border-left-color: #2563eb; }
   .callout-tip { border-left-color: #55651a; }
   .callout-warning { border-left-color: var(--accent); }
-  .dark .callout-info { border-left-color: #7aa7ff; }
-  .dark .callout-tip { border-left-color: #dff56b; }
   .callout-label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-2); }
   .callout-body { margin-top: 0.35rem; }
   .callout-body > * + * { margin-top: 0.75em; }
@@ -200,7 +172,6 @@ html:not(.js) .js-only { display: none !important; }
   .phonesim-actor { width: 2.2rem; height: 2.2rem; border-radius: 999px; display: grid; place-items: center; background: var(--bg-2); color: var(--fg); border: 1px solid var(--line); }
   .phonesim-phone { display: flex; justify-content: center; }
   .phone { width: 13.5rem; height: 24rem; border-radius: 2.2rem; border: 10px solid #0b0e12; background: #0b1119; position: relative; box-shadow: 0 12px 32px rgba(11, 14, 18, 0.18); }
-  .dark .phone { border-color: #2a3442; }
   .phone-notch { position: absolute; top: 0.4rem; left: 50%; width: 4.5rem; height: 1.1rem; margin-left: -2.25rem; border-radius: 999px; background: #0b0e12; z-index: 1; }
   .phone-screen { position: absolute; inset: 0; border-radius: 1.6rem; overflow: hidden; color: #edf0f3; }
   .phone-view { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; padding: 1.5rem 1rem; text-align: center; }

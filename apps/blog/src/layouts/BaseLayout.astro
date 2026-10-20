@@ -1,6 +1,6 @@
 ---
 // Every page: SEO head (title, description, canonical, robots, Open Graph, Twitter, JSON-LD), the CSP meta
-// tag, theme setup before paint, header and footer. No third-party request anywhere.
+// tag, the js class before paint, header and footer. No third-party request anywhere.
 import '../styles/global.css'
 import Header from '../components/Header.astro'
 import Footer from '../components/Footer.astro'
@@ -48,16 +48,10 @@ const csp = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-
     <meta name="twitter:image" content={image} />
     <link rel="icon" type="image/svg+xml" href={url('/favicon.svg')} />
     <link rel="alternate" type="application/rss+xml" title={`${SITE.name} RSS`} href={url('/rss.xml')} />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="light" />
     <script is:inline>
-      // Before paint: mark that scripts run (interactive blocks show their controls only then, so nothing shifts),
-      // and the theme: a saved choice, else the system setting.
+      // Before paint: mark that scripts run (interactive blocks show their controls only then, so nothing shifts).
       document.documentElement.classList.add('js')
-      try {
-        var saved = localStorage.getItem('m91-theme')
-        var dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
-        document.documentElement.classList.toggle('dark', dark)
-      } catch (e) {}
     </script>
     {jsonLd.map((data) => <script type="application/ld+json" set:html={JSON.stringify(data).replace(/</g, '\\u003c')} />)}
   </head>

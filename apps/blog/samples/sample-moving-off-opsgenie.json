@@ -12,7 +12,7 @@
   "topic_group": 3,
   "tags": ["opsgenie", "on-call", "migration"],
   "reading_time_min": 2,
-  "markdown": "Opsgenie support ends on 5 April 2027, so on-call teams need a new home for their alerts.\n\n## What should I list first?\n\nWrite down every alert that pages a person today, and who gets it.\n\n## In what order should I move them?\n\nMove the alerts that wake people first. Test each one with a real phone before the next.\n\n## When can I switch the old tool off?\n\nAfter a full week with no missed page.\n\n## What to do next\n\n[Try M91: send your first alert in a few minutes.](https://m91-site.embarko.app/)",
+  "markdown": "Opsgenie support ends on 5 April 2027, so on-call teams need a new home for their alerts.\n\n## What should I list first?\n\nWrite down every alert that pages a person today, and who gets it.\n\n## In what order should I move them?\n\nMove the alerts that wake people first. Test each one with a real phone before the next.\n\n## When can I switch the old tool off?\n\nAfter a full week with no missed page.\n\n## What to do next\n\n[Try M91: send your first alert in a few minutes.](https://m91.msg91.com/)",
   "blocks": null,
   "seo": {
     "title_tag": "Sample: a short checklist for moving off Opsgenie",

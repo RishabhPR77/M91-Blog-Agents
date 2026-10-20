@@ -14,7 +14,7 @@
     "blocks"
   ],
   "reading_time_min": 1,
-  "markdown": "Invalid blocks are dropped: this Markdown is shown.\n\n## What to do next\n\n[Try M91](https://m91-site.embarko.app/)",
+  "markdown": "Invalid blocks are dropped: this Markdown is shown.\n\n## What to do next\n\n[Try M91](https://m91.msg91.com/)",
   "blocks": [
     {
       "type": "callout",

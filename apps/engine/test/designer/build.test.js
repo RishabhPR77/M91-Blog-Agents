@@ -20,7 +20,7 @@ test('a plan with every block type: all kept, in post order, with rich_text betw
   r.blocks.forEach((b, i) => assert.equal(b.id, `b${i + 1}`))
   assert.equal(r.blocks[0].type, 'rich_text')
   assert.equal(r.blocks[0].data.markdown, '## Why approvals need one owner\n\nAn agent that deletes data needs a person to say yes first. This post shows how.')
-  assert.equal(r.blocks.at(-1).data.markdown, '## What to do next\n\n[Try M91](https://m91-site.embarko.app/)')
+  assert.equal(r.blocks.at(-1).data.markdown, '## What to do next\n\n[Try M91](https://m91.msg91.com/)')
   assert.deepEqual(r.layout.flatMap((l) => l.part_ids), p.parts.map((x) => x.id), 'every part once, in order')
   const post = { blocks: r.blocks }
   assert.deepEqual(validatePost({ ...post }).errors.filter((e) => e.startsWith('/blocks')), [])

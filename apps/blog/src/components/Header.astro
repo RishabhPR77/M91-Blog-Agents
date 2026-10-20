@@ -1,6 +1,5 @@
 ---
 import Logo from './Logo.astro'
-import ThemeToggle from './ThemeToggle.astro'
 import { M91_URL, CTA, TOPICS } from '../config/site'
 import { url } from '../lib/posts'
 ---
@@ -19,7 +18,6 @@ import { url } from '../lib/posts'
       </ul>
     </nav>
     <div class="ml-auto flex items-center gap-2">
-      <ThemeToggle />
       <a href={M91_URL} class="btn">{CTA.text}</a>
     </div>
   </div>
