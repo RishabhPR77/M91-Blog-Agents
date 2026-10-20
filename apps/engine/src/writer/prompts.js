@@ -48,6 +48,7 @@ SEO
 - Main keyword "{{keyword}}": in the title, in the first 100 words, and 1–2 more times where it reads naturally. Never stuff it.
 - Use the supporting keywords naturally where they fit.
 - "title_tag": at most 60 characters. "meta_description": at most 155 characters, plain and specific. "slug_suggestion": lowercase words joined by hyphens.
+- Write acronyms in capitals in the title, "title_tag" and "meta_description": AI, API, MCP, SDK, LLM, SRE, CRM, JSON, URL, HTTP, SMS, OTP, M91 (IoT stays "IoT").
 - "image_ideas": 1 to 3 simple diagrams or images that would help understanding, each with alt text that describes it plainly.
 
 TONE

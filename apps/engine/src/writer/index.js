@@ -29,10 +29,51 @@ const FATAL_KINDS = ['config', 'token', 'billing']
 /** Thread id: writer-<brief_id>-v<version>-<new|revise|repair>-<4 random>. */
 export const writerThreadId = (briefId, version, call) => `writer-${briefId}-v${version}-${call}-${randomCode(4).toLowerCase()}`
 
+// Known acronyms, written the one right way. Plurals ("APIs", "LLMs") keep a lowercase "s"; HTTP, JSON, SMS
+// and IoT take none (so "https" stays "https").
+const ACRONYMS = { ai: 'AI', api: 'API', mcp: 'MCP', sdk: 'SDK', llm: 'LLM', sre: 'SRE', crm: 'CRM', json: 'JSON', url: 'URL', http: 'HTTP', sms: 'SMS', otp: 'OTP', m91: 'M91', iot: 'IoT' }
+const NO_PLURAL = new Set(['http', 'json', 'sms', 'iot', 'm91', 'ai'])
+const ACRONYM_RE = new RegExp(String.raw`\b(${Object.keys(ACRONYMS).join('|')})(s?)\b`, 'gi')
+/** Words that are links, domains, file names, paths or emails stay as they are ("llms.txt", "m91-api.msg91.com"). */
+const LITERAL_WORD = /:\/\/|@|\/|\w\.\w/
+
+/** Acronyms in capitals, whole words only ("maintain" and "ail" are never touched). Returns the fixed text. */
+export function fixAcronyms(text) {
+  if (typeof text !== 'string') return text
+  return text.split(/(\s+)/).map((word) => (LITERAL_WORD.test(word) ? word : word.replace(ACRONYM_RE, (all, base, s) => {
+    const key = base.toLowerCase()
+    if (s && NO_PLURAL.has(key)) return all
+    return `${ACRONYMS[key]}${s ? 's' : ''}`
+  }))).join('')
+}
+
 /** Automatic fixes (brief 10.1) on the draft. Never changes wording. Returns the fix notes. */
 export function autoFixDraft(draft, { config, brief }) {
   const fixes = []
   let md = String(draft.post_markdown ?? '')
+  // Acronyms in capitals in the title, title_tag and meta_description; an H1 equal to the old title follows the
+  // title, so the H1 check still passes.
+  const oldTitle = draft.title
+  for (const [label, get, set] of [
+    ['title', () => draft.title, (v) => { draft.title = v }],
+    ['seo.title_tag', () => draft.seo?.title_tag, (v) => { draft.seo.title_tag = v }],
+    ['seo.meta_description', () => draft.seo?.meta_description, (v) => { draft.seo.meta_description = v }]
+  ]) {
+    const before = get()
+    const after = fixAcronyms(before)
+    if (typeof before === 'string' && after !== before) {
+      set(after)
+      fixes.push(`wrote acronyms in capitals in ${label}`)
+    }
+  }
+  if (typeof oldTitle === 'string' && draft.title !== oldTitle) {
+    const lines = md.split('\n')
+    const i = lines.findIndex((l) => /^#[ \t]+/.test(l) && l.replace(/^#[ \t]+/, '').trim() === oldTitle.trim())
+    if (i >= 0) {
+      lines[i] = `# ${draft.title.trim()}`
+      md = lines.join('\n')
+    }
+  }
   // http → https for the M91 docs hosts, in links and text
   for (const host of config.scout.docsHosts) {
     const re = new RegExp(`http://${host.replace(/\./g, '\\.')}`, 'gi')

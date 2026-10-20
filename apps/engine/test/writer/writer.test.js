@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { runWriter, autoFixDraft, WriterError, writerFeedback } from '../../src/writer/index.js'
+import { runWriter, autoFixDraft, WriterError, writerFeedback, fixAcronyms } from '../../src/writer/index.js'
 import { allowedUrlSet, excerptFor, tutorialSourceText, buildWriterMessage, briefRules } from '../../src/writer/inputs.js'
 import { extractSnippets, snippetSection } from '../../src/writer/snippets.js'
 import { WRITER_BASE } from '../../src/writer/prompts.js'
@@ -435,4 +435,43 @@ test('message guard: a very long snippet (a whole script) is listed without its 
   assert.match(message, /\[S1\] kind: file · language: bash · lines 1-701 · source: [^\n]+\ncontext: [^\n]*\n\(701 lines: too long to list here\. Do not insert S1 or a range of it; use the other snippets, e\.g\. its usage snippets\.\)/)
   assert.match(message, /\[S2\] kind: usage_from_comment · language: bash · lines 1-1 · source: [^\n]+\ncontext: [^\n]*\n```bash\n1\| m91\.sh check\n```/)
   assert.match(message, /--- TUTORIAL SOURCE TEXT ---\nsteps/, 'the source text is not trimmed when compacting is enough')
+})
+
+// ---------- acronyms in capitals (title, title_tag, meta_description) ----------
+
+test('fixAcronyms: known acronyms in capitals, whole words only; links, domains and file names untouched', () => {
+  assert.equal(fixAcronyms('How ai agents call an api over mcp with an sdk'), 'How AI agents call an API over MCP with an SDK')
+  assert.equal(fixAcronyms('llm, sre, crm, json, url, http, sms, otp, m91 and iot'), 'LLM, SRE, CRM, JSON, URL, HTTP, SMS, OTP, M91 and IoT')
+  assert.equal(fixAcronyms('IOT and Iot and Api'), 'IoT and IoT and API')
+  assert.equal(fixAcronyms('Compare llms, apis, sdks, urls and otps'), 'Compare LLMs, APIs, SDKs, URLs and OTPs')
+  assert.equal(fixAcronyms('AI-powered sre with url-safe ids'), 'AI-powered SRE with URL-safe ids')
+  // Word boundaries: no change inside other words; https keeps its lowercase (no plural for HTTP).
+  assert.equal(fixAcronyms('Maintain the main chain, then explain it again: Said, rail, sdkman, https'), 'Maintain the main chain, then explain it again: Said, rail, sdkman, https')
+  // Links, domains, paths and file names stay exactly as written.
+  assert.equal(fixAcronyms('see m91-api.msg91.com/llms.txt, https://m91-api.msg91.com/api/public/api.md and ops@m91.dev'), 'see m91-api.msg91.com/llms.txt, https://m91-api.msg91.com/api/public/api.md and ops@m91.dev')
+  assert.equal(fixAcronyms(undefined), undefined)
+})
+
+test('autoFixDraft: acronyms fixed in title, title_tag and meta_description; the matching H1 follows the title; the body is untouched', () => {
+  const title = 'How ai agents ask a human over an api'
+  const d = {
+    title,
+    seo: { title_tag: 'Ai agent approval with an api', meta_description: 'Make your llm agent wait for a yes by sms or a call, then continue.', slug_suggestion: 'ai-agent-approval' },
+    post_markdown: `# ${title}\n\nYour ai agent calls an api.\n\n## What to do next\n\n[Try M91](${CTA})\n`
+  }
+  const notes = autoFixDraft(d, { config: config(), brief: brief() })
+  assert.equal(d.title, 'How AI agents ask a human over an API')
+  assert.equal(d.seo.title_tag, 'AI agent approval with an API')
+  assert.equal(d.seo.meta_description, 'Make your LLM agent wait for a yes by SMS or a call, then continue.')
+  assert.equal(d.seo.slug_suggestion, 'ai-agent-approval', 'the slug stays lowercase')
+  assert.ok(d.post_markdown.startsWith('# How AI agents ask a human over an API\n'), 'the H1 still equals the title')
+  assert.ok(d.post_markdown.includes('Your ai agent calls an api.'), 'the body text is never changed')
+  assert.deepEqual(notes, ['wrote acronyms in capitals in title', 'wrote acronyms in capitals in seo.title_tag', 'wrote acronyms in capitals in seo.meta_description'])
+  // Already right: no change, no note.
+  const ok = { title: 'How AI agents use an API', seo: { title_tag: 'AI and APIs', meta_description: 'IoT and M91.' }, post_markdown: `# How AI agents use an API\n\nText.\n\n## What to do next\n\n[Try M91](${CTA})\n` }
+  assert.deepEqual(autoFixDraft(ok, { config: config(), brief: brief() }), [])
+})
+
+test('Writer prompt: one line asks for acronyms in capitals in the title, title_tag and meta_description', () => {
+  assert.match(WRITER_BASE, /Write acronyms in capitals in the title, "title_tag" and "meta_description": AI, API, MCP, SDK, LLM, SRE, CRM, JSON, URL, HTTP, SMS, OTP, M91 \(IoT stays "IoT"\)\./)
 })
