@@ -16,6 +16,7 @@ import { loadBrief } from './writer/inputs.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { draftVersion, draftBriefVersion } from './writer/save.js'
 import { emit, throwIfCancelled, CancelledError, isCancel } from './events.js'
+import { acquireRunLock, LockedError } from './util/runlock.js'
 
 /** Reviewer feedback items for the Strategist: strings become { area, problem }. */
 export function strategistFeedback(review) {
@@ -81,15 +82,9 @@ const TRANSITIONS = {
   awaiting_human: [],
   failed: []
 }
-export const LOCK_TTL_MS = 30 * 60 * 1000
-
 export class TransitionError extends Error {}
-export class LockedError extends Error {
-  constructor(message = 'A pipeline run is already in progress') {
-    super(message)
-    this.name = 'LockedError'
-  }
-}
+// The run lock is a local file since Phase 9 (util/runlock.js); LockedError keeps its message.
+export { LockedError }
 
 /** A one-line summary plus record ids for a step's output (never the whole payload). */
 export function summariseOutput(agent, out) {
@@ -186,32 +181,9 @@ export function decideAfterReview(review, counters, limits) {
   return { action: 'fail', send_to: null, reason: `hit MAX_WRITER_REVISIONS (${limits.maxWriterRevisions})` }
 }
 
-/** Takes the single run lock in the store. Stale locks (expired or older than 30 min) are cleared. */
-export async function acquireLock(store, { owner, now = Date.now } = {}) {
-  const t = now()
-  const locks = await store.getRecords({ type: 'lock' })
-  let active = []
-  for (const lock of locks) {
-    const acquiredAt = Date.parse(lock.payload?.acquired_at)
-    const expiresAt = Date.parse(lock.payload?.expires_at)
-    const stale = !(acquiredAt > 0) || t - acquiredAt > LOCK_TTL_MS || (expiresAt > 0 && expiresAt <= t)
-    if (stale) {
-      log.warn('clearing stale run lock', { id: lock.id, owner: lock.payload?.owner })
-      await store.deleteRecord(lock.id)
-    } else active.push(lock)
-  }
-  if (active.length) throw new LockedError(`A pipeline run is already in progress (owner ${active[0].payload?.owner})`)
-
-  const payload = { owner, acquired_at: new Date(t).toISOString(), expires_at: new Date(t + LOCK_TTL_MS).toISOString() }
-  const mine = await store.createRecord({ type: 'lock', payload, status: 'held' })
-  // Two runs racing past the check: the earlier lock wins, the later one backs off.
-  active = (await store.getRecords({ type: 'lock' })).filter((l) => l.id !== mine.id && Date.parse(l.payload?.expires_at) > t)
-  const earlier = active.find((l) => l.payload?.acquired_at < payload.acquired_at || (l.payload?.acquired_at === payload.acquired_at && l.id < mine.id))
-  if (earlier) {
-    await store.deleteRecord(mine.id)
-    throw new LockedError(`A pipeline run is already in progress (owner ${earlier.payload?.owner})`)
-  }
-  return { id: mine.id, release: () => store.deleteRecord(mine.id) }
+/** Takes the run lock (a local file, 0 Mem0 requests). The store argument is kept for older callers. */
+export async function acquireLock(_store, { owner, now = Date.now, config = getConfig() } = {}) {
+  return acquireRunLock({ owner, config, now })
 }
 
 /**
@@ -304,7 +276,7 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
 
   let lock
   try {
-    lock = useLock ? await acquireLock(store, { owner: runId, now }) : { release: async () => {} }
+    lock = useLock ? await acquireLock(store, { owner: runId, now, config }) : { release: async () => {} }
   } catch (error) {
     log.warn('pipeline not started', { error })
     return { briefId, state: 'skipped', reason: error.message, steps }

@@ -93,7 +93,9 @@ test('a run saves its Mem0 totals in the run record, and run.finished carries th
   const result = await manager.wait(run_id)
   restore()
   const saved = result.run.mem0
-  assert.ok(saved.writes > 0 && saved.reads > 0, JSON.stringify(saved))
+  // Phase 9: the run context serves this stub run's lists from its own writes, so it reads nothing.
+  assert.ok(saved.writes > 0, JSON.stringify(saved))
+  assert.equal(saved.reads, 0, JSON.stringify(saved))
   assert.equal(saved.requests, saved.reads + saved.searches + saved.writes)
   const finished = replay(run_id).at(-1)
   assert.equal(finished.type, 'run.finished')

@@ -10,6 +10,7 @@ import { createStore } from './store.js'
 import { createNotifier } from './notify.js'
 import { withRun, emit, subscribe, isCancel } from './events.js'
 import { withMem0Count, currentMem0Counts, mem0Requests } from './util/mem0count.js'
+import { createRunStore } from './runstore.js'
 
 /** The event for a step that threw: step.cancelled when a cancel interrupted it, else step.failed. */
 const stepEnded = (agent, error, signal) => (isCancel(error, signal)
@@ -150,7 +151,8 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
   }
 
   async function execute({ runId, mode, trigger, params, runConfig, signal, mem0 }) {
-    const store = storeFactory(runConfig)
+    // The run context's store (Phase 9 A1): each list once, the run's own writes kept in memory.
+    const store = createRunStore(storeFactory(runConfig))
     const notifier = notifierFactory(runConfig)
     const startedAt = now()
     const dry = runConfig.runtime.dryRun
@@ -211,7 +213,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     let lock = null
     let result
     try {
-      lock = await acquireLock(store, { owner: runId, now })
+      lock = await acquireLock(store, { owner: runId, now, config: runConfig })
       result = await runMode({ mode, runId, params, runConfig, store, notifier, signal })
     } catch (error) {
       result = error instanceof LockedError
@@ -288,7 +290,10 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     }
     if (mode === 'full') {
       const agents = agentsFactory?.(runConfig, { store, notifier }) ?? defaultAgents({ config: runConfig, store, notifier, agentDeps })
-      const r = await runPipeline({ config: runConfig, store, notifier, agents, now, runId, briefId: params.brief_id ?? newBriefId(new Date(now())), lock: false, signal })
+      const briefId = params.brief_id ?? newBriefId(new Date(now()))
+      // A new brief id: everything under it is made in this run, so its lists need no Mem0 read.
+      if (!params.brief_id) store.newBrief(briefId)
+      const r = await runPipeline({ config: runConfig, store, notifier, agents, now, runId, briefId, lock: false, signal })
       const status = r.state === 'awaiting_human' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
       return { status, brief_id: r.briefId, summary: r.error ?? r.summary ?? `pipeline ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
     }
@@ -371,6 +376,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     emit('step.started', { agent: 'strategist', step: 'strategist' })
     try {
       const briefId = params.brief_id ?? newBriefId(new Date(now()))
+      if (!params.brief_id) store.newBrief(briefId)
       const out = agents?.strategist
         ? (await agents.strategist({ runId, briefId, strategistMode: 'plan', config: runConfig })).output
         : await runStrategist({ mode: 'plan', runId, briefId }, { config: runConfig, store, notifier })

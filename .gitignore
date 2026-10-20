@@ -9,6 +9,8 @@ node_modules/
 npm-debug.log*
 coverage/
 apps/engine/dashboard/dist/
+# The engine's local data: run lock and Mem0 usage numbers (Phase 9)
+apps/engine/data/
 # Exported drafts for reading (npm run draft -- --export …)
 drafts/
 # The blog: build output, Astro's cache, and the post files the Publisher writes (build input only; Mem0 is the source of truth)

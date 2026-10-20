@@ -6,7 +6,7 @@ import { stubAgents } from '../src/agents/stubs.js'
 import { createViaSocketClient } from '../src/viasocket.js'
 import { BRIEF_ID_RE } from '../src/util/ids.js'
 import { setSink } from '../src/util/log.js'
-import { fakeConfig, memoryStore, fakeNotifier, fakeFetch, mockReviewer } from './helpers.js'
+import { fakeConfig, heldLock, memoryStore, fakeNotifier, fakeFetch, mockReviewer } from './helpers.js'
 
 beforeEach(() => resetEvents())
 const recordsOf = (store, type) => [...store.records.values()].filter((r) => r.type === type)
@@ -26,7 +26,7 @@ const quiet = () => setSink(() => {})
 test('full run: run_id format, separate brief_id, run record lifecycle, events, lock released', async () => {
   const restore = quiet()
   let lockOwner = null
-  const s = setup({ agents: { scout: async () => { lockOwner = recordsOf(s.store, 'lock')[0]?.payload?.owner; return stubAgents.scout() } } })
+  const s = setup({ agents: { scout: async () => { lockOwner = heldLock()?.run_id; return stubAgents.scout() } } })
   const { run_id } = await s.manager.startRun({ mode: 'full', trigger: 'manual' })
   assert.match(run_id, RUN_ID_RE)
   assert.equal(s.manager.isRunning(), true)
@@ -50,7 +50,7 @@ test('full run: run_id format, separate brief_id, run record lifecycle, events, 
   assert.ok(s.updates.length >= 8, `updated at step boundaries (${s.updates.length})`)
 
   assert.equal(lockOwner, run_id, 'the lock points to the run')
-  assert.equal(recordsOf(s.store, 'lock').length, 0, 'lock released')
+  assert.equal(heldLock(), null, 'lock file released')
   const types = replay(run_id).map((e) => e.type)
   assert.equal(types[0], 'run.started')
   assert.equal(types.at(-1), 'run.finished')
@@ -93,7 +93,7 @@ test('failure: status failed, run.failed event, lock released', async () => {
   assert.equal(run.status, 'failed')
   assert.equal(run.payload.steps.find((x) => x.name === 'strategist').status, 'failed')
   assert.equal(replay(run_id).at(-1).type, 'run.failed')
-  assert.equal(recordsOf(s.store, 'lock').length, 0)
+  assert.equal(heldLock(), null)
 })
 
 test('one run at a time (409); unknown and not-built modes are refused', async () => {
@@ -135,7 +135,7 @@ test('cancel between steps: status cancelled, later steps never run, lock releas
   const [run] = recordsOf(s.store, 'run')
   assert.equal(run.status, 'cancelled')
   assert.equal(replay(run_id).at(-1).type, 'run.cancelled')
-  assert.equal(recordsOf(s.store, 'lock').length, 0)
+  assert.equal(heldLock(), null)
   assert.equal(recordsOf(s.store, 'brief').length, 0, 'nothing half-saved')
   assert.deepEqual(s.notifier.sent.slack, [`⏹️ Run ${run_id} cancelled`])
   assert.equal(s.notifier.sent.m91.length, 0)

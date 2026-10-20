@@ -40,6 +40,8 @@ const DEFAULTS = {
   TARGET_WORDS_MIN: '700', TARGET_WORDS_MAX: '1500',
   DEFAULT_TONE: 'friendly-teacher', TIMEZONE: 'Asia/Kolkata',
   AUTO_PUBLISH: 'false', DRY_RUN: 'false', LOG_LEVEL: 'info',
+  // Phase 9: the engine's local data folder (run lock, Mem0 usage) and when a run lock counts as stale
+  ENGINE_DATA_DIR: '', RUN_LOCK_STALE_MIN: '10',
   AI_RTLAYER_TIMEOUT_MS: '300000', AI_POLL_INTERVAL_MS: '3000', AI_MAX_RETRIES: '3',
   // Phase 2: Scout
   SCOUT_RESEARCH_DELIVERY: 'rtlayer', SCOUT_MAX_CALLS: '14', SCOUT_REUSE_HOURS: '24', SCOUT_MIN_OPEN_CLUSTERS: '5',
@@ -319,7 +321,10 @@ export function loadConfig(env = process.env) {
       autoPublish: bool('AUTO_PUBLISH'),
       dryRun,
       triggerKey: str('PIPELINE_TRIGGER_KEY'),
-      logLevel: oneOf('LOG_LEVEL', LOG_LEVELS)
+      logLevel: oneOf('LOG_LEVEL', LOG_LEVELS),
+      // Empty: apps/engine/data (gitignored). Holds the run lock and the Mem0 usage file; never content.
+      dataDir: str('ENGINE_DATA_DIR') || null,
+      runLockStaleMin: int('RUN_LOCK_STALE_MIN', { min: 1, max: 1440 })
     },
     server: {
       port: int('PORT', { min: 1, max: 65535 })

@@ -1,6 +1,7 @@
 // Mem0 hosted Platform store. One record = one memory under agent_id MEM0_AGENT_ID,
 // run_id = brief_id when it belongs to a post, content = JSON string of the payload.
-// mem0ai v3: add() is asynchronous (returns an event to poll); entity ids go in `filters` for reads.
+// mem0ai v3: with infer=false (every record here) add() is synchronous and returns results[].id (Mem0 docs,
+// api-reference/memory/add-memories); otherwise it returns an event to poll. Entity ids go in `filters` for reads.
 
 import { randomUUID } from 'node:crypto'
 import { getConfig } from './config.js'
@@ -106,7 +107,8 @@ export function toRecord(memory) {
   }
 }
 
-function matches(record, filters = {}) {
+/** Whether a record fits getRecords() filters (type, brief_id, status, version, topic_group). */
+export function recordMatches(record, filters = {}) {
   const want = {
     type: filters.type,
     brief_id: filters.brief_id ?? filters.briefId,
@@ -258,7 +260,8 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
       infer: false
     })
     const eventId = added?.eventId ?? added?.event_id
-    let id = Array.isArray(added) ? added[0]?.id : undefined
+    // Synchronous add (infer=false): the id is in the answer, so no event poll. Otherwise poll, then look it up.
+    let id = Array.isArray(added) ? added[0]?.id : added?.results?.find?.((r) => r?.id)?.id ?? added?.id
     if (!id && eventId) {
       const event = await waitForEvent(eventId)
       id = event.results?.find?.((r) => r?.id)?.id ?? event.results?.[0]?.memory_id
@@ -274,15 +277,18 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     return { id, type, briefId: briefId ?? null, status, version, topicGroup, date, payload, metadata }
   }
 
-  /** Updates one record in place by memory id (never adds a second copy). Metadata is merged. */
-  async function updateRecord(id, payload, metadata = {}) {
+  /**
+   * Updates one record in place by memory id (never adds a second copy). Metadata is merged.
+   * known: the record as the caller already has it (with its full metadata), so it is not read first.
+   */
+  async function updateRecord(id, payload, metadata = {}, { known = null } = {}) {
     // run records are kept up to date in DRY_RUN too (the caller marks them with metadata.type = 'run').
     if (dryRun && metadata.type !== 'run') {
       log.info('DRY_RUN: Mem0 update skipped', { id })
       return { id, payload, metadata, dryRun: true }
     }
     const c = await client()
-    const current = await net(() => c.get(id), 'get')
+    const current = known?.metadata ? { ...known, memory: JSON.stringify(known.payload ?? null) } : await net(() => c.get(id), 'get')
     const merged = { ...(current?.metadata ?? {}), ...metadata }
     await net(() => c.update(id, { ...(payload !== undefined && { text: JSON.stringify(payload) }), metadata: merged }), 'update')
     const record = toRecord({ ...current, id, metadata: merged, memory: payload !== undefined ? JSON.stringify(payload) : current?.memory })
@@ -314,7 +320,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
   /** Records under our agent_id, filtered by type / brief_id / status / version / topic_group. */
   async function getRecords(filters = {}) {
     const briefId = filters.brief_id ?? filters.briefId
-    return (await listAll(briefId, { type: filters.type, status: filters.status })).map(toRecord).filter((r) => matches(r, filters))
+    return (await listAll(briefId, { type: filters.type, status: filters.status })).map(toRecord).filter((r) => recordMatches(r, filters))
   }
 
   /** One record of a type for a brief; the given version, else the highest. */
@@ -328,7 +334,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     const briefId = filters.brief_id ?? filters.briefId
     const res = await net(() => c.search(text, { filters: entityFilters(briefId), topK: filters.topK ?? 10 }), 'search')
     const results = Array.isArray(res) ? res : res?.results ?? []
-    return results.map((m) => ({ ...toRecord(m), score: m.score ?? null })).filter((r) => matches(r, filters))
+    return results.map((m) => ({ ...toRecord(m), score: m.score ?? null })).filter((r) => recordMatches(r, filters))
   }
 
   /**

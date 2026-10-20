@@ -1,9 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runPipeline, decideAfterReview, assertTransition, acquireLock, LockedError, LOCK_TTL_MS, UNVERIFIED_FIX } from '../src/orchestrator.js'
+import { runPipeline, decideAfterReview, assertTransition, acquireLock, LockedError, UNVERIFIED_FIX } from '../src/orchestrator.js'
+import { acquireRunLock } from '../src/util/runlock.js'
+import { setSink } from '../src/util/log.js'
 import { replay, resetEvents, withRun } from '../src/events.js'
 import { stubAgents } from '../src/agents/stubs.js'
-import { fakeConfig, memoryStore, fakeNotifier, mockReviewer } from './helpers.js'
+import { heldLock, fakeConfig, memoryStore, fakeNotifier, mockReviewer } from './helpers.js'
 
 const limits = { maxWriterRevisions: 2, maxStrategistRebriefs: 1, maxScoutRetries: 1, maxAiRoundsPerPost: 5, feedbackMaxItems: 8 }
 const counters = (o = {}) => ({ writerRevisions: 0, rebriefs: 0, scoutRetries: 0, rounds: 0, ...o })
@@ -84,7 +86,7 @@ test('happy path with stubs: a pass ends at awaiting_human, run_log per step, re
   assert.equal(store.byType('brief').length, 1)
   assert.equal(store.byType('draft').length, 1)
   assert.equal(store.byType('review').length, 1)
-  assert.equal(store.byType('lock').length, 0)
+  assert.equal(heldLock(), null)
   // The notifier gets the ready line (the real one only logs it in DRY_RUN); no promo pack before the human approves.
   assert.match(notifier.sent.slack[0], /^📝 Ready for your approval: \*.+\* · score 90\/100 · v1 · brief /)
   assert.ok(!notifier.sent.slack.some((t) => /Promo pack/.test(t)))
@@ -102,7 +104,7 @@ test('writer revisions up to MAX_WRITER_REVISIONS, then fail + notify', async ()
   assert.equal(s.calls.filter((c) => c === 'writer').length, 3) // first draft + 2 revisions
   assert.equal(notifier.sent.slack.length, 1)
   assert.equal(notifier.sent.m91[0].severity, 'LOW')
-  assert.equal(store.byType('lock').length, 0)
+  assert.equal(heldLock(), null)
 })
 
 test('revise then pass is approved at version 2', async () => {
@@ -172,24 +174,54 @@ test('an agent error fails the run with a run_log error entry', async () => {
   assert.equal(entry.payload.error, 'boom')
 })
 
-test('run lock: a second run is skipped while the first holds the lock', async () => {
+test('run lock: a second run is skipped while the first holds the lock file; no Mem0 lock records', async () => {
   const store = memoryStore()
-  const lock = await acquireLock(store, { owner: 'first' })
-  const r = await runPipeline({ config: fakeConfig({ DRY_RUN: 'true' }), store, notifier: fakeNotifier(), agents: stubs() })
+  const config = fakeConfig({ DRY_RUN: 'true' })
+  const lock = await acquireLock(store, { owner: 'first', config })
+  assert.equal(heldLock().run_id, 'first')
+  assert.equal(heldLock().pid, process.pid)
+  const r = await runPipeline({ config, store, notifier: fakeNotifier(), agents: stubs() })
   assert.equal(r.state, 'skipped')
-  await assert.rejects(acquireLock(store, { owner: 'third' }), LockedError)
+  assert.equal(r.reason, 'A pipeline run is already in progress (owner first)')
+  await assert.rejects(acquireLock(store, { owner: 'third', config }), LockedError)
   await lock.release()
+  await lock.release()
+  assert.equal(heldLock(), null)
   assert.equal(store.byType('lock').length, 0)
 })
 
-test('run lock: locks older than 30 min are cleared', async () => {
-  const store = memoryStore()
-  const t0 = Date.parse('2026-10-17T00:00:00Z')
-  await acquireLock(store, { owner: 'old', now: () => t0 })
-  const lock = await acquireLock(store, { owner: 'new', now: () => t0 + LOCK_TTL_MS + 1000 })
-  const locks = store.byType('lock')
-  assert.equal(locks.length, 1)
-  assert.equal(locks[0].payload.owner, 'new')
+test('run lock: taken over (with a warning) when its process is gone or its heartbeat is older than RUN_LOCK_STALE_MIN', async () => {
+  const config = fakeConfig({ RUN_LOCK_STALE_MIN: '10' })
+  const t0 = Date.parse('2026-10-20T00:00:00Z')
+  const old = acquireRunLock({ owner: 'old', config, now: () => t0 })
+  // Same live pid, heartbeat 9 min old: still held.
+  assert.throws(() => acquireRunLock({ owner: 'new', config, now: () => t0 + 9 * 60000 }), LockedError)
+  // Heartbeat 11 min old: stale, taken over.
+  const lines = []
+  const restore = setSink((_l, line) => lines.push(line))
+  const fresh = acquireRunLock({ owner: 'new', config, now: () => t0 + 11 * 60000 })
+  restore()
+  assert.equal(heldLock().run_id, 'new')
+  assert.ok(lines.some((l) => /taking over a stale run lock/.test(l) && /"run_id":"old"/.test(l)))
+  await old.release()
+  assert.equal(heldLock().run_id, 'new', 'the old owner never removes a lock that is no longer its own')
+  await fresh.release()
+  // A dead process: taken over at once, whatever the heartbeat.
+  acquireRunLock({ owner: 'dead', config, pid: 999999 })
+  const next = acquireRunLock({ owner: 'alive', config, isAlive: (pid) => pid !== 999999 })
+  assert.equal(heldLock().run_id, 'alive')
+  await next.release()
+})
+
+test('run lock: the heartbeat is refreshed while the run is active', async () => {
+  const config = fakeConfig()
+  let t = Date.parse('2026-10-20T00:00:00Z')
+  const lock = acquireRunLock({ owner: 'beat', config, now: () => t, heartbeatMs: 10 })
+  const first = heldLock().heartbeat_at
+  t += 60000
+  await new Promise((r) => setTimeout(r, 40))
+  assert.notEqual(heldLock().heartbeat_at, first)
+  assert.equal(heldLock().acquired_at, first)
   await lock.release()
 })
 

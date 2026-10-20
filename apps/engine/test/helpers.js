@@ -1,6 +1,12 @@
 // Shared fixtures for unit tests. All values are fake.
 
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { loadConfig } from '../src/config.js'
+
+// Each test process gets its own engine data folder (run lock, Mem0 usage): test files run in parallel.
+export const TEST_DATA_DIR = mkdtempSync(join(tmpdir(), 'm91-engine-data-'))
 import { sampleSentences } from '../src/agents/stubs.js'
 
 // Unit tests never touch the network: the real fetch only reaches local test servers.
@@ -23,6 +29,7 @@ export function fakeEnv(overrides = {}) {
     PIPELINE_TRIGGER_KEY: 'fake-trigger-key-0123456789',
     // The read cache is shared per process: off in unit tests unless a test turns it on.
     STORE_CACHE_TTL_MS: '0',
+    ENGINE_DATA_DIR: TEST_DATA_DIR,
     ...overrides
   }
 }
@@ -149,4 +156,13 @@ export function fakeFetch(handler) {
   }
   fn.calls = calls
   return fn
+}
+
+/** The run lock file of this test process (Phase 9): its JSON, or null when no run holds it. */
+export function heldLock() {
+  try {
+    return JSON.parse(readFileSync(join(TEST_DATA_DIR, 'run.lock'), 'utf8'))
+  } catch {
+    return null
+  }
 }
