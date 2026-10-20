@@ -55,6 +55,9 @@
     "@m91/content": "0.1.0",
     "ajv": "8.18.0",
     "mem0ai": "3.3.1",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "unified": "11.0.5",
     "viasocket-apps": "0.6.0"
   },
   "devDependencies": {
