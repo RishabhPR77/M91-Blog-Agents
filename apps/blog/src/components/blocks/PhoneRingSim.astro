@@ -60,10 +60,18 @@ const STATE = { agent: 'waiting', m91: 'ringing', phone: 'ringing', human: 'deci
       phone.dataset.decision = decision
     }
     if (!('IntersectionObserver' in window)) return
+    // The moment in a thin band just above the middle of the screen is the current one. Entries only list the
+    // moments that changed, so the moments in the band are kept here; the lowest of them wins (the newest one
+    // when scrolling down), and between moments the last one stays.
+    const inBand = new Set<Element>()
     const io = new IntersectionObserver((entries) => {
-      const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-      if (visible[0]) show(visible[0].target as HTMLElement)
-    }, { rootMargin: '-35% 0px -45% 0px' })
+      for (const e of entries) {
+        if (e.isIntersecting) inBand.add(e.target)
+        else inBand.delete(e.target)
+      }
+      const current = moments.filter((m) => inBand.has(m)).at(-1)
+      if (current) show(current)
+    }, { rootMargin: '-45% 0px -50% 0px' })
     moments.forEach((m) => io.observe(m))
   })
 </script>

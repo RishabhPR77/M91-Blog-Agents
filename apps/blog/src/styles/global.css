@@ -185,6 +185,16 @@ html:not(.js) .js-only { display: none !important; }
   .phone-btn[data-btn="approve"].is-chosen { background: #dff56b; border-color: #dff56b; color: #0b0e12; }
   .phone-btn[data-btn="reject"].is-chosen { background: #ff6b70; border-color: #ff6b70; color: #0b0e12; }
   .phone[data-state="ringing"] { animation: m91-ring 1.2s ease-in-out infinite; }
+  /* Narrow screens: a smaller phone that stays under the header while the moments scroll past it. */
+  @media (max-width: 899.98px) {
+    .phonesim-phone { position: sticky; top: 4.5rem; z-index: 2; background: var(--bg); padding-bottom: 0.75rem; }
+    .phone { width: 10.5rem; height: 15.5rem; border-width: 8px; border-radius: 1.8rem; }
+    .phone-screen { border-radius: 1.3rem; }
+    .phone-view { padding: 1.25rem 0.75rem; gap: 0.35rem; }
+    .phone-big { font-size: 1.2rem; }
+    .phone-small { font-size: 0.8rem; }
+    .phone-btn { padding: 0.4rem; font-size: 0.85rem; }
+  }
   @media (min-width: 900px) {
     .phonesim { grid-template-columns: 1fr 15rem; align-items: start; }
     .phonesim-phone { order: 2; position: sticky; top: 6rem; }
