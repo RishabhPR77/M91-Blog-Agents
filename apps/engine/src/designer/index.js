@@ -16,6 +16,7 @@ import { buildBlocks } from './build.js'
 import { checkIntegrity } from './integrity.js'
 import { designer_plan, planSchemaErrors } from './schemas.js'
 import { buildDesignerPrompt, buildDesignerMessage, designerRepairTail } from './prompts.js'
+import { saveRunLog } from '../util/runlog.js'
 
 export class DesignerError extends Error {
   constructor(message, { kind, status = 400 } = {}) {
@@ -79,7 +80,7 @@ export async function runDesigner(params = {}, deps = {}) {
     calls.push(record)
     log.info('designer call', record)
     try {
-      await store.createRecord({ type: 'run_log', briefId: runId, payload: record, status: entry.error ? 'error' : entry.result })
+      await saveRunLog(store, { briefId: runId, payload: record, status: entry.error ? 'error' : entry.result })
     } catch (e) {
       log.error('could not write designer run_log', { error: e })
     }

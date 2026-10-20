@@ -12,6 +12,7 @@ import { draftVersion, draftBriefVersion, draftsOf } from '../writer/save.js'
 import { promo_pack, promoSchemaErrors } from './schemas.js'
 import { buildPromoPrompt, buildPromoMessage, promoRepairTail } from './prompts.js'
 import { promoProblems } from './checks.js'
+import { saveRunLog } from '../util/runlog.js'
 
 export class PromoError extends Error {
   constructor(message, { kind } = {}) {
@@ -64,7 +65,7 @@ export async function runPromo(params = {}, deps = {}) {
     calls.push(record)
     log.info('promo call', record)
     try {
-      await store.createRecord({ type: 'run_log', briefId: runId, payload: record, status: entry.error ? 'error' : entry.result })
+      await saveRunLog(store, { briefId: runId, payload: record, status: entry.error ? 'error' : entry.result })
     } catch (e) {
       log.error('could not write promo run_log', { error: e })
     }

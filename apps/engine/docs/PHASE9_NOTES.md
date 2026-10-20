@@ -51,6 +51,22 @@ Decision runs (measured): Reviewer check 28, approve 34, publish 28, unpublish 2
   **This lock only works on one machine:** the engine and the CLI on this computer. Revisit it when the
   engine moves to the cloud.
 
+## A2: write only what must outlast the run
+
+- **`run_log` only for errors** (`src/util/runlog.js`), from every agent and the orchestrator. Successful AI
+  calls and steps are already in the run record's timeline, the step log of the result, and the logs. A cancel
+  is not an error.
+- **The Scout's reuse check** no longer lists every `run_log`. The time of the last full research is kept on
+  today's `m91_facts` record (`research_at`, carried over to the next day's record), which the run reads
+  anyway. A finished fresh research notes it with one write; DRY_RUN never does.
+- **The run record** is saved at the start, when a step fails, when the run waits for approval, and at the
+  end. It is no longer saved at every step start and end. Through the run store, each save is one write.
+- **Status changes:** an update that changes nothing is not written. Updates of records the run holds don't
+  read first.
+- **Clusters:** one write per cluster. Merges are collected, so several merges into one cluster make one
+  update, together with its new rank. New clusters are created after ranking, with their rank already set:
+  before, each was created and then updated with its rank.
+
 ## New settings
 
 | Key | Default | Meaning |

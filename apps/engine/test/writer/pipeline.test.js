@@ -73,8 +73,8 @@ test('reviewer fails once: Writer v1 → fail (must + should, quoted) → loop.r
   assert.equal(route.data.send_to, 'writer')
   assert.equal(route.data.action, 'revise')
   assert.equal(r.run.steps.filter((x) => x.name === 'writer').length, 2)
-  const logs = recordsOf(s.store, 'run_log').map((l) => l.payload)
-  assert.deepEqual(logs.filter((l) => l.agent === 'writer' && l.call).map((l) => l.call), ['new', 'revise'])
+  // Both Writer calls are in the run record's steps; successful calls make no run_log records (Phase 9 A2).
+  assert.equal(recordsOf(s.store, 'run_log').length, 0)
 })
 
 test('reviewer always fails: stops at MAX_WRITER_REVISIONS, run failed, LOW alert', async () => {

@@ -159,3 +159,15 @@ test('run store: DRY_RUN placeholders are not kept (the DRY_RUN paths hand objec
   assert.equal(run.dryRun, true)
   assert.ok(store)
 })
+
+test('A2: an update that changes nothing is not written again (0 requests)', async () => {
+  const { store } = base()
+  const run = createRunStore(store)
+  const d = await run.createRecord({ type: 'draft', briefId: 'B1', payload: { v: 1 }, status: 'drafted', version: 1 })
+  const { counts } = await counted(async () => {
+    await run.updateRecord(d.id, undefined, { status: 'drafted' })
+    await run.updateRecord(d.id, undefined, { status: 'awaiting_human' })
+    await run.updateRecord(d.id, undefined, { status: 'awaiting_human' })
+  })
+  assert.deepEqual([counts.reads, counts.writes], [0, 1])
+})

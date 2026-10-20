@@ -17,6 +17,7 @@ import { loadDraft } from './reviewer/inputs.js'
 import { draftVersion, draftBriefVersion } from './writer/save.js'
 import { emit, throwIfCancelled, CancelledError, isCancel } from './events.js'
 import { acquireRunLock, LockedError } from './util/runlock.js'
+import { saveRunLog } from './util/runlog.js'
 
 /** Reviewer feedback items for the Strategist: strings become { area, problem }. */
 export function strategistFeedback(review) {
@@ -222,7 +223,7 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     const record = { time: istIso(new Date(now())), state, round: counters.rounds, version, ...entry }
     steps.push(record)
     try {
-      await store.createRecord({ type: 'run_log', briefId: runId, payload: record, status: entry.result, version })
+      await saveRunLog(store, { briefId: runId, payload: record, status: entry.result, version })
     } catch (error) {
       log.error('could not write run_log', { briefId, error })
     }

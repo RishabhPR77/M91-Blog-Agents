@@ -99,6 +99,9 @@ export function createRunStore(base) {
     },
     async updateRecord(id, payload, metadata = {}) {
       const held = known.get(id) ?? null
+      // Phase 9 A2: a status (or other metadata) change that changes nothing is not written again.
+      const same = (a, b) => a === b || (a != null && b != null && JSON.stringify(a) === JSON.stringify(b))
+      if (held && payload === undefined && Object.entries(metadata).every(([k, v]) => same(held.metadata?.[k], v))) return held
       const r = await base.updateRecord(id, payload, metadata, { known: held })
       if (r && !r.dryRun) remember({ ...(held ?? {}), ...r, payload: payload !== undefined ? payload : held?.payload ?? r.payload })
       return r

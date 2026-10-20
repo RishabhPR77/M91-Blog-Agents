@@ -82,9 +82,12 @@ test('research: full run with all checks, records, ranking, Slack summary', asyn
   assert.equal(tone.topicGroup, 1)
   assert.equal(r.style_profile_id, tone.payload.profile_id)
 
-  // run_log per call (+ summary), with the brief's fields.
-  const logs = callLogs(s.store)
+  // A log entry per call (+ summary) in the result, with the brief's fields; no run_log records (Phase 9 A2).
+  const logs = r.calls
   assert.equal(logs.length, 11)
+  assert.equal(callLogs(s.store).length, 0)
+  // The research time is noted on today's facts record (the next run's reuse check reads it there).
+  assert.ok(recordsOf(s.store, 'm91_facts')[0].payload.research_at)
   for (const k of ['run_id', 'agent', 'call', 'model', 'delivery', 'ms', 'items_returned', 'items_kept', 'items_dropped', 'retries', 'error']) assert.ok(k in logs[0], k)
 
   // Slack summary in the brief's format.
@@ -169,11 +172,11 @@ test('budget: never more than SCOUT_MAX_CALLS calls, retries included', async ()
 })
 
 async function seedReusable(store, { hoursAgo = 2, openClusters = 5, dryRun = false } = {}) {
-  await store.createRecord({ type: 'run_log', briefId: 'old', payload: { agent: 'scout', call: 'research_summary', error: null, time: new Date(NOW - hoursAgo * 3600000).toISOString(), ...(dryRun && { dry_run: true }) } })
   for (let i = 0; i < openClusters; i++) {
     await store.createRecord({ type: 'question_cluster', payload: { cluster_id: `C-${i}`, main_question: `Q${i}`, topic_group: 2, m91_fit: { score: 3 }, demand: { level: 'low' }, freshness: 'ongoing' }, status: 'open', topicGroup: 2 })
   }
-  await store.createRecord({ type: 'm91_facts', payload: { ...VALID.scout_m91_facts, sources: ['https://m91.msg91.com/llms.txt'] }, status: 'current', date: '2026-10-17' })
+  // The last research time lives on the facts record (Phase 9); a DRY_RUN research never sets it.
+  await store.createRecord({ type: 'm91_facts', payload: { ...VALID.scout_m91_facts, sources: ['https://m91.msg91.com/llms.txt'], research_at: dryRun ? null : new Date(NOW - hoursAgo * 3600000).toISOString() }, status: 'current', date: '2026-10-17' })
 }
 
 test('reuse: recent run + enough open clusters → no question, tutorial or cluster calls; today\'s facts reused', async () => {
@@ -245,11 +248,42 @@ test('orchestrator: the real Scout runs before the Strategist stub, which receiv
   const notifier = fakeNotifier()
   const ai = fakeAi()
   // The real Strategist (Phase 3) has its own pipeline tests; here the stub stands in for it.
-  const agents = { ...defaultAgents({ config, store, notifier, scoutDeps: { aiSend: ai, fetch: fakeWeb(), urlChecker: fakeChecker(), now: () => NOW } }), strategist: stubAgents.strategist, writer: stubAgents.writer, reviewer: mockReviewer() }
+  const real = defaultAgents({ config, store, notifier, scoutDeps: { aiSend: ai, fetch: fakeWeb(), urlChecker: fakeChecker(), now: () => NOW } })
+  let scoutCalls = []
+  const agents = { ...real, scout: async (ctx) => { const out = await real.scout(ctx); scoutCalls = out.output.calls; return out }, strategist: stubAgents.strategist, writer: stubAgents.writer, reviewer: mockReviewer() }
   const r = await runPipeline({ config, store, notifier, agents, now: () => NOW, briefId: RUN })
   assert.equal(r.state, 'awaiting_human')
   assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 2), ['scout', 'strategist'])
-  const scoutLogs = callLogs(store).filter((l) => l.agent === 'scout' && l.call)
-  assert.equal(scoutLogs.length, 11)
-  assert.ok(callLogs(store).some((l) => l.agent === 'strategist'))
+  assert.equal(scoutCalls.length, 11)
+  assert.equal(callLogs(store).length, 0, 'no run_log records for successful calls')
+})
+
+/** memoryStore that logs every write: [kind, type, id]. */
+function writeLogged() {
+  const store = memoryStore()
+  const log = []
+  const create = store.createRecord.bind(store)
+  const update = store.updateRecord.bind(store)
+  store.createRecord = async (a) => { const r = await create(a); log.push(['create', a.type, r.id]); return r }
+  store.updateRecord = async (id, p, m) => { log.push(['update', store.records.get(id)?.type, id]); return update(id, p, m) }
+  return { store, log }
+}
+
+test('Phase 9 A2: one write per cluster — a new cluster is created with its rank (no update); a merge is one update', async () => {
+  const fresh = writeLogged()
+  await setup({ store: fresh.store }).run()
+  const cl = recordsOf(fresh.store, 'question_cluster')[0]
+  assert.equal(cl.payload.rank_score, 2 * 5 + 3 + 2, 'ranked at creation')
+  assert.deepEqual(fresh.log.filter((w) => w[1] === 'question_cluster').map((w) => w[0]), ['create'])
+  assert.equal(fresh.log.filter((w) => w[1] === 'run_log').length, 0)
+
+  const merged = writeLogged()
+  await merged.store.createRecord({ type: 'question_cluster', payload: { cluster_id: 'C-old', main_question: 'How do I make my agent ask before deleting data?', related_questions: [], source_urls: [], freshness: 'ongoing', m91_fit: { score: 5 }, demand: { level: 'high' } }, status: 'open', topicGroup: 1 })
+  merged.log.length = 0
+  const r = await setup({ store: merged.store }).run()
+  assert.equal(r.counts.clusters_merged, 1)
+  assert.deepEqual(merged.log.filter((w) => w[1] === 'question_cluster').map((w) => w[0]), ['update'])
+  const c = recordsOf(merged.store, 'question_cluster')[0].payload
+  assert.equal(c.source_urls.length, 1, 'the merge')
+  assert.ok(typeof c.rank_score === 'number', 'and the rank, in the same write')
 })

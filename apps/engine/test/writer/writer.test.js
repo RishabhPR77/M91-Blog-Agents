@@ -69,9 +69,10 @@ test('new mode: one call, prompt and message, draft v1 saved with checks, brief 
   const b = [...s.store.records.values()].find((x) => x.type === 'brief')
   assert.equal(b.status, 'drafted')
   assert.match(s.notifier.sent.slack[0], /^✍️ Draft v1 ready: \*How agent approval works with a phone call\* · \d+ words · grade [\d.]+ · hard checks passed · repairs 0 → Reviewer$/)
-  const logs = [...s.store.records.values()].filter((x) => x.type === 'run_log').map((x) => x.payload)
-  assert.equal(logs[0].agent, 'writer')
-  assert.equal(logs[0].call, 'new')
+  // The call log is in the result; a successful call makes no run_log record (Phase 9 A2).
+  assert.equal([...s.store.records.values()].filter((x) => x.type === 'run_log').length, 0)
+  assert.equal(r.calls[0].agent, 'writer')
+  assert.equal(r.calls[0].call, 'new')
 })
 
 test('SLACK_POST_DRAFTS=true posts the line and the full post (chunked by notify)', async () => {

@@ -14,6 +14,7 @@ import { reviewer_result, reviewSchemaErrors } from './schemas.js'
 import { buildReviewerPrompt, reviewRepairTail, quotesProblem } from './prompts.js'
 import { loadDraft, loadFacts, loadPreviousReview, buildReviewerSections, buildReviewerMessage } from './inputs.js'
 import { decide, missingQuotes, reviewSummaryLine } from './decide.js'
+import { saveRunLog } from '../util/runlog.js'
 
 export class ReviewerError extends Error {
   constructor(message, { kind } = {}) {
@@ -72,7 +73,7 @@ export async function runReviewer(params = {}, deps = {}) {
     calls.push(record)
     log.info('reviewer call', record)
     try {
-      await store.createRecord({ type: 'run_log', briefId: runId, payload: record, status: entry.error ? 'error' : entry.result })
+      await saveRunLog(store, { briefId: runId, payload: record, status: entry.error ? 'error' : entry.result })
     } catch (e) {
       log.error('could not write reviewer run_log', { error: e })
     }

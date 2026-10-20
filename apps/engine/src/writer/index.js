@@ -15,6 +15,7 @@ import { buildWriterPrompt, repairTail, truncatedProblem } from './prompts.js'
 import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, citedDocsSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage } from './inputs.js'
 import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets, SNIPPET_LIST_MAX_LINES } from './snippets.js'
 import { draftsOf, nextDraftVersion, saveDraft, draftVersion, isEarlierDraft } from './save.js'
+import { saveRunLog } from '../util/runlog.js'
 
 export class WriterError extends Error {
   constructor(message, { kind } = {}) {
@@ -211,7 +212,7 @@ export async function runWriter(params = {}, deps = {}) {
     calls.push(record)
     log.info('writer call', record)
     try {
-      await store.createRecord({ type: 'run_log', briefId: runId, payload: record, status: entry.error ? 'error' : entry.result })
+      await saveRunLog(store, { briefId: runId, payload: record, status: entry.error ? 'error' : entry.result })
     } catch (e) {
       log.error('could not write writer run_log', { error: e })
     }

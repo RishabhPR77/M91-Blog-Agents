@@ -11,6 +11,7 @@ import { buildInputs, buildStrategistMessage, InputsError } from './inputs.js'
 import { validateBrief, autoFix, findProblems } from './checks.js'
 import { finalizeBrief, saveBrief, markLeadsUsed, setLeadStatus } from './save.js'
 import { emit, throwIfCancelled, CancelledError } from '../events.js'
+import { saveRunLog } from '../util/runlog.js'
 
 export class StrategistError extends Error {
   constructor(message, problems = []) {
@@ -72,7 +73,7 @@ export async function runStrategist(params = {}, deps = {}) {
     log.info('strategist call', record)
     emit('step.output', { agent: 'strategist', step: `strategist.${entry.call}`, message: entry.error ? `failed: ${entry.error}` : `${entry.result}${entry.problems?.length ? ` (${entry.problems.length} problems)` : ''}`, data: { result: entry.result, problems: entry.problems?.length ?? 0, auto_fixes: entry.auto_fixes?.length ?? 0, ms: entry.ms } })
     try {
-      await store.createRecord({ type: 'run_log', briefId: runId, payload: record, status: entry.error ? 'error' : entry.result })
+      await saveRunLog(store, { briefId: runId, payload: record, status: entry.error ? 'error' : entry.result })
     } catch (e) {
       log.error('could not write strategist run_log', { error: e })
     }

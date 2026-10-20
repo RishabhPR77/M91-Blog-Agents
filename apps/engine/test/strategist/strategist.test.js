@@ -59,7 +59,9 @@ test('plan: one call, brief saved with code fields, lead marked used, Slack summ
   assert.equal(statusOf(s.store, 'question_cluster', 'cluster_id', 'C-1'), 'used')
   assert.equal(recordsOf(s.store, 'question_cluster').find((c) => c.payload.cluster_id === 'C-1').payload.used_by, '261017-1405-ABCD')
   assert.match(s.notifier.sent.slack[0], /^🧭 Brief ready: \*How to make your AI agent wait for a human yes\*\nType: question · Group: 1 · Format: guide · Intent: learn/)
-  const log = recordsOf(s.store, 'run_log')[0].payload
+  // The call log is in the result; successful calls make no run_log record (Phase 9 A2).
+  assert.equal(recordsOf(s.store, 'run_log').length, 0)
+  const log = r.calls[0]
   assert.equal(log.agent, 'strategist')
   assert.equal(log.call, 'plan')
   assert.equal(log.result, 'ok')
@@ -85,7 +87,8 @@ test('repair flow: bad twice → plan fails, nothing saved, no lead used', async
   await assert.rejects(s.run(), (e) => e instanceof StrategistError && /after 1 repair/.test(e.message) && /C-404/.test(e.message))
   assert.equal(recordsOf(s.store, 'brief').length, 0)
   assert.equal(statusOf(s.store, 'question_cluster', 'cluster_id', 'C-1'), 'open')
-  assert.equal(recordsOf(s.store, 'run_log').length, 2)
+  // Two calls with problems (not errors): no run_log records.
+  assert.equal(recordsOf(s.store, 'run_log').length, 0)
 })
 
 test('schema-invalid answer and truncation are repaired (truncation counts as a repair)', async () => {
@@ -214,7 +217,7 @@ test('orchestrator: Scout stub → real Strategist → Writer stub; a pass marks
   const brief = recordsOf(store, 'brief')
   assert.equal(brief.length, 1)
   assert.equal(brief[0].status, 'awaiting_human')
-  assert.ok(recordsOf(store, 'run_log').some((l) => l.payload.agent === 'strategist' && l.payload.call === 'plan'))
+  assert.equal(recordsOf(store, 'run_log').length, 0, 'no run_log records for successful calls')
 })
 
 test('orchestrator: reviewer send_to strategist → re-brief version 2', async () => {

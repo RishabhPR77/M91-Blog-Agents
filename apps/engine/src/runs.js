@@ -159,11 +159,12 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     const run = {
       run_id: runId, trigger, mode, dry_run: dry, status: 'running', started_at: istIso(new Date(startedAt)), finished_at: null, ms: null,
       steps: [], brief_id: null, result_summary: '', warnings: [],
-      // Compact timeline (Phase 6): saved with the step-boundary writes and at the end, not per event.
+      // Compact timeline (Phase 6): saved with the run record, not per event.
       timeline: []
     }
 
-    // The run record follows the step events; writes are queued so they happen in order.
+    // The run record (Phase 9 A2) is saved at the start, when a step fails, when the run waits for approval,
+    // and at the end; steps are tracked in memory in between. Writes are queued so they happen in order.
     let record = null
     let queue = Promise.resolve()
     const save = () => {
@@ -183,11 +184,12 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       addToTimeline(run, e)
       if (e.type === 'step.started' && TOP_STEPS.includes(e.step)) {
         run.steps.push({ name: e.step, status: 'running', started_at: e.ts, finished_at: null, ms: null, ai_calls: 0, models: [], retries: 0, record_ids: [], summary: '', error: null })
-        save()
       } else if ((e.type === 'step.finished' || e.type === 'step.failed' || e.type === 'step.cancelled') && TOP_STEPS.includes(e.step)) {
         const s = stepFor(e.step)
         const status = e.type === 'step.finished' ? 'succeeded' : e.type === 'step.cancelled' ? 'cancelled' : 'failed'
         if (s) Object.assign(s, { status, finished_at: e.ts, ms: e.data?.ms ?? null, error: status === 'failed' ? e.message ?? 'failed' : null })
+        if (status === 'failed') save()
+      } else if (e.type === 'approval.waiting') {
         save()
       } else if (e.type === 'ai.call') {
         const s = stepFor(topOf(e))
@@ -234,7 +236,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       warnings: result.warnings ?? [],
       // Extra facts a mode records on its run (e.g. approve: approved_unreviewed).
       ...(result.run_fields ?? {}),
-      // Mem0 requests up to this final save (the save itself adds 1 read + 1 write; run.finished has the full count).
+      // Mem0 requests up to this final save (the save itself is 1 more write; run.finished has the full count).
       ...(mem0 && { mem0: { ...mem0, requests: mem0Requests(mem0) } })
     })
     for (const s of run.steps) if (s.status === 'running') Object.assign(s, { status: result.status === 'cancelled' ? 'cancelled' : 'failed', finished_at: run.finished_at })

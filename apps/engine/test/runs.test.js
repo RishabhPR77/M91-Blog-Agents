@@ -47,7 +47,8 @@ test('full run: run_id format, separate brief_id, run record lifecycle, events, 
   assert.deepEqual(p.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['reviewer', 'succeeded']])
   assert.match(p.brief_id, BRIEF_ID_RE)
   assert.notEqual(p.brief_id, run_id)
-  assert.ok(s.updates.length >= 8, `updated at step boundaries (${s.updates.length})`)
+  // Phase 9 A2: saved at the start (create), when the run waits for approval, and at the end; not per step.
+  assert.deepEqual(s.updates, ['running', 'succeeded'])
 
   assert.equal(lockOwner, run_id, 'the lock points to the run')
   assert.equal(heldLock(), null, 'lock file released')
@@ -157,7 +158,7 @@ test('cancel, then a network error inside the in-flight step: still cancelled, n
   assert.deepEqual(s.notifier.sent.slack, [`⏹️ Run ${run_id} cancelled`])
 })
 
-test('a step interrupted by a cancel is recorded as "cancelled", not "failed" (run record, event, run_log)', async () => {
+test('a step interrupted by a cancel is recorded as "cancelled", not "failed" (run record, event; run_log only for errors)', async () => {
   const restore = quiet()
   // As live: the in-flight Scout call finishes, then the next cancel check throws CancelledError inside the step.
   let finishCall
@@ -173,13 +174,17 @@ test('a step interrupted by a cancel is recorded as "cancelled", not "failed" (r
   const ev = replay(run_id).find((e) => e.step === 'scout' && (e.type === 'step.failed' || e.type === 'step.cancelled'))
   assert.equal(ev.type, 'step.cancelled')
   assert.equal(ev.message, 'cancelled')
-  const log = recordsOf(s.store, 'run_log').find((l) => l.payload.agent === 'scout')
-  assert.deepEqual([log.payload.result, log.payload.error], ['cancelled', null])
+  // A cancel is not an error: no run_log record (Phase 9 A2); the run record says "cancelled".
+  assert.equal(recordsOf(s.store, 'run_log').length, 0)
   // A real failure is still "failed".
   const f = setup({ agents: { scout: async () => { throw new Error('scout down') } } })
   const { run_id: id2 } = await f.manager.startRun({ mode: 'full' })
   const r2 = await f.manager.wait(id2)
   assert.deepEqual(r2.run.steps.map((x) => [x.name, x.status, x.error]), [['scout', 'failed', 'scout down']])
+  // The run record was saved at the start, when the step failed, and at the end (Phase 9 A2).
+  assert.deepEqual(f.updates, ['running', 'failed'])
+  // Errors still get a run_log record.
+  assert.deepEqual(recordsOf(f.store, 'run_log').map((l) => [l.payload.agent, l.payload.result, l.payload.error]), [['scout', 'error', 'scout down'], ['orchestrator', 'failed', 'scout down']])
 })
 
 test('scout mode: a cancel inside the step is recorded as "cancelled"', async () => {

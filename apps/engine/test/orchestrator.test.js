@@ -70,19 +70,17 @@ test('decideAfterReview: "must" items choose the route in order strategist → s
   assert.equal(decideAfterReview(fail('editor'), counters(), limits).action, 'revise', 'unknown send_to → the Writer')
 })
 
-test('happy path with stubs: a pass ends at awaiting_human, run_log per step, records written, lock released, ready line to the notifier', async () => {
+test('happy path with stubs: a pass ends at awaiting_human, a step log per step (no run_log records), records written, lock released, ready line to the notifier', async () => {
   const store = memoryStore()
   const notifier = fakeNotifier()
   const r = await runPipeline({ config: fakeConfig({ DRY_RUN: 'true' }), store, notifier, agents: stubs() })
   assert.equal(r.state, 'awaiting_human')
   assert.equal(r.version, 1)
   assert.equal(store.byType('brief')[0].status, 'awaiting_human')
-  const logs = store.byType('run_log')
-  assert.deepEqual(logs.map((l) => l.payload.agent), ['scout', 'strategist', 'writer', 'reviewer', 'orchestrator'])
-  for (const l of logs) {
-    for (const k of ['time', 'agent', 'model', 'ms', 'result', 'error']) assert.ok(k in l.payload, `run_log has ${k}`)
-    assert.equal(l.briefId, r.briefId)
-  }
+  // Phase 9 A2: the step log stays in the result (and the run record's timeline); only errors become run_log records.
+  assert.deepEqual(r.steps.map((l) => l.agent), ['scout', 'strategist', 'writer', 'reviewer', 'orchestrator'])
+  for (const l of r.steps) for (const k of ['time', 'agent', 'model', 'ms', 'result', 'error']) assert.ok(k in l, `step log has ${k}`)
+  assert.equal(store.byType('run_log').length, 0, 'no run_log for successful steps')
   assert.equal(store.byType('brief').length, 1)
   assert.equal(store.byType('draft').length, 1)
   assert.equal(store.byType('review').length, 1)

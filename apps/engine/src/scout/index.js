@@ -12,6 +12,7 @@ import { buildDocsBundle, fetchSkillReadme, DocsError } from './docs.js'
 import { classifyCluster, mergeClusterPayload, storedStoryUrls, isDuplicateTutorial } from './dedupe.js'
 import { rankClusters } from './rank.js'
 import { emit, scoutStepName, throwIfCancelled, CancelledError } from '../events.js'
+import { saveRunLog } from '../util/runlog.js'
 
 /** An error that fails the pipeline run (brief 13). */
 export class ScoutError extends Error {
@@ -125,7 +126,7 @@ export async function runScout(params = {}, deps = {}) {
       if (!error) emit('step.output', { agent: 'scout', step, message: `${kept} kept of ${returned} returned${dropped ? ` (${dropped} dropped)` : ''}`, data: { returned, kept, dropped } })
     }
     try {
-      await store.createRecord({ type: 'run_log', briefId: runId, payload: entry, status: error ? 'error' : 'ok' })
+      await saveRunLog(store, { briefId: runId, payload: entry, status: error ? 'error' : 'ok' })
     } catch (e) {
       log.error('could not write scout run_log', { error: e })
     }
@@ -174,7 +175,7 @@ export async function runScout(params = {}, deps = {}) {
     const factsResult = await getFacts()
     const facts = factsResult.payload
     const factsSummary = summariseFacts(facts)
-    const reuse = await shouldReuse()
+    const reuse = await shouldReuse(factsResult)
 
     // Questions
     const questions = []
@@ -286,6 +287,10 @@ export async function runScout(params = {}, deps = {}) {
     // Clusters + dedupe (skipped when reusing research)
     const clusterIds = []
     const newClusterRecords = []
+    // Phase 9 A2: one write per cluster. Merges are collected (several merges into one cluster → one update),
+    // and new clusters are created after ranking, with their rank already set.
+    const pendingMerges = new Map()
+    const pendingNew = []
     if (!reuse.reuse && questions.length) {
       const res = await tryCall('clusters', {
         task: CLUSTERS,
@@ -313,8 +318,7 @@ export async function runScout(params = {}, deps = {}) {
           const cluster = { ...c, source_urls: urls, freshness: freshnessFromDates(urls.map((u) => dateByUrl.get(urlKey(u.url))).filter(Boolean), today) }
           const decision = await classifyCluster(store, cluster, sc.dedupeSimilarity)
           if (decision.action === 'merge') {
-            const merged = mergeClusterPayload(decision.match.payload, cluster, today)
-            await store.updateRecord(decision.match.id, merged, {})
+            pendingMerges.set(decision.match.id, mergeClusterPayload(pendingMerges.get(decision.match.id) ?? decision.match.payload, cluster, today))
             counts.clusters_merged++
             continue
           }
@@ -327,8 +331,7 @@ export async function runScout(params = {}, deps = {}) {
             first_seen: today,
             last_seen: today
           }
-          const rec = await store.createRecord({ type: 'question_cluster', briefId: null, payload, status: 'open', topicGroup: c.topic_group, date: today })
-          newClusterRecords.push({ id: rec.id, payload })
+          pendingNew.push({ tempId: `new:${pendingNew.length}`, payload, topicGroup: c.topic_group })
           clusterIds.push(payload.cluster_id)
           counts.clusters_new++
         }
@@ -338,7 +341,7 @@ export async function runScout(params = {}, deps = {}) {
 
     // Rank all open clusters
     const stored = (await store.getRecords({ type: 'question_cluster', status: 'open' })).map((r) => ({ id: r.id, payload: r.payload }))
-    const openClusters = [...stored, ...newClusterRecords.filter((n) => !stored.some((s) => s.id === n.id))]
+    const openClusters = [...stored.map((o) => ({ id: o.id, payload: pendingMerges.get(o.id) ?? o.payload })), ...pendingNew.map((n) => ({ id: n.tempId, payload: n.payload }))]
     const recentGroups = (await store.getRecords({ type: 'brief' }))
       .sort((a, b) => String(b.date).localeCompare(String(a.date)))
       .slice(0, 10)
@@ -346,11 +349,15 @@ export async function runScout(params = {}, deps = {}) {
       .filter((g) => g != null)
     const ranked = rankClusters(openClusters.map((c) => ({ ...c.payload, _id: c.id })), recentGroups)
     for (const c of ranked) {
-      const before = openClusters.find((o) => o.id === c._id)?.payload?.rank_score
-      if (before !== c.rank_score) {
-        const { _id, ...payload } = c
-        await store.updateRecord(_id, payload, {})
+      const { _id, ...payload } = c
+      const fresh = pendingNew.find((n) => n.tempId === _id)
+      if (fresh) {
+        const rec = await store.createRecord({ type: 'question_cluster', briefId: null, payload, status: 'open', topicGroup: fresh.topicGroup, date: today })
+        newClusterRecords.push({ id: rec.id, payload })
+        continue
       }
+      const before = stored.find((o) => o.id === _id)?.payload
+      if (pendingMerges.has(_id) || before?.rank_score !== c.rank_score) await store.updateRecord(_id, payload, {})
     }
     const top = ranked[0] ?? null
 
@@ -441,6 +448,14 @@ export async function runScout(params = {}, deps = {}) {
       }
     }
     await runLog({ call: 'research_summary', model: null, delivery: null, ms: 0, retries: 0 }, { returned: calls.length, kept: clusterIds.length + storyIds.length + tutorialIds.length })
+    // A finished fresh research: note its time on the facts record (one write; DRY_RUN writes nothing).
+    if (!reuse.reuse && !store.dryRun && factsResult.id) {
+      try {
+        await store.updateRecord(factsResult.id, { ...factsResult.payload, research_at: istIso(new Date(now())) }, {})
+      } catch (error) {
+        warnings.push(`could not note the research time on the facts record: ${error.message}`)
+      }
+    }
     await postSummary(result, styleSources)
     return { ...result, calls }
   }
@@ -503,7 +518,9 @@ export async function runScout(params = {}, deps = {}) {
       pages_fetched: bundle.pagesFetched,
       chars: bundle.chars,
       sources: bundle.sources,
-      date: today
+      date: today,
+      // When the last full research finished (Phase 9: the reuse check reads it here instead of every run_log).
+      research_at: current.map((r) => r.payload?.research_at).filter(Boolean).sort().at(-1) ?? null
     }
     await runLog(res.meta, { returned, kept: returned - dropped, dropped })
     for (const old of current) await store.updateRecord(old.id, undefined, { status: 'old' })
@@ -511,13 +528,13 @@ export async function runScout(params = {}, deps = {}) {
     return { id: rec.id, payload, reused: false }
   }
 
-  /** Reuse question research when the last successful (non-dry) run is recent and enough clusters are open. */
-  async function shouldReuse() {
-    const summaries = (await store.getRecords({ type: 'run_log' }))
-      .filter((r) => r.payload?.agent === 'scout' && r.payload?.call === 'research_summary' && !r.payload?.error && r.payload?.dry_run !== true)
-      .map((r) => Date.parse(r.payload.time))
-      .filter((t) => t > 0)
-    const last = summaries.length ? Math.max(...summaries) : null
+  /**
+   * Reuse question research when the last successful (non-dry) research is recent and enough clusters are open.
+   * The time is on today's m91_facts record (research_at), which the run has already read: no extra request.
+   */
+  async function shouldReuse(factsResult) {
+    const t = Date.parse(factsResult?.payload?.research_at)
+    const last = t > 0 ? t : null
     const recent = last !== null && now() - last < sc.reuseHours * 3600000
     if (!recent) return { reuse: false }
     const open = (await store.getRecords({ type: 'question_cluster', status: 'open' })).length
