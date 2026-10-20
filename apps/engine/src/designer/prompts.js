@@ -27,7 +27,7 @@ export const CATALOG = [
   ['code_tabs', '2–5 consecutive code parts (several versions of the same thing).'],
   ['comparison_table', 'exactly one table.'],
   ['faq_accordion', 'H3 headings that are questions (flag is_question), each followed by one or more answer paragraphs; 2–12 questions.'],
-  ['phone_ring_sim', 'exactly one ORDERED list with 3–8 items describing the approval flow (agent asks, phone rings, person decides, software continues; flag looks_like_flow). Give one moment_actor per item, in order.'],
+  ['phone_ring_sim', 'exactly one ORDERED list with 3–8 items describing the approval flow (agent asks, phone rings, person decides, software continues; flag looks_like_flow). Give one moment_actor per item, in order. The actors must go agent → m91 or phone → human → software, each at least once, never backwards; a moment whose text starts with an actor ("M91 …", "Your agent …") uses that actor. Otherwise do not use this block.'],
   ['escalation_timeline', 'exactly one ORDERED list with 2–10 items describing what happens over time.'],
   ['agent_terminal_replay', 'exactly one code part in text, bash, console or log with 2–40 lines (a log or a run of commands).'],
   ['choice_explorer', '2–4 choices: paragraphs that start with bold text (flag starts_with_bold); a following paragraph without bold belongs to the choice before it.'],

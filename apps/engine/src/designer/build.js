@@ -38,6 +38,25 @@ const headingInner = (md, h) => (h.children?.length ? spanOf(md, h.children[0], 
 const isOrderedList = (p) => p.type === 'list' && p.ordered
 const plain = (p) => textOf(p.node).replace(/\s+/g, ' ').trim()
 
+// phone_ring_sim: the phone shows one state per actor (the same map as the blog's PhoneRingSim.astro). The
+// moments must go through every state in this order, and an actor named at the start of a moment's text must be
+// the moment's actor (m91 and phone both ring, so they count as one).
+export const PHONE_STATES = Object.freeze({ agent: 'waiting', m91: 'ringing', phone: 'ringing', human: 'deciding', software: 'continuing' })
+const STATE_ORDER = ['waiting', 'ringing', 'deciding', 'continuing']
+const NAMED_ACTORS = [
+  ['agent', /^(?:the |your |an? )?(?:ai )?agents?\b/i],
+  ['m91', /^m91\b/i],
+  ['phone', /^(?:the |your |a )?(?:on-call )?phones?\b/i],
+  ['human', /^(?:the |a |an |your )?(?:person|human|approver|reviewer|someone|on-call (?:person|engineer))\b/i],
+  ['software', /^(?:the |your )?(?:software|app|application|server|backend|code|system|service|workflow)\b/i]
+]
+/** The actor a moment's text starts with ("M91 rings…" → m91), or null when it names none. */
+export function namedActor(text) {
+  const t = String(text ?? '').replace(/^[\s*_`]+/, '')
+  return NAMED_ACTORS.find(([, re]) => re.test(t))?.[0] ?? null
+}
+const sameActor = (a, b) => a === b || (PHONE_STATES[a] === 'ringing' && PHONE_STATES[b] === 'ringing')
+
 class PatternError extends Error {}
 const need = (ok, message) => {
   if (!ok) throw new PatternError(message)
@@ -102,6 +121,15 @@ const BUILDERS = {
     const actors = seg.moment_actors ?? []
     need(actors.length === items.length, `phone_ring_sim needs one actor per moment (${items.length}), got ${actors.length}`)
     need(actors.every((a) => ACTORS.includes(a)), 'phone_ring_sim: unknown actor')
+    items.forEach((it, k) => {
+      const text = textOf(it).replace(/\s+/g, ' ').trim()
+      const named = namedActor(text)
+      need(!named || sameActor(named, actors[k]), `phone_ring_sim: moment ${k + 1} names ${named} ("${text.length > 60 ? `${text.slice(0, 60)}…` : text}") but its actor is ${actors[k]}`)
+    })
+    const states = actors.map((a) => PHONE_STATES[a])
+    const ranks = states.map((st) => STATE_ORDER.indexOf(st))
+    need(ranks.every((r, k) => k === 0 || r >= ranks[k - 1]) && STATE_ORDER.every((_, r) => ranks.includes(r)),
+      `phone_ring_sim: the moments must go waiting → ringing → deciding → continuing (agent → M91 or phone → human → software), got ${states.join(' → ')}`)
     return { moments: items.map((it, k) => ({ actor: actors[k], markdown: itemContent(md, it) })) }
   },
 

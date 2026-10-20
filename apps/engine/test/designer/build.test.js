@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { validatePost } from '@m91/content'
 import { parseParts } from '../../src/designer/parts.js'
-import { buildBlocks, languageLabel } from '../../src/designer/build.js'
+import { buildBlocks, languageLabel, namedActor } from '../../src/designer/build.js'
 import { EVERY_BLOCK_MD, everyBlockPlan, range, seg } from './fixtures.js'
 
 const parsed = () => parseParts(EVERY_BLOCK_MD)
@@ -109,4 +109,41 @@ test('variants: two paragraphs as a callout; troubleshooting with separate Fix p
   assert.deepEqual(['bash', 'sh', 'js', 'python', 'json', 'yaml', '', 'kotlin'].map(languageLabel), ['Terminal', 'Terminal', 'JavaScript', 'Python', 'JSON', 'YAML', 'Text', 'Kotlin'])
   const tabs = buildBlocks({ segments: [seg('code_tabs', ['N1', 'N2'])] }, parseParts('```bash\na\n```\n\n```bash\nb\n```')).blocks[0].data.tabs
   assert.deepEqual(tabs.map((t) => t.label), ['Terminal', 'Terminal (2)'])
+})
+
+test('namedActor: the actor a moment starts with, or null', () => {
+  assert.equal(namedActor('The agent reaches a risky step.'), 'agent')
+  assert.equal(namedActor('Your AI agent pauses.'), 'agent')
+  assert.equal(namedActor('**M91** rings the phone.'), 'm91')
+  assert.equal(namedActor('The on-call phone rings.'), 'phone')
+  assert.equal(namedActor('The person taps Approve.'), 'human')
+  assert.equal(namedActor('Software asks for approval.'), 'software')
+  assert.equal(namedActor('Your server runs the step.'), 'software')
+  assert.equal(namedActor('After that, the step runs.'), null)
+  assert.equal(namedActor('Agentic flows are common.'), null)
+})
+
+test('phone_ring_sim: moments must go waiting → ringing → deciding → continuing, and a named actor must match', () => {
+  const flow = (items, actors) => {
+    const p = parseParts(`Intro.\n\n${items.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n`)
+    return buildBlocks({ segments: [seg('phone_ring_sim', range(p.parts, '1. '), { moment_actors: actors })] }, p, { maxBlocks: 6 })
+  }
+  // The live post's flow, with the actors the Designer gave it (moment 3 names M91, moment 4 the agent).
+  const q8c4 = ['Software asks for approval with callbackUrl and responseOptions.', 'M91 rings the phone and records who answered and what they chose.',
+    'M91 posts the human response to your callback webhook.', 'Your agent verifies operation ID, payload hash, scope, and expiry.', 'Your agent records the decision and runs or cancels the tool.']
+  let r = flow(q8c4, ['software', 'm91', 'software', 'human', 'software'])
+  assert.equal(r.kept.length, 0)
+  assert.match(r.dropped[0].reason, /^phone_ring_sim: moment 3 names m91 \("M91 posts the human response to your callback webhook\."\) but its actor is software$/)
+  assert.ok(r.blocks.every((b) => b.type === 'rich_text'), 'its parts stay plain text')
+  // Right names, wrong order: the phone would show "Continuing…" first.
+  r = flow(q8c4, ['software', 'm91', 'm91', 'agent', 'agent'])
+  assert.match(r.dropped[0].reason, /^phone_ring_sim: the moments must go waiting → ringing → deciding → continuing .*got continuing → ringing → ringing → waiting → waiting$/)
+  // A missing stage (no person deciding) is dropped too.
+  r = flow(['The agent asks for approval.', 'M91 rings the phone.', 'The software continues.'], ['agent', 'm91', 'software'])
+  assert.match(r.dropped[0].reason, /got waiting → ringing → continuing$/)
+  // A good flow: repeats allowed, m91 and phone ring alike, unnamed moments take the Designer's actor.
+  r = flow(['The agent pauses before deleting data.', 'M91 calls the on-call engineer.', 'The phone keeps ringing until someone answers.', 'The person taps Approve.', 'After that, the delete runs.'],
+    ['agent', 'm91', 'm91', 'human', 'software'])
+  assert.deepEqual(r.dropped, [])
+  assert.deepEqual(r.blocks.find((b) => b.type === 'phone_ring_sim').data.moments.map((m) => m.actor), ['agent', 'm91', 'm91', 'human', 'software'])
 })
