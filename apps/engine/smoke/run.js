@@ -146,14 +146,17 @@ async function s5() {
   const notifier = createNotifier({ config })
   const when = istHuman()
   try {
-    const { ms } = await timed(() => notifier.slack(`Smoke test from M91 Blog Engine v2 (${when}). Please ignore.`))
-    record('S5 Slack message', 'SENT (confirm receipt)', ms)
+    const { ms, value } = await timed(() => notifier.slack(`Smoke test from M91 Blog Engine v2 (${when}). Please ignore.`))
+    // A "pending flows" answer means nothing was sent (the webhook URL is empty).
+    if (value?.skipped) record('S5 Slack message', 'SKIPPED', ms, '', `${value.key ?? 'webhook URL'} is empty: nothing sent`)
+    else record('S5 Slack message', 'SENT (confirm receipt)', ms)
   } catch (e) {
     record('S5 Slack message', 'FAIL', '', '', e.message)
   }
   try {
-    const { ms } = await timed(() => notifier.m91Alert({ title: 'Blog engine smoke test', description: `Test alert (${when}). Please ignore.`, severity: 'LOW' }))
-    record('S5 M91 alert (LOW)', 'SENT (confirm receipt)', ms)
+    const { ms, value } = await timed(() => notifier.m91Alert({ title: 'Blog engine smoke test', description: `Test alert (${when}). Please ignore.`, severity: 'LOW' }))
+    if (value?.skipped) record('S5 M91 alert (LOW)', 'SKIPPED', ms, '', `${value.key ?? 'webhook URL'} is empty: nothing sent`)
+    else record('S5 M91 alert (LOW)', 'SENT (confirm receipt)', ms)
   } catch (e) {
     record('S5 M91 alert (LOW)', 'FAIL', '', '', e.message)
   }
