@@ -462,3 +462,58 @@ test('publish modes as runs: publish, set_index, unpublish, rebuild_blog', async
   assert.equal(un.status, 'succeeded')
   assert.equal(un.run.result_summary, `unpublished ${slug}`)
 })
+
+// ---------- Phase 8: interactive blocks ----------
+
+test('chooseBlocks: off, no Designer result, fallback, no blocks → null; an ok block_doc is checked again against the body', async () => {
+  const { chooseBlocks } = await import('../../src/publisher/blocks.js')
+  const { parseParts } = await import('../../src/designer/parts.js')
+  const { buildBlocks } = await import('../../src/designer/build.js')
+  const { EVERY_BLOCK_MD, everyBlockPlan } = await import('../designer/fixtures.js')
+  const p = parseParts(EVERY_BLOCK_MD)
+  const built = buildBlocks(everyBlockPlan(p.parts), p, { maxBlocks: 3 })
+  const doc = { status: 'ok', payload: { blocks: built.blocks, layout: built.layout } }
+  assert.deepEqual(chooseBlocks({ interactive: false, doc, markdown: EVERY_BLOCK_MD }), { blocks: null, note: 'plain Markdown (interactive off)' })
+  assert.equal(chooseBlocks({ interactive: true, doc: null, markdown: EVERY_BLOCK_MD }).note, 'plain Markdown (no Designer result for this version)')
+  assert.equal(chooseBlocks({ interactive: true, doc: { status: 'fallback', payload: { blocks: null } }, markdown: EVERY_BLOCK_MD }).note, 'plain Markdown (Designer fallback)')
+  assert.equal(chooseBlocks({ interactive: true, doc: { status: 'ok', payload: { blocks: null } }, markdown: EVERY_BLOCK_MD }).note, 'plain Markdown (no interactive blocks chosen)')
+  const ok = chooseBlocks({ interactive: true, doc, markdown: EVERY_BLOCK_MD })
+  assert.equal(ok.blocks, built.blocks)
+  assert.equal(ok.note, '3 interactive blocks')
+  // The draft changed after the Designer ran: the blocks no longer match, so the post goes out as Markdown.
+  const changed = chooseBlocks({ interactive: true, doc, markdown: EVERY_BLOCK_MD.replace('Send a test alert.', 'Send two test alerts.') })
+  assert.equal(changed.blocks, null)
+  assert.match(changed.warning, /^blocks not used: they no longer match the post/)
+})
+
+test('publish uses the block_doc (blocks in the post, the note in the sub-step); a republish reuses it; interactive off → null', async () => {
+  const restore = quiet()
+  const { parseParts, bodyMarkdown } = await import('../../src/designer/parts.js')
+  const { buildBlocks } = await import('../../src/designer/build.js')
+  const { EVERY_BLOCK_MD, everyBlockPlan } = await import('../designer/fixtures.js')
+  const postMd = `# How agent approval works with a phone call\n\n**TL;DR**\n- One.\n- Two.\n- Three.\n\n${EVERY_BLOCK_MD}`
+  const s = await seeded()
+  await s.store.updateRecord(s.draft.id, { ...s.store.records.get(s.draft.id).payload, post_markdown: postMd }, {})
+  const p = parseParts(bodyMarkdown(postMd))
+  const built = buildBlocks(everyBlockPlan(p.parts), p, { maxBlocks: 6 })
+  await s.store.createRecord({ type: 'block_doc', briefId: BRIEF_ID, payload: { version: 1, blocks: built.blocks, layout: built.layout, created_at: '2026-10-20T10:00:00+05:30' }, status: 'ok', version: 1 })
+  const ev = []
+  const { pub } = publisherFor(s)
+  const unsub = (await import('../../src/events.js')).subscribe((e) => ev.push(e))
+  const { withRun } = await import('../../src/events.js')
+  await withRun('R-261020-1000-BLKS', () => pub.publish({ briefId: BRIEF_ID }))
+  const [rec] = posts(s.store)
+  assert.deepEqual(rec.payload.post.blocks, built.blocks)
+  assert.equal(rec.payload.post.markdown, bodyMarkdown(postMd), 'markdown is always kept (RSS, llms.txt, fallback)')
+  const step1 = ev.find((e) => e.type === 'step.output' && /^1\/6|build post/.test(e.message))
+  assert.match(step1.message, /· 6 interactive blocks$/)
+  // Republish: the same block_doc, no new Designer run.
+  await pub.publish({ briefId: BRIEF_ID })
+  assert.deepEqual(posts(s.store)[0].payload.post.blocks, built.blocks)
+  // Switched off for this post: the next publish sends blocks: null.
+  await s.store.updateRecord(s.draft.id, undefined, { interactive: false })
+  await pub.publish({ briefId: BRIEF_ID })
+  unsub()
+  restore()
+  assert.equal(posts(s.store)[0].payload.post.blocks, null)
+})

@@ -128,11 +128,12 @@ export function noindexFor({ existing, published = [], firstN }) {
 
 /**
  * The post JSON (format v1).
- * @param {{ draft: object, briefId, brief, published: object[], config, now: () => number, istIso: (Date) => string }} input
- *   draft: the draft record ({ version, payload }); published: every published_post record.
+ * @param {{ draft: object, briefId, brief, published: object[], config, now: () => number, istIso: (Date) => string, blocks?: object[]|null }} input
+ *   draft: the draft record ({ version, payload }); published: every published_post record; blocks: from
+ *   chooseBlocks (publisher/blocks.js), already checked against this body (null: plain Markdown).
  * @returns {{ post, slug, existing, warnings[] }}  Throws PostBuildError when the post is not valid.
  */
-export function buildPost({ draft, briefId, brief, published = [], config, now = Date.now, istIso }) {
+export function buildPost({ draft, briefId, brief, published = [], config, now = Date.now, istIso, blocks = null }) {
   const d = draft.payload ?? draft
   const warnings = []
   const baseUrl = config.blog.baseUrl
@@ -153,7 +154,7 @@ export function buildPost({ draft, briefId, brief, published = [], config, now =
     tags: tagsOf(brief),
     reading_time_min: readingTime(markdown),
     markdown,
-    blocks: null,
+    blocks,
     seo: { title_tag: d.seo?.title_tag ?? d.title, meta_description: d.seo?.meta_description ?? '', og_image: `${baseUrl}/og/${slug}.png` },
     sources: sourcesOf(markdown, { baseUrl, ctaUrl: config.m91.ctaUrl }),
     related_slugs: relatedSlugs(markdown, { slug, topicGroup, baseUrl, published }),

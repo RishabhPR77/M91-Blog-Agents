@@ -12,6 +12,9 @@ import { emit, throwIfCancelled, isCancel } from '../events.js'
 import { loadBrief } from '../writer/inputs.js'
 import { draftsOf, draftVersion, draftBriefVersion } from '../writer/save.js'
 import { buildPost } from './post.js'
+import { chooseBlocks } from './blocks.js'
+import { isInteractive, latestBlockDoc } from '../designer/index.js'
+import { bodyMarkdown } from '../designer/parts.js'
 import { exportPublished, BLOG_DIR, CONTENT_DIR } from './export.js'
 import { runBlogBuild, checkBuild } from './build.js'
 import { deploy as embarkoDeploy } from './embarko.js'
@@ -118,7 +121,12 @@ export function createPublisher({ config, store, notifier, fetch = globalThis.fe
     const briefRec = await loadBrief(store, briefId, draftBriefVersion(draft))
     if (!briefRec) throw new PublishError('unknown_brief', `no brief ${briefId}`, 404)
     const published = await store.getRecords({ type: 'published_post' })
-    const { post, existing, warnings: postWarnings } = buildPost({ draft, briefId, brief: briefRec.payload, published, config, now, istIso })
+    // Phase 8: the interactive blocks from the newest block_doc of this version (a republish reuses it: no AI).
+    const interactive = isInteractive(draft, config)
+    const doc = interactive ? await latestBlockDoc(store, briefId, draftVersion(draft)) : null
+    const chosen = chooseBlocks({ interactive, doc, markdown: bodyMarkdown(draft.payload?.post_markdown) })
+    if (chosen.warning) warnings.push(chosen.warning)
+    const { post, existing, warnings: postWarnings } = buildPost({ draft, briefId, brief: briefRec.payload, published, config, now, istIso, blocks: chosen.blocks })
     warnings.push(...postWarnings)
     for (const w of postWarnings) log.warn('publisher', { briefId, warning: w })
     const test = draft.metadata?.test === true || briefRec.metadata?.test === true
@@ -131,7 +139,7 @@ export function createPublisher({ config, store, notifier, fetch = globalThis.fe
     const record = existing
       ? { ...existing, ...(await store.updateRecord(existing.id, payload, { status: 'publishing', slug: post.slug })), payload }
       : { ...(await store.createRecord({ type: 'published_post', briefId, payload, status: 'publishing', version: post.version, meta: { slug: post.slug, ...(test && { test: true }) } })), payload }
-    sub(1, 'build post', `${post.slug} · v${post.version} · ${post.reading_time_min} min read · ${post.noindex ? 'noindex' : 'indexed'}`, { slug: post.slug, noindex: post.noindex, record_id: record.id })
+    sub(1, 'build post', `${post.slug} · v${post.version} · ${post.reading_time_min} min read · ${post.noindex ? 'noindex' : 'indexed'} · ${chosen.note}`, { slug: post.slug, noindex: post.noindex, record_id: record.id, blocks: post.blocks?.length ?? 0 })
     try {
       throwIfCancelled()
       const shipped = await ship({ slug: post.slug, extra: dry ? [post] : [] })
