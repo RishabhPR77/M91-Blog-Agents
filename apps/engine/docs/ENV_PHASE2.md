@@ -22,7 +22,8 @@ DOCS_MAX_PAGES=15
 # At most 48000: viaSocket refuses a message over 50,000 characters (the brief's 150000 can't work).
 DOCS_MAX_CHARS=45000
 # Comma-separated hosts; only doc links on these are fetched.
-M91_DOCS_HOSTS=m91.msg91.com
+M91_DOCS_HOSTS=m91-api.msg91.com,m91.msg91.com
+# (Since 2026-10-20 the docs are on m91-api.msg91.com: see PHASE8_NOTES.md.)
 DEDUPE_SIMILARITY=0.85
 URL_CHECK_TIMEOUT_MS=10000
 

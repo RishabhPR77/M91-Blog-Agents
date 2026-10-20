@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
-import { slugify, chooseSlug, stripTitleAndTldr, readingTime, tagsOf, sourcesOf, relatedSlugs, noindexFor, buildPost, PostBuildError } from '../../src/publisher/post.js'
+import { slugify, chooseSlug, stripTitleAndTldr, readingTime, tagsOf, sourcesOf, relatedSlugs, noindexFor, buildPost, PostBuildError, rewriteOldSiteLinks, OLD_M91_SITE } from '../../src/publisher/post.js'
 import { postsToExport, writePosts } from '../../src/publisher/export.js'
 import { buildEnv, checkBuild, BlogBuildError } from '../../src/publisher/build.js'
 import { deploy, EmbarkoError } from '../../src/publisher/embarko.js'
@@ -516,4 +516,37 @@ test('publish uses the block_doc (blocks in the post, the note in the sub-step);
   unsub()
   restore()
   assert.equal(posts(s.store)[0].payload.post.blocks, null)
+})
+
+// ---------- old M91 site links ----------
+
+test('rewriteOldSiteLinks: the old site home page (with or without /) becomes M91_CTA_URL; longer paths and other hosts stay', () => {
+  const md = [
+    '[Try M91](https://m91-site.embarko.app/) and [home](https://m91-site.embarko.app).',
+    'Bare: https://m91-site.embarko.app/. Autolink: <https://m91-site.embarko.app>',
+    'Kept: [cases](https://m91-site.embarko.app/#cases), [page](https://m91-site.embarko.app/pricing), https://m91-site.embarko.app.evil.test/'
+  ].join('\n')
+  const r = rewriteOldSiteLinks(md, CTA)
+  assert.equal(r.count, 4)
+  assert.equal(r.text, [
+    `[Try M91](${CTA}) and [home](${CTA}).`,
+    `Bare: ${CTA}. Autolink: <${CTA}>`,
+    'Kept: [cases](https://m91-site.embarko.app/#cases), [page](https://m91-site.embarko.app/pricing), https://m91-site.embarko.app.evil.test/'
+  ].join('\n'))
+  assert.deepEqual(rewriteOldSiteLinks(md, ''), { text: md, count: 0 }, 'no M91_CTA_URL: unchanged')
+  assert.equal(OLD_M91_SITE, 'https://m91-site.embarko.app')
+})
+
+test('buildPost: old M91 site links become M91_CTA_URL in the body and the blocks, stay out of the sources, and are reported', () => {
+  const cfg = config()
+  const md = `${draftAnswer().post_markdown.trimEnd()}\n\nMore at [the old site](https://m91-site.embarko.app/).\n`
+  const draft = { version: 2, payload: draftAnswer({ post_markdown: md }) }
+  const blocks = [{ id: 'b1', type: 'rich_text', data: { markdown: 'More at [the old site](https://m91-site.embarko.app/).' } }]
+  const { post, warnings } = buildPost({ draft, briefId: BRIEF_ID, brief: brief(), published: [], config: cfg, now, istIso, blocks })
+  assert.ok(!post.markdown.includes('m91-site.embarko.app'))
+  assert.ok(post.markdown.includes(`[the old site](${CTA})`))
+  assert.equal(post.blocks[0].data.markdown, `More at [the old site](${CTA}).`)
+  assert.ok(!post.sources.some((s) => s.url.includes('m91-site') || s.url === CTA))
+  assert.deepEqual(warnings, [`replaced 1 link to the old M91 site (https://m91-site.embarko.app) with M91_CTA_URL (${CTA})`])
+  assert.equal(blocks[0].data.markdown, 'More at [the old site](https://m91-site.embarko.app/).', 'the caller\'s blocks are not changed')
 })

@@ -256,3 +256,16 @@ test('keyword length: a short keyword passes; KEYWORD_MAX_WORDS is respected; th
   const { buildPlanPrompt } = await import('../../src/strategist/prompts.js')
   assert.match(buildPlanPrompt(ctx.cfg, ctx.inputs), /a short phrase people type into a search box, at most 6 words \(for example "ai agent human approval"\), never a whole question or sentence\./)
 })
+
+test('auto-fix: http → https on both M91 docs hosts (m91-api.msg91.com and m91.msg91.com)', async () => {
+  const { cfg, inputs } = await setup()
+  assert.deepEqual(cfg.scout.docsHosts, ['m91-api.msg91.com', 'm91.msg91.com'])
+  const raw = validBrief({
+    m91_facts_to_use: [
+      { fact: 'Rings every phone in a channel at full volume until someone answers.', source_url: 'http://m91-api.msg91.com/llms.txt' },
+      { fact: 'Rings every phone in a channel at full volume until someone answers.', source_url: 'http://m91.msg91.com/llms.txt' }
+    ]
+  })
+  const { brief } = autoFix(raw, { config: cfg, inputs })
+  assert.deepEqual(brief.m91_facts_to_use.map((f) => f.source_url), ['https://m91-api.msg91.com/llms.txt', 'https://m91.msg91.com/llms.txt'])
+})

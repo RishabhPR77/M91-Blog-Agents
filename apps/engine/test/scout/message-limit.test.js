@@ -35,7 +35,7 @@ test('Scout: every message sent stays within 50,000 characters, even with DOCS_M
     if (url === DOC_INTRO) return res(big)
     return { ok: false, status: 404, headers: { get: () => '' }, text: async () => '' }
   }
-  const config = fakeConfig({ DOCS_MAX_CHARS: '48000' })
+  const config = fakeConfig({ DOCS_MAX_CHARS: '48000', M91_DOCS_URL: LLMS })
   const ai = fakeAi()
   await runScout({ mode: 'research', runId: 'R' }, { config, store: memoryStore(), notifier: fakeNotifier(), aiSend: ai, fetch: web, urlChecker: fakeChecker() })
   const facts = ai.requests.find((q) => q.call === 'facts')

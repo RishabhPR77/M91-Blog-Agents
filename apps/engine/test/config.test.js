@@ -114,7 +114,7 @@ test('Phase 2 Scout keys: defaults and validation', () => {
   assert.equal(c.scout.docsMaxChars, 45000)
   assert.ok(problemsForKeys({ DOCS_MAX_CHARS: '48001' }).includes('DOCS_MAX_CHARS'))
   assert.equal(loadConfig(fakeEnv({ DOCS_MAX_CHARS: '48000' })).scout.docsMaxChars, 48000)
-  assert.deepEqual(c.scout.docsHosts, ['m91.msg91.com'])
+  assert.deepEqual(c.scout.docsHosts, ['m91-api.msg91.com', 'm91.msg91.com'])
   assert.equal(c.scout.dedupeSimilarity, 0.85)
   assert.equal(c.scout.urlCheckTimeoutMs, 10000)
   assert.deepEqual(c.scout.competitors, ['withHuman', 'PagerDuty', 'Opsgenie', 'Twilio A2H', 'Pushover'])

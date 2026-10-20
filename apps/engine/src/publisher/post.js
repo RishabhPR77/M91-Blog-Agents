@@ -126,6 +126,27 @@ export function noindexFor({ existing, published = [], firstN }) {
   return ever.length < firstN
 }
 
+/** The M91 site's old address. Drafts written before the site moved still link to it. */
+export const OLD_M91_SITE = 'https://m91-site.embarko.app'
+// The old site's home page only (with or without the trailing slash), not a longer path on it.
+const OLD_SITE_RE = /https:\/\/m91-site\.embarko\.app\/?(?![\w/#?%~+=&-]|\.\w)/gi
+
+/** Every link to the old M91 site's home page → ctaUrl (M91_CTA_URL). No ctaUrl: unchanged. */
+export function rewriteOldSiteLinks(text, ctaUrl) {
+  if (!ctaUrl || typeof text !== 'string') return { text, count: 0 }
+  let count = 0
+  const out = text.replace(OLD_SITE_RE, () => {
+    count++
+    return ctaUrl
+  })
+  return { text: out, count }
+}
+/** The same rewrite in every string of the blocks' data (they are slices of the same body). */
+const rewriteDeep = (v, ctaUrl) =>
+  typeof v === 'string' ? rewriteOldSiteLinks(v, ctaUrl).text
+    : Array.isArray(v) ? v.map((x) => rewriteDeep(x, ctaUrl))
+      : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, rewriteDeep(x, ctaUrl)])) : v
+
 /**
  * The post JSON (format v1).
  * @param {{ draft: object, briefId, brief, published: object[], config, now: () => number, istIso: (Date) => string, blocks?: object[]|null }} input
@@ -139,8 +160,15 @@ export function buildPost({ draft, briefId, brief, published = [], config, now =
   const baseUrl = config.blog.baseUrl
   const slug = chooseSlug({ briefId, brief, draft: d, published })
   const existing = published.find((r) => slugOf(r) === slug) ?? null
-  const { markdown, warnings: stripWarnings } = stripTitleAndTldr(d.post_markdown)
+  const { markdown: stripped, warnings: stripWarnings } = stripTitleAndTldr(d.post_markdown)
   warnings.push(...stripWarnings)
+  // Links to the old M91 site become M91_CTA_URL, in the body and the blocks alike (so the sources skip them too).
+  const ctaUrl = config.m91?.ctaUrl
+  const { text: markdown, count: oldLinks } = rewriteOldSiteLinks(stripped, ctaUrl)
+  if (oldLinks) {
+    blocks = blocks && rewriteDeep(blocks, ctaUrl)
+    warnings.push(`replaced ${oldLinks} link${oldLinks === 1 ? '' : 's'} to the old M91 site (${OLD_M91_SITE}) with M91_CTA_URL (${ctaUrl})`)
+  }
   const at = istIso(new Date(now()))
   const topicGroup = Number(brief?.topic_group ?? d.topic_group ?? 1)
   const post = {
@@ -156,7 +184,7 @@ export function buildPost({ draft, briefId, brief, published = [], config, now =
     markdown,
     blocks,
     seo: { title_tag: d.seo?.title_tag ?? d.title, meta_description: d.seo?.meta_description ?? '', og_image: `${baseUrl}/og/${slug}.png` },
-    sources: sourcesOf(markdown, { baseUrl, ctaUrl: config.m91.ctaUrl }),
+    sources: sourcesOf(markdown, { baseUrl, ctaUrl }),
     related_slugs: relatedSlugs(markdown, { slug, topicGroup, baseUrl, published }),
     noindex: noindexFor({ existing, published, firstN: config.blog.noindexFirstNPosts }),
     canonical_url: `${baseUrl}/posts/${slug}/`,

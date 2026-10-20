@@ -7,13 +7,13 @@ import { stubAgents } from '../../src/agents/stubs.js'
 import { createNotifier } from '../../src/notify.js'
 import { AiError } from '../../src/viasocket.js'
 import { fakeConfig, memoryStore, fakeNotifier, fakeFetch, mockReviewer } from '../helpers.js'
-import { fakeAi, fakeWeb, fakeChecker, VALID, INVALID, truncated, fatal } from './fixtures.js'
+import { fakeAi, fakeWeb, fakeChecker, VALID, INVALID, truncated, fatal, LLMS } from './fixtures.js'
 
 const NOW = Date.parse('2026-10-17T08:35:00Z') // 14:05 IST
 const RUN = '261017-1405-ABCD'
 
 function setup({ env = {}, answers = {}, store, web = fakeWeb(), checker = fakeChecker(), notifier } = {}) {
-  const config = fakeConfig(env)
+  const config = fakeConfig({ M91_DOCS_URL: LLMS, ...env })
   store ??= memoryStore({ dryRun: config.runtime.dryRun })
   const ai = fakeAi(answers)
   notifier ??= fakeNotifier()
@@ -210,7 +210,7 @@ test('dedupe in research: an open cluster with the same question is merged, not 
 
 test('DRY_RUN: AI is called, nothing but run_log is saved, no Slack request', async () => {
   const fetch = fakeFetch(() => ({ body: { ok: true } }))
-  const config = fakeConfig({ DRY_RUN: 'true' })
+  const config = fakeConfig({ DRY_RUN: 'true', M91_DOCS_URL: LLMS })
   const s = setup({ env: { DRY_RUN: 'true' }, notifier: createNotifier({ config, fetch }) })
   const r = await s.run()
   assert.equal(s.ai.requests.length, 10)
@@ -240,7 +240,7 @@ test('sources mode: verdicts counted, dead URLs dropped, source_pack saved under
 })
 
 test('orchestrator: the real Scout runs before the Strategist stub, which receives the ScoutResult', async () => {
-  const config = fakeConfig({ DRY_RUN: 'true' })
+  const config = fakeConfig({ DRY_RUN: 'true', M91_DOCS_URL: LLMS })
   const store = memoryStore({ dryRun: true })
   const notifier = fakeNotifier()
   const ai = fakeAi()

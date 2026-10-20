@@ -159,3 +159,27 @@ setup made no AI calls and no Mem0 calls.
   sources.
 - The blog's header and footer now link to `https://m91.msg91.com/`, including `#how` and `#cases`. Both
   anchors exist on the live site (checked 2026-10-20).
+
+## After Phase 8 (2026-10-20)
+
+- **Old M91 site links:** at publish time, the Publisher replaces every link to the old site's home page
+  (`https://m91-site.embarko.app`, with or without the trailing slash) with `M91_CTA_URL`. This applies to
+  the body and the blocks. Sources skip these links, since they are now the CTA. The run's warnings say how
+  many were replaced. Longer paths on the old site are left as they are.
+- **M91 docs moved** to `https://m91-api.msg91.com`. The old address `https://m91.msg91.com/llms.txt` and every
+  `/api/public/*.md` page there now return 404. The defaults are:
+
+  ```
+  M91_DOCS_URL=https://m91-api.msg91.com/llms.txt
+  M91_DOCS_HOSTS=m91-api.msg91.com,m91.msg91.com
+  ```
+
+  These checks read the `M91_DOCS_HOSTS` list, so they accept both hosts:
+  - the Scout's docs bundle;
+  - the Writer's http → https fix and its cited-page fetch;
+  - the Strategist's fix;
+  - the tutorial link check.
+
+  The Writer and the Reviewer allow whatever URLs the brief and the source pack contain, on either host.
+- Published posts that cite `m91.msg91.com/api/public/…` or `m91.msg91.com/llms.txt` now point at dead
+  pages. The Publisher does not rewrite those links.

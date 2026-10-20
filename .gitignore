@@ -25,3 +25,6 @@ Thumbs.db
 
 # Local Claude settings (personal)
 .claude/settings.local.json
+
+# Local preview servers for the Browser pane (machine-specific)
+.claude/launch.json

@@ -4,7 +4,7 @@ import { emit, withRun, replay, subscribe, resetEvents, bufferedRuns, currentRun
 import { log, registerSecrets, setSink, setLevel } from '../src/util/log.js'
 import { runScout } from '../src/scout/index.js'
 import { fakeConfig, memoryStore, fakeNotifier } from './helpers.js'
-import { fakeAi, fakeWeb, fakeChecker } from './scout/fixtures.js'
+import { fakeAi, fakeWeb, fakeChecker, LLMS } from './scout/fixtures.js'
 
 beforeEach(() => resetEvents())
 const quiet = () => setSink(() => {})
@@ -85,7 +85,7 @@ test('helper names stay stable', () => {
 
 test('a Scout run emits step.started/finished/output per sub-call (names stable)', async () => {
   const restore = quiet()
-  const config = fakeConfig({ SCOUT_QUESTION_GROUPS: '1' })
+  const config = fakeConfig({ SCOUT_QUESTION_GROUPS: '1', M91_DOCS_URL: LLMS })
   const deps = { config, store: memoryStore(), notifier: fakeNotifier(), aiSend: fakeAi(), fetch: fakeWeb(), urlChecker: fakeChecker(), now: () => Date.parse('2026-10-17T08:35:00Z') }
   await withRun('R-scout', () => runScout({ mode: 'research', runId: 'R-scout' }, deps))
   restore()

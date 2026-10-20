@@ -4,6 +4,7 @@ import { AiError, TruncatedError } from '../../src/viasocket.js'
 
 export const DOC_INTRO = 'https://m91.msg91.com/docs/intro.md'
 export const DOC_API = 'https://m91.msg91.com/docs/api.md'
+// The fake docs site keeps the old host; tests pass it as M91_DOCS_URL (the default is m91-api.msg91.com).
 export const LLMS = 'https://m91.msg91.com/llms.txt'
 export const REPO = 'https://github.com/MSG91/m91-skill'
 
