@@ -7,6 +7,7 @@
 //   cache_hits: answered from the in-process read cache (no request sent)
 // Note: Mem0's quota error named list (getAll) calls "SEARCH" events, so compare quotas with reads + searches.
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { recordUsage } from './mem0usage.js'
 
 const als = new AsyncLocalStorage()
 const totals = blankCounts()
@@ -19,6 +20,8 @@ export function blankCounts() {
 export function countMem0(kind, n = 1) {
   if (!(kind in totals)) return
   totals[kind] += n
+  // Phase 9 A5: requests (not cache hits) also go into the month's usage estimate.
+  if (kind !== 'cache_hits') recordUsage(kind, n)
   const scope = als.getStore()
   if (scope) scope[kind] += n
 }

@@ -11,6 +11,10 @@ import { createNotifier } from './notify.js'
 import { withRun, emit, subscribe, isCancel } from './events.js'
 import { withMem0Count, currentMem0Counts, mem0Requests } from './util/mem0count.js'
 import { createRunStore } from './runstore.js'
+import { usageStatus, stopMessage, warnLine } from './util/mem0usage.js'
+
+/** Modes that still run at the Mem0 stop level: approving or publishing a draft that is already waiting. */
+export const QUOTA_EXEMPT_MODES = Object.freeze(['approve', 'publish'])
 
 /** The event for a step that threw: step.cancelled when a cancel interrupted it, else step.failed. */
 const stepEnded = (agent, error, signal) => (isCancel(error, signal)
@@ -108,6 +112,11 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
   storeFactory ??= (cfg) => createStore({ config: cfg })
   notifierFactory ??= (cfg) => createNotifier({ config: cfg })
   let active = null // { runId, controller, done }
+  // Phase 9 A5: a run summary line when the month's Mem0 usage is at the warn level or above.
+  const quotaWarning = () => {
+    const u = usageStatus(config, { now })
+    return u.level === 'ok' ? [] : [warnLine(u)]
+  }
   // The engine's index (Phase 9 A4), set by the API server: pre-run checks read it, and runs start from it.
   let index = null
   const readStore = (runConfig) => index ?? storeFactory(runConfig)
@@ -120,6 +129,9 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (!TRIGGERS.includes(trigger)) throw new RunError('bad_trigger', `trigger must be one of ${TRIGGERS.join(', ')}`)
     if (dryRun !== undefined && typeof dryRun !== 'boolean') throw new RunError('bad_params', 'dry_run must be true or false')
     if (active) throw new RunError('run_in_progress', `run ${active.runId} is in progress`, 409)
+    // Phase 9 A5: at MEM0_STOP_PCT new runs are refused; approving or publishing a waiting draft still runs.
+    const usage = usageStatus(config, { now })
+    if (usage.level === 'stop' && !QUOTA_EXEMPT_MODES.includes(mode)) throw new RunError('mem0_quota', stopMessage(usage), 429)
     if (mode === 'writer') await checkWriterParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'reviewer') await checkReviewerParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'promo') await checkPromoParams(params, configForRun(config, { dryRun, params }))
@@ -128,7 +140,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (DECISION_MODES.includes(mode)) {
       const runConfig0 = configForRun(config, { dryRun, params })
       try {
-        await checkDecision(mode, params, { store: storeFactory(runConfig0), config: runConfig0 })
+        await checkDecision(mode, params, { store: readStore(runConfig0), config: runConfig0 })
       } catch (error) {
         if (error instanceof ApprovalError) throw new RunError(error.code, error.message, error.status)
         throw error
@@ -237,7 +249,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       ms: now() - startedAt,
       brief_id: run.brief_id ?? result.brief_id ?? null,
       result_summary: result.summary ?? result.error ?? '',
-      warnings: result.warnings ?? [],
+      warnings: [...(result.warnings ?? []), ...quotaWarning()],
       // Extra facts a mode records on its run (e.g. approve: approved_unreviewed).
       ...(result.run_fields ?? {}),
       // Mem0 requests up to this final save (the save itself is 1 more write; run.finished has the full count).

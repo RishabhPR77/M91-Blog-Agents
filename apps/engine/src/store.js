@@ -10,6 +10,7 @@ import { sleep, retry } from './util/retry.js'
 import { istDate } from './util/time.js'
 import { countMem0 } from './util/mem0count.js'
 import { emitStoreWrite, markWrite } from './storeevents.js'
+import { configureUsage } from './util/mem0usage.js'
 
 export const RECORD_TYPES = Object.freeze([
   'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'draft',
@@ -138,6 +139,8 @@ export function clearStoreCache() {
 // cacheTtlMs (default STORE_CACHE_TTL_MS) and now are injectable for tests.
 export function createStore({ config = getConfig(), clientFactory = defaultClientFactory, fetch = globalThis.fetch, sleepFn = sleep, eventTimeoutMs = 60000, eventPollMs = 1000, dryRun = config.runtime.dryRun, testTag = false, cacheTtlMs, now = Date.now } = {}) {
   const { apiKey, agentId } = config.mem0
+  // Phase 9 A5: this process's Mem0 requests go into the usage file of this engine's data folder.
+  configureUsage(config, { now })
   // DRY_RUN rule: no Mem0 writes, except run_log records, which carry dry_run: true.
   // Reads still happen. Skipped writes return a placeholder record with a "dryrun-" id.
   const DRY_ID = 'dryrun-'

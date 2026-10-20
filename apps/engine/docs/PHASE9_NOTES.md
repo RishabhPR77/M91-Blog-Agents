@@ -131,6 +131,21 @@ Decision runs (measured): Reviewer check 28, approve 34, publish 28, unpublish 2
 
   The header shows "Data loaded N min ago".
 
+## A5: the quota guard
+
+- **The estimate:** every counted Mem0 request (reads, searches, writes; not cache hits) is added to
+  `apps/engine/data/mem0-usage.json` (gitignored). The file holds numbers only: totals for the month and per
+  day. The month is the UTC calendar month, like Mem0's reset. The engine and CLI commands on this machine
+  add to the same file. Requests from anywhere else are not seen, so **the Mem0 console has the exact
+  figure**.
+- **Warn level** (`MEM0_WARN_PCT`, 80%): an amber banner in the dashboard, and a line in each run's summary
+  ("Mem0 quota: 850/1000 requests this month (85%); resets 2026-11-01").
+- **Stop level** (`MEM0_STOP_PCT`, 95%): new runs (API and CLI) and **Refresh from Mem0** are refused
+  with "Mem0 quota almost used: <n>/<limit>. Runs paused until <date> or a higher limit
+  (MEM0_MONTHLY_LIMIT)." (HTTP 429). **Approve and publish of a waiting draft still run.**
+- **Visible:** the dashboard header always shows "Mem0 n/limit" (the reset date is in the tooltip).
+  `/api/health` carries the estimate and reads no Mem0.
+
 ## New settings
 
 | Key | Default | Meaning |
@@ -139,3 +154,6 @@ Decision runs (measured): Reviewer check 28, approve 34, publish 28, unpublish 2
 | `RUN_LOCK_STALE_MIN` | `10` | A run lock whose heartbeat is older than this (minutes) is taken over. |
 | `DEDUPE_MODE` | `local` | `local` (in-memory trigram similarity) or `mem0` (a Mem0 search per check). |
 | `DEDUPE_SIMILARITY_LOCAL` | `0.65` | The threshold for local duplicate checks (see A3). |
+| `MEM0_MONTHLY_LIMIT` | `1000` | Your Mem0 plan's monthly request limit. |
+| `MEM0_WARN_PCT` | `80` | Show a warning from this percent. |
+| `MEM0_STOP_PCT` | `95` | Refuse new runs and refreshes from this percent. |

@@ -24,6 +24,7 @@ import { lessonText } from './lessons.js'
 import { isInteractive, latestBlockDoc } from './designer/index.js'
 import { withMem0Count, mem0Requests } from './util/mem0count.js'
 import { createEngineIndex } from './engineindex.js'
+import { usageStatus, stopMessage } from './util/mem0usage.js'
 
 const VERSION = (() => {
   try {
@@ -331,7 +332,10 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     const seg = path.split('/').filter(Boolean) // ['api', ...]
 
     // Health never touches Mem0: the index's age and whether another process changed Mem0 since it loaded.
-    if (method === 'GET' && path === '/api/health') return send(res, 200, { ok: true, version: VERSION, run_in_progress: isRunning(), ...(store?.isIndex && { index: store.status() }) })
+    if (method === 'GET' && path === '/api/health') {
+      const u = config ? usageStatus(config, { now }) : null
+      return send(res, 200, { ok: true, version: VERSION, run_in_progress: isRunning(), ...(store?.isIndex && { index: store.status() }), ...(u && { mem0_usage: { month: u.month, used: u.used, limit: u.limit, pct: u.pct, level: u.level, warn_pct: u.warn_pct, stop_pct: u.stop_pct, resets_on: u.resets_on, total: u.total } }) })
+    }
 
     if (path === '/api/login' && method === 'POST') {
       if (!auth) return fail(res, 400, 'auth_off', 'login is not needed: DASHBOARD_AUTH is false')
@@ -470,6 +474,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     // Refresh from Mem0 (Phase 9 A4): reload every type the index holds (one read per type).
     if (path === '/api/index/refresh' && method === 'POST') {
       if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: refresh when it has finished')
+      const u = usageStatus(config, { now })
+      if (u.level === 'stop') throw new ApiError(429, 'mem0_quota', stopMessage(u))
       return send(res, 200, { index: await store.refresh() })
     }
 

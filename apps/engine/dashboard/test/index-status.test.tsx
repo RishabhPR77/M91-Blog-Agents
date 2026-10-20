@@ -43,3 +43,22 @@ describe('engine index status', () => {
     expect(await screen.findByRole('button', { name: /Refresh from Mem0/ })).toBeDisabled()
   })
 })
+
+describe('Mem0 quota guard', () => {
+  const usage = (used: number, level: 'ok' | 'warn' | 'stop') => ({ month: '2026-10', used, limit: 1000, pct: used / 10, level, warn_pct: 80, stop_pct: 95, resets_on: '2026-11-01T00:00:00.000Z' })
+  it('shows the estimate; no banner below the warn level', async () => {
+    mockFetch(routes({ ok: true, version: '0.2.0', run_in_progress: false, mem0_usage: usage(412, 'ok') }))
+    renderApp(<Layout><p>page</p></Layout>)
+    expect(await screen.findByTestId('mem0-usage')).toHaveTextContent('Mem0 412/1000')
+    expect(screen.queryByTestId('mem0-quota-banner')).not.toBeInTheDocument()
+  })
+  it('warn and stop banners', async () => {
+    mockFetch(routes({ ok: true, version: '0.2.0', run_in_progress: false, mem0_usage: usage(850, 'warn') }))
+    const { unmount } = renderApp(<Layout><p>page</p></Layout>)
+    expect(await screen.findByTestId('mem0-quota-banner')).toHaveTextContent('850/1000 requests used this month (85%). Runs pause at 95%. Resets on 1 Nov.')
+    unmount()
+    mockFetch(routes({ ok: true, version: '0.2.0', run_in_progress: false, mem0_usage: usage(960, 'stop') }))
+    renderApp(<Layout><p>page</p></Layout>)
+    expect(await screen.findByTestId('mem0-quota-banner')).toHaveTextContent('Mem0 quota almost used: 960/1000 (96%). New runs are paused until 1 Nov')
+  })
+})

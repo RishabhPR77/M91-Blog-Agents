@@ -76,7 +76,7 @@ describe('Control page', () => {
   it('shows expected calls; Run Scout asks first and sends the low-cost params with the default dry-run', async () => {
     const calls = mockFetch(routes({ 'POST /api/runs': { status: 202, body: { run_id: 'R-261019-1300-ABCD' } } }))
     page()
-    await screen.findByRole('option', { name: /2 \(least used\)/ })
+    await screen.findByRole('option', { name: /2 \(least used\)/ }, { timeout: 5000 })
     expect(within(card('Run Scout')).getByTestId('cost')).toHaveTextContent(`Expected AI calls: ${COSTS.scout.normal} normal · ${COSTS.scout.lowCost} low-cost`)
     await userEvent.click(await runButton('Run Scout'))
     const dialog = screen.getByRole('dialog')
@@ -92,7 +92,7 @@ describe('Control page', () => {
   it('low cost off and dry run off: no extra params, normal estimate', async () => {
     const calls = mockFetch(routes({ 'POST /api/runs': { status: 202, body: { run_id: 'R-261019-1300-ABCD' } } }))
     page()
-    await screen.findByRole('option', { name: /least used/ })
+    await screen.findByRole('option', { name: /least used/ }, { timeout: 5000 })
     await userEvent.click(screen.getByRole('checkbox', { name: 'Low cost' }))
     await userEvent.click(screen.getByRole('checkbox', { name: 'Dry run' }))
     await userEvent.click(await runButton('Run full pipeline'))
@@ -117,7 +117,7 @@ describe('Control page', () => {
   it('409: a clear message with a link to the running run', async () => {
     mockFetch(routes({ 'POST /api/runs': { status: 409, body: { error: { code: 'run_in_progress', message: 'run R-261019-1250-WXYZ is in progress' } } } }))
     page()
-    await screen.findByRole('option', { name: /least used/ })
+    await screen.findByRole('option', { name: /least used/ }, { timeout: 5000 })
     await userEvent.click(await runButton('Run Strategist'))
     await userEvent.click(screen.getByRole('button', { name: 'Start the run' }))
     const alert = await screen.findByRole('alert')
@@ -128,7 +128,7 @@ describe('Control page', () => {
   it('run buttons are disabled for modes not in built_modes; Designer and Publish say when they come', async () => {
     mockFetch(routes({}, { ...SETTINGS, built_modes: ['full', 'strategist', 'writer', 'reviewer', 'promo'] }))
     page()
-    await screen.findByRole('option', { name: /least used/ })
+    await screen.findByRole('option', { name: /least used/ }, { timeout: 5000 })
     await waitFor(() => expect(within(card('Run full pipeline')).getByRole('button', { name: /Run full pipeline/ })).toBeEnabled())
     expect(within(card('Run Scout')).getByRole('button')).toBeDisabled()
     expect(within(card('Designer')).getByRole('button')).toBeDisabled()

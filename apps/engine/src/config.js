@@ -34,6 +34,8 @@ const DEFAULTS = {
   REVIEWER_AI_SERVICE: 'openai', REVIEWER_AI_MODEL: 'gpt-5.5', REVIEWER_DELIVERY: 'rtlayer',
   PROMO_AI_SERVICE: 'openai', PROMO_AI_MODEL: 'gpt-5-mini', PROMO_DELIVERY: 'sync',
   MEM0_AGENT_ID: 'm91-blog',
+  // Phase 9 A5: the Mem0 quota guard (an estimate kept in apps/engine/data/mem0-usage.json)
+  MEM0_MONTHLY_LIMIT: '1000', MEM0_WARN_PCT: '80', MEM0_STOP_PCT: '95',
   M91_DOCS_URL: 'https://m91-api.msg91.com/llms.txt',
   PASS_SCORE_MIN: '85', PASS_AREA_MIN: '7',
   MAX_WRITER_REVISIONS: '2', MAX_STRATEGIST_REBRIEFS: '1', MAX_SCOUT_RETRIES: '1', MAX_AI_ROUNDS_PER_POST: '5',
@@ -278,7 +280,11 @@ export function loadConfig(env = process.env) {
       projectId: str('MEM0_PROJECT_ID'),
       agentId: str('MEM0_AGENT_ID', { required: true }),
       // Phase 7: in-process read cache lifetime; 0 turns it off
-      cacheTtlMs: int('STORE_CACHE_TTL_MS', { max: 3600000 })
+      cacheTtlMs: int('STORE_CACHE_TTL_MS', { max: 3600000 }),
+      // Phase 9 A5: the plan's monthly request limit, and the warn / stop levels (percent of it)
+      monthlyLimit: int('MEM0_MONTHLY_LIMIT', { min: 1 }),
+      warnPct: int('MEM0_WARN_PCT', { min: 1, max: 100 }),
+      stopPct: int('MEM0_STOP_PCT', { min: 1, max: 100 })
     },
     notify: {
       // Optional here; notify.js refuses a real send when they are missing.
