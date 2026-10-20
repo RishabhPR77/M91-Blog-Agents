@@ -50,7 +50,9 @@ const csp = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-
     <link rel="alternate" type="application/rss+xml" title={`${SITE.name} RSS`} href={url('/rss.xml')} />
     <meta name="color-scheme" content="light dark" />
     <script is:inline>
-      // Theme before paint: a saved choice, else the system setting.
+      // Before paint: mark that scripts run (interactive blocks show their controls only then, so nothing shifts),
+      // and the theme: a saved choice, else the system setting.
+      document.documentElement.classList.add('js')
       try {
         var saved = localStorage.getItem('m91-theme')
         var dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches

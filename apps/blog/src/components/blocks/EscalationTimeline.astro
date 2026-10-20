@@ -1,0 +1,34 @@
+---
+// escalation_timeline: what happens over time, as a vertical timeline; with JS each step fills in as it scrolls
+// into view (colour only, so nothing moves). Reduced motion: everything is filled in at once.
+interface Props { id: string; steps: string[] }
+const { id, steps } = Astro.props
+---
+<ol class="timeline" data-block="escalation_timeline" data-block-id={id} aria-label="Timeline">
+  {steps.map((html) => (
+    <li class="timeline-step">
+      <span class="timeline-dot" aria-hidden="true"></span>
+      <div class="timeline-text" set:html={html} />
+    </li>
+  ))}
+</ol>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-block="escalation_timeline"]').forEach((block) => {
+    const steps = Array.from(block.querySelectorAll<HTMLElement>('.timeline-step'))
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduce || !('IntersectionObserver' in window)) {
+      steps.forEach((s) => s.classList.add('is-visible'))
+      return
+    }
+    block.classList.add('is-animated')
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue
+        e.target.classList.add('is-visible')
+        io.unobserve(e.target)
+      }
+    }, { rootMargin: '0px 0px -25% 0px' })
+    steps.forEach((s) => io.observe(s))
+  })
+</script>

@@ -58,8 +58,9 @@ const updated = post.updated_at.slice(0, 10) !== post.published_at.slice(0, 10)
       <TableOfContents headings={headings} />
     </div>
     <div class="mt-10">
-      {post.blocks && <BlockRenderer blocks={post.blocks} />}
-      <div class="prose-m91" set:html={html} />
+      {post.blocks
+        ? <BlockRenderer blocks={post.blocks} slug={post.slug} headingIds={headings.map((h) => h.id)} fallbackHtml={html} />
+        : <div class="prose-m91" set:html={html} />}
       <CodeCopy />
     </div>
     <div class="mt-14 max-w-[44rem] space-y-12">

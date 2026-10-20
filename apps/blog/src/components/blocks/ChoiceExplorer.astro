@@ -1,0 +1,42 @@
+---
+// choice_explorer: 2–4 choices from the post, each with its outcome. Without JS: each choice in bold with its
+// outcome below. With JS: "Tap a choice to see what happens" and one outcome at a time (radio group, arrow keys).
+interface Props { id: string; options: { choice: string; outcome: string }[] }
+const { id, options } = Astro.props
+---
+<section class="choices" data-block="choice_explorer" data-block-id={id} aria-label="Choices">
+  <p class="choices-hint js-only">Tap a choice to see what happens.</p>
+  <div class="choices-buttons js-only" role="radiogroup" aria-label="Choices">
+    {options.map((o, i) => <button type="button" role="radio" aria-checked="false" tabindex={i === 0 ? 0 : -1} data-index={i} set:html={o.choice} />)}
+  </div>
+  {options.map((o, i) => (
+    <div class="choice" data-index={i}>
+      <p class="choice-label no-js-only" set:html={o.choice} />
+      <div class="choice-outcome" set:html={o.outcome} />
+    </div>
+  ))}
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-block="choice_explorer"]').forEach((block) => {
+    const buttons = Array.from(block.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
+    const outcomes = Array.from(block.querySelectorAll<HTMLElement>('.choice'))
+    const pick = (n: number, focus = false) => {
+      buttons.forEach((b, i) => {
+        b.setAttribute('aria-checked', i === n ? 'true' : 'false')
+        b.tabIndex = i === n ? 0 : -1
+      })
+      outcomes.forEach((o, i) => o.classList.toggle('is-active', i === n))
+      if (focus) buttons[n]?.focus()
+    }
+    buttons.forEach((b, i) => {
+      b.addEventListener('click', () => pick(i))
+      b.addEventListener('keydown', (e) => {
+        const step: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
+        if (!(e.key in step)) return
+        e.preventDefault()
+        pick((i + step[e.key] + buttons.length) % buttons.length, true)
+      })
+    })
+  })
+</script>

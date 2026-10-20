@@ -1,0 +1,44 @@
+---
+// code_tabs: several code blocks of the post. Without JS they are stacked with their labels; with JS one box
+// with a tab per language (ARIA tabs, arrow keys). The page's copy button works on every tab.
+interface Props { id: string; tabs: { label: string; language: string; html: string }[] }
+const { id, tabs } = Astro.props
+const uid = `blk-${id}`
+---
+<section class="codetabs" data-block="code_tabs" data-block-id={id} aria-label="Code examples">
+  <div class="codetabs-list js-only" role="tablist" aria-label="Code versions">
+    {tabs.map((t, i) => (
+      <button type="button" role="tab" id={`${uid}-tab-${i}`} aria-controls={`${uid}-panel-${i}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>{t.label}</button>
+    ))}
+  </div>
+  {tabs.map((t, i) => (
+    <div class:list={['codetabs-panel', { 'is-active': i === 0 }]} role="tabpanel" id={`${uid}-panel-${i}`} aria-labelledby={`${uid}-tab-${i}`} data-language={t.language}>
+      <p class="codetabs-label no-js-only">{t.label}</p>
+      <Fragment set:html={t.html} />
+    </div>
+  ))}
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-block="code_tabs"]').forEach((block) => {
+    const tabs = Array.from(block.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    const panels = Array.from(block.querySelectorAll<HTMLElement>('[role="tabpanel"]'))
+    const select = (n: number, focus = false) => {
+      tabs.forEach((t, i) => {
+        t.setAttribute('aria-selected', i === n ? 'true' : 'false')
+        t.tabIndex = i === n ? 0 : -1
+      })
+      panels.forEach((p, i) => p.classList.toggle('is-active', i === n))
+      if (focus) tabs[n]?.focus()
+    }
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => select(i))
+      t.addEventListener('keydown', (e) => {
+        const keys: Record<string, number> = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }
+        if (!(e.key in keys)) return
+        e.preventDefault()
+        select((keys[e.key] + tabs.length) % tabs.length, true)
+      })
+    })
+  })
+</script>

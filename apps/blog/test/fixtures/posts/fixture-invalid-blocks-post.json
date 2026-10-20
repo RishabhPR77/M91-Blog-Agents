@@ -1,0 +1,39 @@
+{
+  "slug": "fixture-invalid-blocks-post",
+  "title": "Fixture: a post with invalid blocks",
+  "description": "Fixture for the build tests: invalid block data is dropped, the post shows its Markdown.",
+  "tldr": [
+    "Blocks one.",
+    "Blocks two.",
+    "Blocks three."
+  ],
+  "published_at": "2026-10-05T10:00:00+05:30",
+  "updated_at": "2026-10-05T10:00:00+05:30",
+  "topic_group": 4,
+  "tags": [
+    "blocks"
+  ],
+  "reading_time_min": 1,
+  "markdown": "Invalid blocks are dropped: this Markdown is shown.\n\n## What to do next\n\n[Try M91](https://m91-site.embarko.app/)",
+  "blocks": [
+    {
+      "type": "callout",
+      "id": "b1",
+      "data": {
+        "tone": "loud",
+        "markdown": "x"
+      }
+    }
+  ],
+  "seo": {
+    "title_tag": "Fixture: a post with invalid blocks",
+    "meta_description": "Fixture: invalid blocks.",
+    "og_image": "https://m91-blog.embarko.app/og/fixture-invalid-blocks-post.png"
+  },
+  "sources": [],
+  "related_slugs": [],
+  "noindex": false,
+  "canonical_url": "https://m91-blog.embarko.app/posts/fixture-invalid-blocks-post/",
+  "brief_id": "261005-1000-FXTR",
+  "version": 1
+}

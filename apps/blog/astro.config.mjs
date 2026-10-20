@@ -21,6 +21,7 @@ export default defineConfig({
   trailingSlash: 'always',
   build: { format: 'directory' },
   integrations: [sitemap({ filter: (page) => !excluded.has(page) })],
-  vite: { plugins: [tailwindcss()] },
+  // assetsInlineLimit 0: block scripts (Phase 8) ship as files from 'self', never inline in the HTML.
+  vite: { plugins: [tailwindcss()], build: { assetsInlineLimit: 0 } },
   devToolbar: { enabled: false }
 })

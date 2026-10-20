@@ -1,0 +1,43 @@
+---
+// agent_terminal_replay: a log or a run of commands from the post. Without JS all lines are shown; with JS they
+// appear one by one (about 400 ms apart) when the box scrolls into view, with "Watch again". The lines keep
+// their space while hidden, so nothing moves. Reduced motion: all lines at once.
+interface Props { id: string; language: string; lines: string[] }
+const { id, language, lines } = Astro.props
+---
+<figure class="terminal" data-block="agent_terminal_replay" data-block-id={id}>
+  <div class="terminal-bar" aria-hidden="true">
+    <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+    <span class="terminal-title">{language === 'log' ? 'Log' : 'Terminal'}</span>
+  </div>
+  <div class="terminal-body" role="log" aria-label={language === 'log' ? 'Log output' : 'Terminal output'}>
+    {lines.map((l) => <div class="terminal-line">{l === '' ? ' ' : l}</div>)}
+  </div>
+  <button type="button" class="terminal-replay js-only" data-replay>Watch again</button>
+</figure>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-block="agent_terminal_replay"]').forEach((block) => {
+    const lines = Array.from(block.querySelectorAll<HTMLElement>('.terminal-line'))
+    const button = block.querySelector<HTMLButtonElement>('[data-replay]')
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+    let timers: number[] = []
+    const play = () => {
+      timers.forEach(clearTimeout)
+      timers = []
+      if (reduce) return lines.forEach((l) => l.classList.remove('is-hidden'))
+      lines.forEach((l) => l.classList.add('is-hidden'))
+      lines.forEach((l, i) => timers.push(window.setTimeout(() => l.classList.remove('is-hidden'), 400 * (i + 1))))
+    }
+    button?.addEventListener('click', play)
+    if (reduce || !('IntersectionObserver' in window)) return
+    lines.forEach((l) => l.classList.add('is-hidden'))
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        io.disconnect()
+        play()
+      }
+    }, { threshold: 0.4 })
+    io.observe(block)
+  })
+</script>

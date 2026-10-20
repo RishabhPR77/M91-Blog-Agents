@@ -1,9 +1,43 @@
 ---
-// Phase 8 stub: interactive blocks are not built yet. A post with blocks shows this note, and the page
-// falls back to its Markdown (rendered right after this component).
-interface Props { blocks: { type: string; id: string }[] }
-const { blocks } = Astro.props
+// The post body as interactive blocks (Phase 8), in order. If any block can't be rendered (a type that isn't
+// built yet, bad data, a rendering error, heading ids that don't line up), the whole post's Markdown is shown
+// instead and the build logs a warning: never a half-broken page.
+import RichText from './blocks/RichText.astro'
+import Callout from './blocks/Callout.astro'
+import StepsChecklist from './blocks/StepsChecklist.astro'
+import CodeTabs from './blocks/CodeTabs.astro'
+import ComparisonTable from './blocks/ComparisonTable.astro'
+import FaqAccordion from './blocks/FaqAccordion.astro'
+import PhoneRingSim from './blocks/PhoneRingSim.astro'
+import EscalationTimeline from './blocks/EscalationTimeline.astro'
+import AgentTerminalReplay from './blocks/AgentTerminalReplay.astro'
+import ChoiceExplorer from './blocks/ChoiceExplorer.astro'
+import TroubleshootingPicker from './blocks/TroubleshootingPicker.astro'
+import { prepareBlocks, type Block } from '../lib/blocks'
+
+interface Props { blocks: Block[]; slug: string; headingIds: string[]; fallbackHtml: string }
+const { blocks, slug, headingIds, fallbackHtml } = Astro.props
+const prepared = await prepareBlocks(blocks, headingIds)
+if (!prepared.ok) console.warn(`[blocks] ${slug}: ${prepared.reason}: showing the post's Markdown instead`)
 ---
-<p class="rounded-xl border border-dashed border-line-2 p-4 text-sm text-fg-2" data-blocks-unsupported={blocks.length}>
-  Interactive blocks are not supported yet: this post is shown as plain text.
-</p>
+{prepared.ok ? (
+  <div class="prose-m91 blocks" data-blocks={prepared.items.length}>
+    {prepared.items.map((b) => {
+      switch (b.type) {
+        case 'rich_text': return <RichText html={b.html} />
+        case 'callout': return <Callout id={b.id} tone={b.tone} html={b.html} />
+        case 'steps_checklist': return <StepsChecklist id={b.id} slug={slug} steps={b.steps} />
+        case 'code_tabs': return <CodeTabs id={b.id} tabs={b.tabs} />
+        case 'comparison_table': return <ComparisonTable id={b.id} html={b.html} />
+        case 'faq_accordion': return <FaqAccordion id={b.id} items={b.items} />
+        case 'phone_ring_sim': return <PhoneRingSim id={b.id} moments={b.moments} />
+        case 'escalation_timeline': return <EscalationTimeline id={b.id} steps={b.steps} />
+        case 'agent_terminal_replay': return <AgentTerminalReplay id={b.id} language={b.language} lines={b.lines} />
+        case 'choice_explorer': return <ChoiceExplorer id={b.id} options={b.options} />
+        case 'troubleshooting_picker': return <TroubleshootingPicker id={b.id} items={b.items} />
+      }
+    })}
+  </div>
+) : (
+  <div class="prose-m91" data-blocks-fallback set:html={fallbackHtml} />
+)}

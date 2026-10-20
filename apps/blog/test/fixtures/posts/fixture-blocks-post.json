@@ -1,7 +1,7 @@
 {
   "slug": "fixture-blocks-post",
   "title": "Fixture: a post with blocks",
-  "description": "Fixture for the build tests: a post whose blocks are not supported yet, so it falls back to Markdown.",
+  "description": "Fixture for the build tests: a block type that is not built yet, so the page shows the whole Markdown.",
   "tldr": [
     "Blocks one.",
     "Blocks two.",
@@ -17,11 +17,17 @@
   "markdown": "The Markdown fallback for a post with blocks.\n\n## What to do next\n\n[Try M91](https://m91-site.embarko.app/)",
   "blocks": [
     {
-      "type": "callout",
+      "type": "rich_text",
       "id": "b1",
       "data": {
-        "tone": "info",
-        "markdown": "A callout"
+        "markdown": "The Markdown fallback for a post with blocks."
+      }
+    },
+    {
+      "type": "diagram",
+      "id": "b2",
+      "data": {
+        "nodes": []
       }
     }
   ],

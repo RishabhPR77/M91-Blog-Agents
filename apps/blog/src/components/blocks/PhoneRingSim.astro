@@ -1,0 +1,69 @@
+---
+// phone_ring_sim: the approval flow of the post. Without JS: the moments as a numbered list, an actor icon each.
+// With JS: a phone mockup (sticky beside the moments on wide screens, above them on phones) shows each moment's
+// state as it scrolls into view. Every word on the phone screen is a fixed label here, never AI text.
+import Icon from './Icon.astro'
+import type { Actor } from '../../lib/blocks'
+interface Props { id: string; moments: { actor: Actor; html: string; decision: 'approve' | 'reject' | null }[] }
+const { id, moments } = Astro.props
+const ACTOR = { agent: 'The agent', m91: 'M91', phone: 'The phone', human: 'A person', software: 'The software' } as const
+const STATE = { agent: 'waiting', m91: 'ringing', phone: 'ringing', human: 'deciding', software: 'continuing' } as const
+---
+<section class="phonesim" data-block="phone_ring_sim" data-block-id={id} aria-label="How the approval flows">
+  <div class="phonesim-phone js-only" aria-hidden="true">
+    <div class="phone" data-state={STATE[moments[0].actor]}>
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <div class="phone-view" data-view="waiting">
+          <span class="phone-app">Your agent</span>
+          <span class="phone-big">Paused</span>
+          <span class="phone-small">Waiting for a person…</span>
+        </div>
+        <div class="phone-view" data-view="ringing">
+          <span class="phone-app">Incoming call</span>
+          <span class="phone-big">M91</span>
+          <span class="phone-small">Ringing…</span>
+        </div>
+        <div class="phone-view" data-view="deciding">
+          <span class="phone-app">M91 · decision needed</span>
+          <span class="phone-buttons"><span class="phone-btn" data-btn="approve">Approve</span><span class="phone-btn" data-btn="reject">Reject</span></span>
+        </div>
+        <div class="phone-view" data-view="continuing">
+          <span class="phone-app">Your software</span>
+          <span class="phone-big">Decision received</span>
+          <span class="phone-small">Continuing…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ol class="phonesim-moments">
+    {moments.map((m, i) => (
+      <li class:list={['phonesim-moment', { 'is-active': i === 0 }]} data-state={STATE[m.actor]} data-decision={m.decision ?? ''}>
+        <span class="phonesim-actor"><Icon name={m.actor} /><span class="sr-only">{ACTOR[m.actor]}:</span></span>
+        <div class="phonesim-text" set:html={m.html} />
+      </li>
+    ))}
+  </ol>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-block="phone_ring_sim"]').forEach((block) => {
+    const phone = block.querySelector<HTMLElement>('.phone')
+    const moments = Array.from(block.querySelectorAll<HTMLElement>('.phonesim-moment'))
+    if (!phone || !moments.length) return
+    let decision = ''
+    const show = (m: HTMLElement) => {
+      moments.forEach((x) => x.classList.toggle('is-active', x === m))
+      if (m.dataset.decision) decision = m.dataset.decision
+      phone.dataset.state = m.dataset.state ?? 'waiting'
+      phone.querySelectorAll<HTMLElement>('[data-btn]').forEach((b) => b.classList.toggle('is-chosen', m.dataset.state === 'deciding' && b.dataset.btn === (m.dataset.decision || 'approve')))
+      phone.dataset.decision = decision
+    }
+    if (!('IntersectionObserver' in window)) return
+    const io = new IntersectionObserver((entries) => {
+      const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+      if (visible[0]) show(visible[0].target as HTMLElement)
+    }, { rootMargin: '-35% 0px -45% 0px' })
+    moments.forEach((m) => io.observe(m))
+  })
+</script>

@@ -1,0 +1,44 @@
+---
+// troubleshooting_picker: problems from the post, each with its likely cause and fix. Without JS: all of them,
+// one after another. With JS: "What are you seeing?" buttons that show the chosen problem's cause and fix.
+// Each problem keeps its heading's id, so links to it still work (the script opens the linked problem).
+interface Props { id: string; items: { anchor: string; problem: string; cause: string; fix: string }[] }
+const { id, items } = Astro.props
+---
+<section class="troubleshoot" data-block="troubleshooting_picker" data-block-id={id} aria-label="Troubleshooting">
+  <p class="troubleshoot-q js-only">What are you seeing?</p>
+  <div class="troubleshoot-buttons js-only" role="group" aria-label="Problems">
+    {items.map((it, i) => <button type="button" aria-pressed="false" aria-controls={it.anchor} data-index={i} set:html={it.problem} />)}
+  </div>
+  {items.map((it, i) => (
+    <div class="troubleshoot-item" id={it.anchor} data-index={i}>
+      <h3 class="troubleshoot-problem" set:html={it.problem} />
+      <div class="troubleshoot-cause" set:html={it.cause} />
+      <div class="troubleshoot-fix" set:html={it.fix} />
+    </div>
+  ))}
+</section>
+
+<script>
+  const pickers = Array.from(document.querySelectorAll<HTMLElement>('[data-block="troubleshooting_picker"]'))
+  const setups = pickers.map((block) => {
+    const buttons = Array.from(block.querySelectorAll<HTMLButtonElement>('[aria-pressed]'))
+    const items = Array.from(block.querySelectorAll<HTMLElement>('.troubleshoot-item'))
+    const pick = (n: number) => {
+      buttons.forEach((b, i) => b.setAttribute('aria-pressed', i === n ? 'true' : 'false'))
+      items.forEach((it, i) => it.classList.toggle('is-active', i === n))
+    }
+    buttons.forEach((b, i) => b.addEventListener('click', () => pick(i)))
+    return { items, pick }
+  })
+  // A link to a problem (#its-id) opens it.
+  const openTarget = () => {
+    const id = decodeURIComponent(location.hash.slice(1))
+    for (const s of setups) {
+      const n = s.items.findIndex((it) => it.id === id)
+      if (n >= 0) s.pick(n)
+    }
+  }
+  openTarget()
+  window.addEventListener('hashchange', openTarget)
+</script>

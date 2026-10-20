@@ -1,0 +1,7 @@
+---
+// comparison_table: the post's table; it scrolls sideways, and on narrow screens each row becomes a card with
+// the column names as labels (CSS only, from the cells' data-label).
+interface Props { id: string; html: string }
+const { id, html } = Astro.props
+---
+<div class="comparison" data-block="comparison_table" data-block-id={id} set:html={html} />

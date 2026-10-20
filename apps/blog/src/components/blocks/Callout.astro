@@ -1,0 +1,11 @@
+---
+// callout: 1–2 paragraphs or a blockquote of the post, highlighted (no script).
+import Icon from './Icon.astro'
+interface Props { id: string; tone: 'info' | 'tip' | 'warning'; html: string }
+const { id, tone, html } = Astro.props
+const LABEL = { info: 'Note', tip: 'Tip', warning: 'Warning' } as const
+---
+<aside class={`callout callout-${tone}`} data-block="callout" data-block-id={id} aria-label={LABEL[tone]}>
+  <p class="callout-label"><Icon name={tone} /> {LABEL[tone]}</p>
+  <div class="callout-body" set:html={html} />
+</aside>

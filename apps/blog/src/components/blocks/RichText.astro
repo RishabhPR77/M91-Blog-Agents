@@ -1,0 +1,6 @@
+---
+// rich_text: plain parts of the post, rendered like any post body (its elements sit directly in the body).
+interface Props { html: string }
+const { html } = Astro.props
+---
+<Fragment set:html={html} />

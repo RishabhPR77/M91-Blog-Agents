@@ -1,0 +1,47 @@
+---
+// steps_checklist: the post's numbered steps with checkboxes. Without JS they can still be ticked; with JS a
+// progress line "N of M done" appears and progress is remembered on this device (localStorage, if allowed).
+interface Props { id: string; slug: string; steps: string[] }
+const { id, slug, steps } = Astro.props
+---
+<section class="checklist" data-block="steps_checklist" data-block-id={id} data-key={`m91-blog:${slug}:${id}`} aria-label="Steps checklist">
+  <p class="checklist-progress js-only" aria-live="polite"><span data-done>0</span> of {steps.length} done</p>
+  <ol class="checklist-list">
+    {steps.map((html, i) => (
+      <li class="checklist-item">
+        <input type="checkbox" class="checklist-box" id={`${id}-step-${i}`} data-step={i} />
+        <label class="checklist-mark" for={`${id}-step-${i}`}><span class="sr-only">Step {i + 1} done</span></label>
+        <div class="checklist-text"><span class="checklist-num" aria-hidden="true">{i + 1}</span><div set:html={html} /></div>
+      </li>
+    ))}
+  </ol>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-block="steps_checklist"]').forEach((block) => {
+    const key = block.dataset.key ?? ''
+    const boxes = Array.from(block.querySelectorAll<HTMLInputElement>('.checklist-box'))
+    const done = block.querySelector<HTMLElement>('[data-done]')
+    let saved: number[] = []
+    try {
+      saved = JSON.parse(localStorage.getItem(key) ?? '[]')
+    } catch {
+      saved = []
+    }
+    const update = () => {
+      const ticked = boxes.filter((b) => b.checked)
+      if (done) done.textContent = String(ticked.length)
+      boxes.forEach((b) => b.closest('li')?.classList.toggle('is-done', b.checked))
+      try {
+        localStorage.setItem(key, JSON.stringify(ticked.map((b) => Number(b.dataset.step))))
+      } catch {
+        // Storage may be blocked: the checklist still works for this visit.
+      }
+    }
+    boxes.forEach((b) => {
+      b.checked = Array.isArray(saved) && saved.includes(Number(b.dataset.step))
+      b.addEventListener('change', update)
+    })
+    update()
+  })
+</script>

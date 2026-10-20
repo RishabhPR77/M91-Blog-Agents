@@ -29,6 +29,11 @@ function readFolder(dir) {
       throw new Error(`Invalid post file ${file}: not valid JSON (${error.message})`)
     }
     const { valid, errors } = validatePost(post)
+    // Bad blocks never stop the build or break a page (Phase 8): the post is shown as its Markdown instead.
+    if (!valid && errors.every((e) => e.startsWith('/blocks'))) {
+      console.warn(`[blocks] ${file}: blocks not valid, showing the post's Markdown instead:\n  - ${errors.slice(0, 5).join('\n  - ')}`)
+      return { ...post, blocks: null }
+    }
     if (!valid) throw new Error(`Invalid post file ${file} (format v1):\n  - ${errors.join('\n  - ')}`)
     return post
   })

@@ -1,0 +1,24 @@
+---
+// faq_accordion: the post's questions as native <details> (works without JS). Each keeps its heading's id, so
+// links to the question still work; a small script opens the question a link points to.
+interface Props { id: string; items: { anchor: string; question: string; answer: string }[] }
+const { id, items } = Astro.props
+---
+<div class="faq" data-block="faq_accordion" data-block-id={id}>
+  {items.map((it) => (
+    <details class="faq-item" id={it.anchor}>
+      <summary class="faq-q"><span set:html={it.question} /></summary>
+      <div class="faq-a" set:html={it.answer} />
+    </details>
+  ))}
+</div>
+
+<script>
+  const openTarget = () => {
+    const id = decodeURIComponent(location.hash.slice(1))
+    const el = id ? document.getElementById(id) : null
+    if (el instanceof HTMLDetailsElement) el.open = true
+  }
+  openTarget()
+  window.addEventListener('hashchange', openTarget)
+</script>
