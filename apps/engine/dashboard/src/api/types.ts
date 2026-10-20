@@ -1,6 +1,9 @@
 // Shapes returned by the engine API (apps/engine/src/server.js). Only the fields the dashboard uses.
 
-export type Health = { ok: boolean; version: string; run_in_progress: boolean }
+/** The engine's index (Phase 9 A4): when it was loaded, and whether another process changed Mem0 since. */
+export type IndexStatus = { loaded_at: string | null; types: string[]; records: number; out_of_date: boolean }
+
+export type Health = { ok: boolean; version: string; run_in_progress: boolean; index?: IndexStatus }
 
 export type AgentModel = { service?: string; model?: string; delivery?: string; research_delivery?: string }
 

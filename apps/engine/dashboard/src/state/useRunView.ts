@@ -32,8 +32,8 @@ export function useRunView(runId: string): { view: RunView; detail: RunDetail | 
     queryFn: () => api<RunDetail>(`/api/runs/${runId}`),
     // Right after POST /api/runs the record may not be saved yet: retry a 404 a few times.
     retry: (n, e) => isApiError(e) && (e.status === 404 || e.status === 0) && n < 4,
-    retryDelay: 1000,
-    refetchInterval: () => (terminalSeen.current || (recordStatus.current && recordStatus.current !== 'running') ? false : 10_000)
+    retryDelay: 1000
+    // No polling (Phase 9 A4): live events refresh the run detail (served from the engine's index).
   })
   recordStatus.current = runQuery.data?.run?.status
 
@@ -57,6 +57,8 @@ export function useRunView(runId: string): { view: RunView; detail: RunDetail | 
         onEvent: (event) => {
           received++
           dispatch({ type: 'event', event })
+          // A finished step may have produced records: refresh the run detail (0 Mem0 requests: the index).
+          if (event.type === 'step.finished' || event.type === 'approval.waiting') void qc.invalidateQueries({ queryKey: ['run', runId] })
           if (TERMINAL.has(event.type)) {
             terminalSeen.current = true
             close()

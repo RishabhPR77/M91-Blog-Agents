@@ -46,6 +46,7 @@ import { createRunManager } from './runs.js'
 import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
 import { listPins, addPin, cancelPin, DATE_RE } from './pins.js'
+import { engineUrl, runViaEngine, engineApi } from './enginecall.js'
 
 /** --key=value, --key value, or a bare --flag (true). Anything else is positional. */
 export function parseArgs(argv) {
@@ -75,7 +76,7 @@ function printChecks(results) {
 }
 
 /** npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"] | --list | --cancel <id> */
-export async function pinCommand(args, { store }) {
+export async function pinCommand(args, { store, engine = null }) {
   if (args.list) {
     const pins = await listPins(store)
     if (!pins.length) return console.log('No pinned topics.')
@@ -83,12 +84,31 @@ export async function pinCommand(args, { store }) {
     return
   }
   if (args.cancel) {
-    await cancelPin(store, args.cancel)
+    if (engine) await engineApi.cancelPin(engine, args.cancel)
+    else await cancelPin(store, args.cancel)
     return console.log(`Cancelled ${args.cancel}.`)
   }
   if (typeof args.topic !== 'string' || !DATE_RE.test(String(args.date))) throw new Error('usage: npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"]')
-  const { pin, saved } = await addPin(store, { topic: args.topic, date: args.date, priority: args.priority === 'high' ? 'high' : undefined, notes: typeof args.notes === 'string' ? args.notes : undefined })
+  const input = { topic: args.topic, date: args.date, priority: args.priority === 'high' ? 'high' : undefined, notes: typeof args.notes === 'string' ? args.notes : undefined }
+  const { pin, saved } = engine
+    ? await engineApi.addPin(engine, { ...input, target_date: input.date }).then((r) => ({ pin: r.pinned, saved: r.saved }))
+    : await addPin(store, input)
   console.log(saved ? `Pinned ${pin.pinned_id} for ${pin.target_date} (${pin.priority}).` : `DRY_RUN: not saved. Would pin ${pin.pinned_id} for ${pin.target_date}.`)
+}
+
+/**
+ * Starts a run and waits for it: through the running engine when it is up (Phase 9 A4: its index stays
+ * current and the dashboard shows the run live), else in this process.
+ */
+export async function startAndWait(config, { mode, params = {}, dryRun, engineUrlFn = engineUrl, viaEngine = runViaEngine, managerFactory = () => createRunManager({ config }), print = console.log } = {}) {
+  const base = await engineUrlFn(config)
+  if (base) {
+    print(`Running through the engine at ${base} (watch it live in the dashboard).`)
+    return viaEngine(base, { mode, params, dryRun, onStart: (id) => print(`run ${id} started`) })
+  }
+  const manager = managerFactory()
+  const { run_id } = await manager.startRun({ mode, trigger: 'cli', params, ...(dryRun && { dryRun: true }) })
+  return manager.wait(run_id)
 }
 
 /** The Designer's result: the blocks it kept (with why), dropped segments (with reasons), integrity, calls. */
@@ -177,7 +197,7 @@ export async function cleanupCommand(args, { store, confirm = ask, print = conso
 }
 
 /** npm run lessons -- --list | --delete <memory_id> */
-export async function lessonsCommand(args, { store, print = console.log, table = console.table }) {
+export async function lessonsCommand(args, { store, engine = null, print = console.log, table = console.table }) {
   if (args.list) {
     const list = (await store.getRecords({ type: 'lesson' })).sort((a, b) => String(b.date).localeCompare(String(a.date)))
     if (!list.length) return print('No lessons yet.')
@@ -185,6 +205,11 @@ export async function lessonsCommand(args, { store, print = console.log, table =
     return print(`${list.length} lesson(s). The Strategist and the Writer get the latest LESSONS_LIMIT of them.`)
   }
   if (typeof args.delete === 'string') {
+    // Through the running engine when it is up (it checks that the id is a lesson).
+    if (engine) {
+      await engineApi.deleteLesson(engine, args.delete)
+      return print(`Deleted lesson ${args.delete}.`)
+    }
     const rec = await store.getRecord(args.delete)
     if (!rec || rec.type !== 'lesson') throw new Error(`${args.delete} is not a lesson memory; nothing deleted`)
     await store.deleteRecord(args.delete)
@@ -212,7 +237,7 @@ async function main() {
 
   // Clean-up deletes for real even when DRY_RUN=true: it only removes ids you list or confirm.
   if (args._[0] === 'cleanup') return cleanupCommand(args, { store: createStore({ config, dryRun: false }) })
-  if (args._[0] === 'lessons') return lessonsCommand(args, { store: createStore({ config, dryRun: false }) })
+  if (args._[0] === 'lessons') return lessonsCommand(args, { store: createStore({ config, dryRun: false }), engine: typeof args.delete === 'string' ? await engineUrl(config) : null })
 
   if (args._[0] === 'strategist') {
     let scoutResult
@@ -244,7 +269,7 @@ async function main() {
     return
   }
 
-  if (args._[0] === 'pin') return pinCommand(args, { store })
+  if (args._[0] === 'pin') return pinCommand(args, { store, engine: args.list ? null : await engineUrl(config) })
 
   if (args._[0] === 'writer') {
     if (!args['brief-id'] || args['brief-id'] === true) throw new Error('usage: npm run writer -- --brief-id=<id> [--brief-version=<n>] [--mode=revise --feedback-file=<path.json>]')
@@ -327,9 +352,7 @@ async function main() {
     if (mode === 'unpublish' || mode === 'set_index') params.slug = args.slug
     if (mode === 'set_index') params.noindex = args.noindex === 'true' ? true : args.noindex === 'false' ? false : undefined
     if (Object.values(params).some((v) => v === undefined || v === true)) throw new Error(`usage: npm run ${args._[0]} -- ${usage}`)
-    const manager = createRunManager({ config })
-    const { run_id } = await manager.startRun({ mode, trigger: 'cli', params })
-    const result = await manager.wait(run_id)
+    const result = await startAndWait(config, { mode, params })
     console.table((result.run?.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, summary: String(s.summary).slice(0, 90), error: s.error ? String(s.error).slice(0, 60) : '' })))
     console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
     for (const w of result.run?.warnings ?? []) console.log(`WARNING: ${w}`)
@@ -365,9 +388,7 @@ async function main() {
     }
     if (mode === 'reject_topic' && typeof args.reason === 'string') params.reason = args.reason
     if (mode === 'approve' && args['force-unreviewed']) params.force_unreviewed = true
-    const manager = createRunManager({ config })
-    const { run_id } = await manager.startRun({ mode, trigger: 'cli', params })
-    const result = await manager.wait(run_id)
+    const result = await startAndWait(config, { mode, params })
     console.table((result.run?.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, ai_calls: s.ai_calls, summary: String(s.summary).slice(0, 80), error: s.error ? String(s.error).slice(0, 50) : '' })))
     console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
     for (const w of result.run?.warnings ?? []) console.log(`WARNING: ${w}`)
@@ -378,9 +399,7 @@ async function main() {
   if (args._[0] === 'designer') {
     if (typeof args['brief-id'] !== 'string') throw new Error('usage: npm run designer -- --brief-id=<id> [--version=<n>]')
     const params = { brief_id: args['brief-id'], ...(args.version && { version: Number(args.version) }) }
-    const manager = createRunManager({ config })
-    const { run_id } = await manager.startRun({ mode: 'designer', trigger: 'cli', params })
-    const result = await manager.wait(run_id)
+    const result = await startAndWait(config, { mode: 'designer', params })
     if (result.output) printDesigner(result.output)
     else console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
     process.exitCode = result.status === 'succeeded' ? 0 : 1
@@ -396,9 +415,8 @@ async function main() {
       ...(args['brief-version'] && { brief_version: Number(args['brief-version']) }),
       ...(mode === 'reviewer' && { route: args.route === true })
     }
-    const manager = createRunManager({ config })
-    const { run_id } = await manager.startRun({ mode, trigger: 'cli', params })
-    const result = await manager.wait(run_id)
+    const result = await startAndWait(config, { mode, params })
+    const run_id = result.run_id ?? result.run?.run_id
     if (result.output) (mode === 'reviewer' ? printReview : printPromo)(result.output)
     else console.table((result.run?.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, summary: String(s.summary).slice(0, 70), error: s.error ? String(s.error).slice(0, 50) : '' })))
     log.info('run finished', { run_id, status: result.status, summary: result.run?.result_summary, warnings: result.warnings?.length ?? 0 })
@@ -408,12 +426,11 @@ async function main() {
 
   // npm run pipeline  (= run --mode=full), or: node src/cli.js run --mode=scout|strategist|full [--dry-run]
   const mode = args._[0] === 'run' ? args.mode ?? 'full' : 'full'
-  const manager = createRunManager({ config })
-  const { run_id } = await manager.startRun({ mode, trigger: 'cli', ...(args['dry-run'] && { dryRun: true }) })
-  log.info('run started', { run_id, mode, dryRun: args['dry-run'] ? true : config.runtime.dryRun })
-  const result = await manager.wait(run_id)
+  log.info('run starting', { mode, dryRun: args['dry-run'] ? true : config.runtime.dryRun })
+  const result = await startAndWait(config, { mode, ...(args['dry-run'] && { dryRun: true }) })
+  const run_id = result.run_id ?? result.run?.run_id
   const run = result.run ?? {}
-  console.table((run.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, ai_calls: s.ai_calls, models: s.models.join(' '), summary: String(s.summary).slice(0, 70), error: s.error ? String(s.error).slice(0, 50) : '' })))
+  console.table((run.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, ai_calls: s.ai_calls, models: (s.models ?? []).join(' '), summary: String(s.summary).slice(0, 70), error: s.error ? String(s.error).slice(0, 50) : '' })))
   log.info('run finished', { run_id, status: result.status, brief_id: run.brief_id, summary: run.result_summary, ms: run.ms })
   process.exitCode = result.status === 'succeeded' ? 0 : 1
 }

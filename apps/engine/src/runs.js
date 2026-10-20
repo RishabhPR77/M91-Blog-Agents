@@ -108,6 +108,9 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
   storeFactory ??= (cfg) => createStore({ config: cfg })
   notifierFactory ??= (cfg) => createNotifier({ config: cfg })
   let active = null // { runId, controller, done }
+  // The engine's index (Phase 9 A4), set by the API server: pre-run checks read it, and runs start from it.
+  let index = null
+  const readStore = (runConfig) => index ?? storeFactory(runConfig)
   const finished = new Map() // run_id → final result (last 20)
 
   /** Starts a run in the background and returns its run_id at once. */
@@ -152,7 +155,8 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
 
   async function execute({ runId, mode, trigger, params, runConfig, signal, mem0 }) {
     // The run context's store (Phase 9 A1): each list once, the run's own writes kept in memory.
-    const store = createRunStore(storeFactory(runConfig))
+    // While the engine's index is up to date, the run starts from it (no Mem0 read for what it holds).
+    const store = createRunStore(storeFactory(runConfig), { seed: index && !index.outOfDate() ? index : null })
     const notifier = notifierFactory(runConfig)
     const startedAt = now()
     const dry = runConfig.runtime.dryRun
@@ -396,7 +400,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (typeof params.brief_id !== 'string' || !params.brief_id.trim()) throw new RunError('bad_params', 'writer mode needs params.brief_id')
     if (params.brief_version !== undefined && !(Number.isInteger(params.brief_version) && params.brief_version >= 1)) throw new RunError('bad_params', 'params.brief_version must be a whole number ≥ 1')
     if (params.feedback !== undefined && !Array.isArray(params.feedback)) throw new RunError('bad_params', 'params.feedback must be a list of feedback items')
-    const brief = await loadBrief(storeFactory(runConfig), params.brief_id, params.brief_version)
+    const brief = await loadBrief(readStore(runConfig), params.brief_id, params.brief_version)
     if (!brief) throw new RunError('unknown_brief', `no brief ${params.brief_id}${params.brief_version ? ` v${params.brief_version}` : ''}`)
   }
 
@@ -412,33 +416,34 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
   async function checkReviewerParams(params, runConfig) {
     checkDraftParams(params, 'reviewer')
     if (params.route !== undefined && typeof params.route !== 'boolean') throw new RunError('bad_params', 'params.route must be true or false')
-    const draft = await loadDraft(storeFactory(runConfig), params.brief_id, { version: params.version, briefVersion: params.brief_version })
+    const draft = await loadDraft(readStore(runConfig), params.brief_id, { version: params.version, briefVersion: params.brief_version })
     if (!draft) throw new RunError('unknown_draft', `no draft of brief ${params.brief_id}${params.version ? ` v${params.version}` : ''}`)
   }
 
   /** promo mode: params.brief_id of a brief with an approved draft. */
   async function checkPromoParams(params, runConfig) {
     checkDraftParams(params, 'promo')
-    const draft = await approvedDraft(storeFactory(runConfig), params.brief_id, { version: params.version, briefVersion: params.brief_version })
+    const draft = await approvedDraft(readStore(runConfig), params.brief_id, { version: params.version, briefVersion: params.brief_version })
     if (!draft) throw new RunError('no_approved_draft', `brief ${params.brief_id} has no approved draft${params.version ? ` v${params.version}` : ''}`)
   }
 
   /** designer mode: params.brief_id of a brief with an approved or published draft (params.version optional). */
   async function checkDesignerParams(params, runConfig) {
     checkDraftParams(params, 'designer')
-    const draft = await designableDraft(storeFactory(runConfig), params.brief_id, { version: params.version })
+    const draft = await designableDraft(readStore(runConfig), params.brief_id, { version: params.version })
     if (!draft) throw new RunError('no_draft', `brief ${params.brief_id} has no approved or published draft${params.version ? ` v${params.version}` : ''}`, 409)
   }
 
   /** The Publisher's modes: preflight (token, site URL) and params, before the run starts. */
   async function checkPublishParams(mode, params, runConfig) {
+    // (reads below go through the index when the engine has one)
     try {
       publishPreflight(runConfig)
     } catch (error) {
       if (error instanceof PublishError) throw new RunError(error.code, error.message, 409)
       throw error
     }
-    const store = storeFactory(runConfig)
+    const store = readStore(runConfig)
     if (mode === 'publish') {
       if (typeof params.brief_id !== 'string' || !params.brief_id.trim()) throw new RunError('bad_params', 'publish needs params.brief_id')
       const draft = (await draftsOf(store, params.brief_id)).find((d) => d.status === 'approved' || d.status === 'published')
@@ -464,6 +469,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     startRun,
     cancelRun,
     isRunning: () => Boolean(active),
+    useIndex: (i) => { index = i ?? null },
     activeRunId: () => active?.runId ?? null,
     /** Resolves with the final result of a run started by this manager. */
     wait: async (runId) => (active?.runId === runId ? active.done : finished.get(runId) ?? null)

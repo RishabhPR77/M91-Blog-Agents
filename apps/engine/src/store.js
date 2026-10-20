@@ -9,6 +9,7 @@ import { log } from './util/log.js'
 import { sleep, retry } from './util/retry.js'
 import { istDate } from './util/time.js'
 import { countMem0 } from './util/mem0count.js'
+import { emitStoreWrite, markWrite } from './storeevents.js'
 
 export const RECORD_TYPES = Object.freeze([
   'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'draft',
@@ -144,6 +145,12 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
   const skipWrite = (type) => dryRun && type !== 'run_log' && type !== 'run'
   let clientPromise
   const client = () => (clientPromise ??= clientFactory(apiKey))
+  // Phase 9 A4: every saved write is announced (the engine's index follows it) and stamps the write marker.
+  const writeKey = `mem0:${agentId}`
+  const wrote = (event) => {
+    markWrite(config)
+    emitStoreWrite({ key: writeKey, ...event })
+  }
 
   // Mem0 calls that are safe to repeat (reads, update/delete by id, event polls) retry network blips
   // (seen live: one "fetch failed" ended a run; another blip outlasted 3 tries in ~3 s). Up to 5
@@ -274,7 +281,9 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     }
     if (!id) throw new StoreError('Mem0 stored the record but its memory id could not be found', { type, eventId })
     log.debug('store create', { type, id, briefId })
-    return { id, type, briefId: briefId ?? null, status, version, topicGroup, date, payload, metadata }
+    const created = { id, type, briefId: briefId ?? null, status, version, topicGroup, date, payload, metadata }
+    wrote({ op: 'create', record: created })
+    return created
   }
 
   /**
@@ -294,6 +303,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     const record = toRecord({ ...current, id, metadata: merged, memory: payload !== undefined ? JSON.stringify(payload) : current?.memory })
     forgetLists()
     if (ttl > 0) cache.records.set(id, { at: now(), value: record })
+    wrote({ op: 'update', record })
     return record
   }
 
@@ -350,6 +360,8 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     countMem0('writes')
     const added = await c.add([{ role: 'user', content: text }], { agentId, metadata: { ...meta, ...(testTag && { test: true }), type: 'lesson', date: istDate() }, infer: true })
     forgetLists()
+    // Mem0 extracts the lesson later (infer=true): the index only learns that its lesson list changed.
+    wrote({ op: 'lesson', type: 'lesson' })
     return { eventId: added?.eventId ?? added?.event_id ?? null, status: added?.status ?? null }
   }
 
@@ -360,9 +372,10 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     await net(() => c.delete(id), 'delete')
     forgetLists()
     cache.records.delete(id)
+    wrote({ op: 'delete', id })
   }
 
-  return { dryRun, createRecord, updateRecord, getRecord, getRecords, getOne, searchSimilar, addLesson, deleteRecord }
+  return { dryRun, writeKey, createRecord, updateRecord, getRecord, getRecords, getOne, searchSimilar, addLesson, deleteRecord }
 }
 
 let defaultStore

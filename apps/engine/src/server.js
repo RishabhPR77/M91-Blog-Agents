@@ -23,6 +23,7 @@ import { reviewOfDraft, hardChecksPassed } from './approval.js'
 import { lessonText } from './lessons.js'
 import { isInteractive, latestBlockDoc } from './designer/index.js'
 import { withMem0Count, mem0Requests } from './util/mem0count.js'
+import { createEngineIndex } from './engineindex.js'
 
 const VERSION = (() => {
   try {
@@ -201,6 +202,10 @@ const parseCookies = (header = '') => Object.fromEntries(header.split(';').map((
  */
 export function createServer({ triggerKey, run, manager, store, config, now = Date.now, keepAliveMs = 15000, sessionMs = 12 * 3600 * 1000, dashboardDir = DEFAULT_DASHBOARD_DIR } = {}) {
   let legacyRunning = null
+  // Phase 9 A4: every API read goes through the engine's index (0 Mem0 requests once a type is loaded),
+  // and the run manager's checks and runs start from it too.
+  if (store && !store.isIndex) store = createEngineIndex(store, { config, now })
+  manager?.useIndex?.(store)
   const auth = Boolean(config?.dashboard?.auth)
   const password = config?.dashboard?.password ?? ''
   const sessions = new Map() // token → expires at
@@ -325,7 +330,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     const method = req.method
     const seg = path.split('/').filter(Boolean) // ['api', ...]
 
-    if (method === 'GET' && path === '/api/health') return send(res, 200, { ok: true, version: VERSION, run_in_progress: isRunning() })
+    // Health never touches Mem0: the index's age and whether another process changed Mem0 since it loaded.
+    if (method === 'GET' && path === '/api/health') return send(res, 200, { ok: true, version: VERSION, run_in_progress: isRunning(), ...(store?.isIndex && { index: store.status() }) })
 
     if (path === '/api/login' && method === 'POST') {
       if (!auth) return fail(res, 400, 'auth_off', 'login is not needed: DASHBOARD_AUTH is false')
@@ -461,6 +467,12 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       return send(res, 200, { record: r })
     }
 
+    // Refresh from Mem0 (Phase 9 A4): reload every type the index holds (one read per type).
+    if (path === '/api/index/refresh' && method === 'POST') {
+      if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: refresh when it has finished')
+      return send(res, 200, { index: await store.refresh() })
+    }
+
     // Settings
     if (path === '/api/settings' && method === 'GET') return send(res, 200, publicSettings(config))
     // Phase 7: the published posts for the dashboard's Posts page (never the post text).
@@ -545,6 +557,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     }
   }
   server.isRunning = isRunning
+  server.index = store?.isIndex ? store : null
   // Close open event streams so the server can stop cleanly.
   const close = server.close.bind(server)
   server.close = (cb) => {
@@ -554,6 +567,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       s.res.end()
     }
     streams.clear()
+    server.index?.close?.()
     return close(cb)
   }
   return server
@@ -579,6 +593,12 @@ async function main() {
   const store = getStore()
   const manager = createRunManager({ config })
   const server = createServer({ triggerKey: config.runtime.triggerKey, manager, store, config })
+  // Load the dashboard's lists once at start (one read per type); later writes keep them current.
+  try {
+    await server.index.build()
+  } catch (error) {
+    log.error('index not loaded at start; types load on first use', { error })
+  }
   const port = config.server?.port ?? (Number(process.env.PORT) || 8080)
   // Without dashboard auth the API is for this machine only.
   const host = config.dashboard?.auth ? '0.0.0.0' : '127.0.0.1'

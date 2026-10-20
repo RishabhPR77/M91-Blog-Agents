@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadConfig } from '../src/config.js'
+import { emitStoreWrite } from '../src/storeevents.js'
 
 // Each test process gets its own engine data folder (run lock, Mem0 usage): test files run in parallel.
 export const TEST_DATA_DIR = mkdtempSync(join(tmpdir(), 'm91-engine-data-'))
@@ -41,6 +42,7 @@ export const fakeConfig = (overrides) => loadConfig(fakeEnv(overrides))
  * `similarity(text, record)` → score for searchSimilar (default: 1 on an exact text match, else 0).
  * `dryRun: true` mimics the store's DRY_RUN rule (only run_log is written).
  */
+let memoryStoreSeq = 0
 export function memoryStore({ similarity, dryRun = false } = {}) {
   const records = new Map()
   let seq = 0
@@ -52,10 +54,14 @@ export function memoryStore({ similarity, dryRun = false } = {}) {
     ((f.brief_id ?? f.briefId) === undefined || r.briefId === (f.brief_id ?? f.briefId)) &&
     (f.status === undefined || r.status === f.status) &&
     (f.version === undefined || r.version === f.version)
+  // Writes are announced like the real store's (Phase 9 A4), under a key of this store only.
+  const writeKey = `memory:${++memoryStoreSeq}`
+  const wrote = (event) => emitStoreWrite({ key: writeKey, ...event })
   return {
     records,
     writes,
     dryRun,
+    writeKey,
     /** Seed first, then switch DRY_RUN on. */
     setDryRun(value) {
       dryRun = value
@@ -68,6 +74,7 @@ export function memoryStore({ similarity, dryRun = false } = {}) {
       const id = `mem-${++seq}`
       const record = { id, type, payload, briefId, status, version, topicGroup, date, metadata: { ...meta, type, brief_id: briefId, status, version, topic_group: topicGroup, date, ...((type === 'run_log' || type === 'run') && { dry_run: dryRun }) } }
       records.set(id, record)
+      wrote({ op: 'create', record })
       return record
     },
     async updateRecord(id, payload, metadata = {}) {
@@ -76,6 +83,7 @@ export function memoryStore({ similarity, dryRun = false } = {}) {
       const r = records.get(id)
       Object.assign(r, { payload: payload ?? r.payload, metadata: { ...r.metadata, ...metadata } })
       if (metadata.status) r.status = metadata.status
+      wrote({ op: 'update', record: r })
       return r
     },
     lessons: [],
@@ -84,6 +92,7 @@ export function memoryStore({ similarity, dryRun = false } = {}) {
       this.lessons.push({ text, meta })
       const id = `mem-${++seq}`
       records.set(id, { id, type: 'lesson', payload: text, briefId: null, status: null, version: null, date: '2026-10-19', metadata: { ...meta, type: 'lesson' } })
+      wrote({ op: 'lesson', type: 'lesson' })
       return { eventId: `evt-${id}`, status: 'PENDING' }
     },
     async searchSimilar(text, filters = {}) {
@@ -100,6 +109,7 @@ export function memoryStore({ similarity, dryRun = false } = {}) {
     },
     async deleteRecord(id) {
       records.delete(id)
+      wrote({ op: 'delete', id })
     },
     byType(type) {
       return [...records.values()].filter((r) => r.type === type)

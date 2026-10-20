@@ -96,6 +96,41 @@ Decision runs (measured): Reviewer check 28, approve 34, publish 28, unpublish 2
   pair falls on the right side. The silent-mode pair counts as different: it is a close topic, but a
   different question. The tests pin these pairs.
 
+## A4: the dashboard stops spending quota
+
+- **The engine's index** (`src/engineindex.js`) holds what the dashboard shows:
+  - **Loading:** at engine start it loads the dashboard's types, one read each (runs, drafts, briefs, reviews,
+    published posts, pinned topics, lessons). Other types load on first use, also with the type as a
+    server-side filter.
+  - **Staying current:** every write this process makes (runs, the API) is announced by the store
+    (`src/storeevents.js`) and applied to the index, with no read.
+  - **Lessons:** Mem0 extracts lessons later (`infer: true`), so a new lesson only marks that list for a
+    reload on its next use.
+  - **Serving:** every API read goes through the index. List pages, the run page, approvals, posts and
+    record views cost **0 Mem0 requests** once their types are loaded.
+- **Runs start from the index** while it is up to date. Pre-run checks and the run store's first lists come
+  from memory. In the test, an approve run read nothing from Mem0 for its draft and brief.
+- **Changes from another process:** every saved write stamps `data/last-write.json` (pid and time only).
+  A stamp from another pid that is newer than the index's load time sets `out_of_date` in `/api/health`
+  (which reads no Mem0). The dashboard then shows "Data may be out of date" with **Refresh from Mem0**
+  (`POST /api/index/refresh`: one read per held type; refused while a run is in progress). While out of
+  date, runs read Mem0 instead of the index.
+- **CLI commands go through the running engine** when it answers on this machine and the dashboard login
+  is off: `pipeline`/`run`, `publish`, `unpublish`, `set-index`, `rebuild-blog`, `designer`,
+  `approve`, `revise`, `reject`, `review`, `reviewer`, `promo`, `pin` (add and cancel) and
+  `lessons --delete`. The run shows live in the dashboard, and the CLI waits on the run detail, which is
+  served from the index.
+
+  These still work directly and set the out-of-date flag: `scout`, `strategist`, `writer`,
+  `cleanup`, `test-await` and `blog:sync` (which only reads). The first three run an agent outside the
+  run manager; the engine has no API for the other two.
+- **No polling that touches Mem0:**
+  - the dashboard polls only `/api/health`;
+  - the lists refresh on live events;
+  - the run page refreshes on step and approval events.
+
+  The header shows "Data loaded N min ago".
+
 ## New settings
 
 | Key | Default | Meaning |

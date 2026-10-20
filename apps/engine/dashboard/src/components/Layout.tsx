@@ -9,6 +9,7 @@ import { keys, useApprovals, useHealth, useRuns, useSettings } from '../api/quer
 import { openEventStream } from '../api/sse'
 import { applyTheme, readThemePref, saveThemePref, watchSystemTheme, type ThemePref } from '../theme'
 import { toast } from './Toasts'
+import { IndexAge, IndexBanner } from './IndexStatus'
 
 type NavItem = { to: string; label: string; icon: ReactNode; badge?: number; end?: boolean }
 
@@ -153,6 +154,7 @@ export function Layout({ children }: { children: ReactNode }) {
           {settings.data && (settings.data.runtime.dry_run
             ? <span className="pill pill-amber" data-testid="dry-run-default">DRY RUN default</span>
             : <span className="pill pill-gray" data-testid="dry-run-default">Live runs by default</span>)}
+          {online && <IndexAge index={health.data?.index} />}
           <div className="ml-auto">
             <ThemeToggle />
           </div>
@@ -162,6 +164,7 @@ export function Layout({ children }: { children: ReactNode }) {
             Engine is not running. Start it with <code className="rounded bg-red-100 px-1 dark:bg-red-900">npm run dev:engine</code>.
           </div>
         )}
+        {online && <IndexBanner index={health.data?.index} running={Boolean(health.data?.run_in_progress)} />}
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">{children}</main>
       </div>
     </div>

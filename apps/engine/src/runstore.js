@@ -6,6 +6,7 @@
 // - A list asked for with a filter is served from a held list with a wider filter when there is one
 //   (e.g. "story_lead, open" from "story_lead").
 // - newBrief(briefId): every record of that brief is made in this run, so lists scoped to it need no read.
+// - seed (Phase 9 A4): the engine's index. Lists are taken from it instead of Mem0 while it is up to date.
 // - Searches and lessons pass straight through.
 import { recordMatches } from './store.js'
 
@@ -17,7 +18,7 @@ const covers = (held, want) => held.type === want.type &&
   (held.brief_id === undefined || held.brief_id === want.brief_id) &&
   (held.status === undefined || held.status === want.status)
 
-export function createRunStore(base) {
+export function createRunStore(base, { seed = null } = {}) {
   /** key → { filter, records: Map(id → record) } */
   const lists = new Map()
   /** Every record this run has seen or written, by id (the newest copy). */
@@ -53,7 +54,8 @@ export function createRunStore(base) {
         return derived
       }
     }
-    const fetched = want.brief_id && newBriefs.has(want.brief_id) ? [] : await base.getRecords({ type: want.type, ...(want.brief_id && { brief_id: want.brief_id }), ...(want.status && { status: want.status }) })
+    const source = seed ?? base
+    const fetched = want.brief_id && newBriefs.has(want.brief_id) ? [] : await source.getRecords({ type: want.type, ...(want.brief_id && { brief_id: want.brief_id }), ...(want.status && { status: want.status }) })
     const l = { filter: want, records: new Map() }
     for (const r of fetched) l.records.set(r.id, known.get(r.id) ?? r)
     // Newer copies held here win over what Mem0 answered; records made in this run are added.
