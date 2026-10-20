@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "code_tabs block data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tabs"
+  ],
+  "properties": {
+    "tabs": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "label",
+          "language",
+          "code"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "A fixed name derived from the language by code"
+          },
+          "language": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  },
+  "description": "2–5 consecutive code blocks."
+}

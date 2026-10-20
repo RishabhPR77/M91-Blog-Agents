@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "agent_terminal_replay block data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "language",
+    "lines"
+  ],
+  "properties": {
+    "language": {
+      "enum": [
+        "text",
+        "bash",
+        "console",
+        "log"
+      ]
+    },
+    "lines": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 40,
+      "items": {
+        "type": "string",
+        "description": "Exactly one line of the code block (may be empty)"
+      }
+    }
+  },
+  "description": "One code block of log or command lines."
+}

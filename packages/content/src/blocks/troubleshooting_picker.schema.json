@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "troubleshooting_picker block data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "items"
+  ],
+  "properties": {
+    "items": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "problem_markdown",
+          "cause_markdown",
+          "fix_markdown"
+        ],
+        "properties": {
+          "problem_markdown": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Markdown sliced from the approved post"
+          },
+          "cause_markdown": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Markdown sliced from the approved post"
+          },
+          "fix_markdown": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Markdown sliced from the approved post"
+          }
+        }
+      }
+    }
+  },
+  "description": "H3 problems, each with a \"Likely cause:\" and a \"Fix:\" paragraph."
+}

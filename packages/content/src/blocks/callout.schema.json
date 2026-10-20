@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "callout block data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tone",
+    "markdown"
+  ],
+  "properties": {
+    "tone": {
+      "enum": [
+        "info",
+        "tip",
+        "warning"
+      ]
+    },
+    "markdown": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Markdown sliced from the approved post"
+    }
+  },
+  "description": "1–2 paragraphs or a blockquote, highlighted."
+}

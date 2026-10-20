@@ -13,7 +13,7 @@ const post = (over = {}) => ({
   tags: ['ai-agents', 'approvals'],
   reading_time_min: 6,
   markdown: '# Title\n\nBody.',
-  blocks: [{ type: 'steps_checklist', id: 'b1', data: { steps: [] } }],
+  blocks: [{ type: 'steps_checklist', id: 'b1', data: { steps: [{ markdown: 'Create the alert.' }, { markdown: 'Ring the phone.' }] } }],
   seo: { title_tag: 'Map Human Approvals to the Right Tool Call', meta_description: 'Short description.', og_image: '' },
   sources: [{ url: 'https://github.com/example/issues/1', title: 'Issue' }],
   related_slugs: [],

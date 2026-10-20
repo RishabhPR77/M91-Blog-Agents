@@ -2,14 +2,29 @@
   "slug": "fixture-blocks-post",
   "title": "Fixture: a post with blocks",
   "description": "Fixture for the build tests: a post whose blocks are not supported yet, so it falls back to Markdown.",
-  "tldr": ["Blocks one.", "Blocks two.", "Blocks three."],
+  "tldr": [
+    "Blocks one.",
+    "Blocks two.",
+    "Blocks three."
+  ],
   "published_at": "2026-10-05T10:00:00+05:30",
   "updated_at": "2026-10-05T10:00:00+05:30",
   "topic_group": 4,
-  "tags": ["blocks"],
+  "tags": [
+    "blocks"
+  ],
   "reading_time_min": 1,
   "markdown": "The Markdown fallback for a post with blocks.\n\n## What to do next\n\n[Try M91](https://m91-site.embarko.app/)",
-  "blocks": [{ "type": "callout", "id": "b1", "data": { "text": "A callout" } }],
+  "blocks": [
+    {
+      "type": "callout",
+      "id": "b1",
+      "data": {
+        "tone": "info",
+        "markdown": "A callout"
+      }
+    }
+  ],
   "seo": {
     "title_tag": "Fixture: a post with blocks",
     "meta_description": "Fixture: a post with blocks.",

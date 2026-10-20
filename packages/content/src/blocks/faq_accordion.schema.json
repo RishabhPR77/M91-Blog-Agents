@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "faq_accordion block data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "items"
+  ],
+  "properties": {
+    "items": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "question_markdown",
+          "answer_markdown"
+        ],
+        "properties": {
+          "question_markdown": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Markdown sliced from the approved post"
+          },
+          "answer_markdown": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Markdown sliced from the approved post"
+          }
+        }
+      }
+    }
+  },
+  "description": "H3 questions, each with its answer."
+}
