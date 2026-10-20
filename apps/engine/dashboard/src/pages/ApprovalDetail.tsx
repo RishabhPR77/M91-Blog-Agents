@@ -11,6 +11,7 @@ import { ChecksTable, type CheckResult } from '../components/ChecksTable'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MarkdownPreview } from '../components/MarkdownPreview'
 import { PublishCard } from '../components/PublishCard'
+import { InteractiveCard, type InteractiveInfo } from '../components/InteractiveCard'
 import { Card, EmptyState, PageHeader } from '../components/Page'
 import { VerdictPanel, type Review } from '../components/VerdictPanel'
 import { StatusBadge } from '../components/StatusBadge'
@@ -34,6 +35,8 @@ export type ApprovalDetailData = {
   }
   review: Review | null
   checks: CheckResult[]
+  /** Phase 8: interactive blocks (null or missing from older engines). */
+  interactive?: InteractiveInfo | null
   earlier: { version: number; brief_version: number; status: string; title: string; score: number | null; total?: number | null; human_feedback: HumanFeedback; record_id?: string }[]
 }
 
@@ -100,6 +103,8 @@ export default function ApprovalDetail() {
 
   const { reviewed, hardPassed, failedHard } = approvalFlags(d)
   const waiting = d.draft.status === 'awaiting_human'
+  // Approving also runs the Designer when interactive blocks are on (Phase 8).
+  const approveCalls = d.interactive?.on ? COSTS.approve_interactive.normal : COSTS.approve.normal
   const needsReview = !reviewed && rereviewDefault
   const usedRevisions = d.earlier.filter((e) => e.human_feedback).length
   const revisionsLeft = maxRevisions == null ? null : maxRevisions - usedRevisions
@@ -195,6 +200,7 @@ export default function ApprovalDetail() {
 
         <div className="space-y-4 lg:col-span-2">
           <PublishCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} title={d.draft.title} />
+          <InteractiveCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} info={d.interactive} />
           <Card title="Your decision">
             <div className="space-y-4">
               {error && <ActionError error={error} onClose={() => setError(null)} />}
@@ -308,14 +314,14 @@ export default function ApprovalDetail() {
             <button type="button" className="btn-primary mt-4 w-full" disabled={busy} onClick={() => void run(reviewAction)}>Review it first · expected AI calls {COSTS.approval_review.normal}</button>
             <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
               <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-0.5" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} /> I understand this version was not checked by the Reviewer</label>
-              <button type="button" className="btn-danger mt-2 w-full" disabled={busy || !understood} onClick={() => void run(forceAction)}>Approve without review · expected AI calls {COSTS.approve.normal}</button>
+              <button type="button" className="btn-danger mt-2 w-full" disabled={busy || !understood} onClick={() => void run(forceAction)}>Approve without review · expected AI calls {approveCalls}</button>
             </div>
             <div className="mt-4 flex justify-end"><button type="button" className="btn-secondary" disabled={busy} onClick={() => setApproveOpen(false)}>Cancel</button></div>
           </div>
         </div>
       ) : (
-        <ConfirmDialog open title={`Approve v${d.draft.version}?`} expectedCalls={COSTS.approve.normal} confirmLabel="Approve" busy={busy} onConfirm={() => run(approveAction)} onCancel={() => setApproveOpen(false)}>
-          <p>The promo pack is created, then the Designer step (a placeholder until Phase 8) and the Publisher step ({settings.data?.blog?.auto_publish ? 'AUTO_PUBLISH is on: the post is published to the blog, no AI calls' : 'AUTO_PUBLISH is off: publish it afterwards with Publish'}).{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>
+        <ConfirmDialog open title={`Approve v${d.draft.version}?`} expectedCalls={approveCalls} confirmLabel="Approve" busy={busy} onConfirm={() => run(approveAction)} onCancel={() => setApproveOpen(false)}>
+          <p>The promo pack is created, then the Designer step ({d.interactive?.on ? 'interactive blocks are on: it picks the parts that become blocks' : 'interactive blocks are off: it is skipped'}) and the Publisher step ({settings.data?.blog?.auto_publish ? 'AUTO_PUBLISH is on: the post is published to the blog, no AI calls' : 'AUTO_PUBLISH is off: publish it afterwards with Publish'}).{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>
         </ConfirmDialog>
       ))}
 

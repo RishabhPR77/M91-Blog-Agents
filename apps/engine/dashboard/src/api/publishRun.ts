@@ -1,4 +1,5 @@
-// Starting a Publisher run (Phase 7): publish, unpublish, set_index, rebuild_blog. No AI calls; the run
+// Starting a Publisher run (Phase 7): publish, unpublish, set_index, rebuild_blog, plus a Designer re-run
+// (Phase 8, the only one with AI calls: 1–2). The Publisher modes use no AI; every run
 // takes the engine's run lock like any other run, so a 409 means another run is in progress.
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -6,9 +7,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api, errorMessage, isApiError } from './client'
 import { toast } from '../components/Toasts'
 
-export type PublishMode = 'publish' | 'unpublish' | 'set_index' | 'rebuild_blog'
+export type PublishMode = 'publish' | 'unpublish' | 'set_index' | 'rebuild_blog' | 'designer'
 
-export const PUBLISH_LABEL: Record<PublishMode, string> = { publish: 'Publish', unpublish: 'Unpublish', set_index: 'Search visibility', rebuild_blog: 'Rebuild blog' }
+export const PUBLISH_LABEL: Record<PublishMode, string> = { publish: 'Publish', unpublish: 'Unpublish', set_index: 'Search visibility', rebuild_blog: 'Rebuild blog', designer: 'Designer' }
 
 /** start(mode, params, dryRun) posts /api/runs and opens the live run page; errors become a message. */
 export function usePublishRun() {

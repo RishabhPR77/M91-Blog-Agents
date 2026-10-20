@@ -21,6 +21,7 @@ import { draftsOf, draftVersion, draftBriefVersion } from './writer/save.js'
 import { BRIEF_ID_RE } from './util/ids.js'
 import { reviewOfDraft, hardChecksPassed } from './approval.js'
 import { lessonText } from './lessons.js'
+import { isInteractive, latestBlockDoc } from './designer/index.js'
 import { withMem0Count, mem0Requests } from './util/mem0count.js'
 
 const VERSION = (() => {
@@ -87,6 +88,10 @@ export function publicSettings(config) {
     blog: config.blog && {
       auto_publish: config.runtime.autoPublish, app_name: config.blog.appName, base_url: config.blog.baseUrl,
       noindex_first_n_posts: config.blog.noindexFirstNPosts, deploy_token_set: Boolean(config.blog.embarkoDeployToken)
+    },
+    // Interactive blocks (Phase 8): the Designer's limits and whether new posts get blocks.
+    designer: config.designer && {
+      max_interactive_blocks: config.designer.maxInteractiveBlocks, max_repairs: config.designer.maxRepairs, interactive_default: config.designer.interactiveDefault
     },
     built_modes: [...BUILT_MODES],
     decision_modes: [...DECISION_MODES],
@@ -225,6 +230,9 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     const review = reviewOf(d)
     // reviewed: the newest review of this version is a pass (the approve rule, Phase 5.5).
     const reviewed = (await reviewOfDraft(store, d))?.payload?.pass === true
+    // Interactive blocks (Phase 8): the switch and the newest Designer result for this version (one block_doc read).
+    const doc = config?.designer ? await latestBlockDoc(store, briefId, draftVersion(d)) : null
+    const dp = doc?.payload ?? {}
     return {
       brief_id: briefId,
       draft: {
@@ -235,6 +243,13 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       },
       review: review && { total: review.total, pass: review.pass, gates: review.gates, areas: review.areas, feedback: review.feedback, summary: review.summary, sources_checked: review.sources_checked },
       checks: p.checks?.results ?? [],
+      interactive: config?.designer ? {
+        on: isInteractive(d, config), default: config.designer.interactiveDefault, set: typeof d.metadata?.interactive === 'boolean',
+        block_doc: doc && {
+          record_id: doc.id, status: doc.status ?? dp.status ?? null, summary: dp.summary ?? '', blocks: dp.blocks?.length ?? 0,
+          dropped: dp.dropped_segments?.length ?? 0, integrity_passed: dp.integrity?.passed ?? null, created_at: dp.created_at ?? null
+        }
+      } : null,
       earlier: earlier.map((e) => ({
         version: draftVersion(e), brief_version: draftBriefVersion(e), status: e.status, title: e.payload?.title ?? '',
         // score and total are the same number (total is the dashboard's name; score kept for older callers).
@@ -300,7 +315,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     if (run.payload?.brief_id) ids.add(run.payload.brief_id)
     if (!ids.size) return []
     // One filtered (and cached) read per type, in parallel.
-    const types = ['m91_facts', 'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'source_pack', 'draft', 'review']
+    const types = ['m91_facts', 'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'source_pack', 'draft', 'review', 'block_doc']
     const lists = await Promise.all(types.map((type) => store.getRecords({ type })))
     return lists.flat().filter((r) => ids.has(r.id) || ids.has(KEY_ID_OF(r.payload))).map(trimRecord)
   }
@@ -414,6 +429,20 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       }
     }
 
+    // Interactive blocks on or off for a brief's newest draft (Phase 8): stored on the draft as metadata.interactive.
+    // It takes effect at the next Designer run or publish; it never starts a run itself.
+    if (seg[1] === 'drafts' && seg[2] && seg[3] === 'interactive' && seg.length === 4 && method === 'POST') {
+      const briefId = seg[2]
+      if (!BRIEF_ID_RE.test(briefId)) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')
+      const body = await readJson(req)
+      if (typeof body.on !== 'boolean') throw new ApiError(400, 'bad_params', 'on must be true or false')
+      if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: try again when it has finished')
+      const [d] = await draftsOf(store, briefId)
+      if (!d) throw new ApiError(404, 'not_found', `no draft of brief ${briefId}`)
+      const saved = await store.updateRecord(d.id, undefined, { interactive: body.on })
+      return send(res, 200, { brief_id: briefId, version: draftVersion(d), on: body.on, saved: !saved?.dryRun })
+    }
+
     // Records
     if (path === '/api/records' && method === 'GET') {
       const type = url.searchParams.get('type') || undefined
@@ -441,7 +470,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         return {
           record_id: r.id, slug: p.slug ?? p.post?.slug ?? null, title: p.title ?? p.post?.title ?? '', status: r.status, noindex: Boolean(p.noindex ?? p.post?.noindex),
           url: p.url ?? p.post?.canonical_url ?? null, brief_id: p.brief_id ?? r.briefId ?? null, version: p.version ?? null, topic_group: p.topic_group ?? null,
-          published_at: p.post?.published_at ?? null, updated_at: p.post?.updated_at ?? null, deployed_at: p.deployed_at ?? null, last_error: p.last_error ?? null
+          published_at: p.post?.published_at ?? null, updated_at: p.post?.updated_at ?? null, deployed_at: p.deployed_at ?? null, last_error: p.last_error ?? null,
+          blocks: Array.isArray(p.post?.blocks) ? p.post.blocks.length : 0
         }
       }).sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))
       return send(res, 200, { posts })

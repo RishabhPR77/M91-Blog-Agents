@@ -1,4 +1,4 @@
-// /records/:memoryId — one record: a friendly view per type (brief, draft, review, promo pack; a readable
+// /records/:memoryId — one record: a friendly view per type (brief, draft, review, promo pack, block doc; a readable
 // field view for the others) and the raw JSON with copy.
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -102,6 +102,34 @@ function PromoView({ p }: { p: P }) {
   )
 }
 
+/** block_doc (Phase 8): the Designer's result — kept and dropped segments, the blocks, the integrity check. */
+function BlockDocView({ p }: { p: P }) {
+  const preview = new Map<string, string>((p.parts ?? []).map((x: P) => [x.id, x.preview]))
+  const parts = (ids?: string[]) => (ids ?? []).map((id) => <span key={id} className="mr-1 rounded bg-slate-100 px-1 font-mono text-xs dark:bg-slate-800" title={preview.get(id)}>{id}</span>)
+  return (
+    <>
+      <p className="mb-4 text-sm" data-testid="block-doc-summary">{p.summary}</p>
+      <p className="mb-4 text-xs text-slate-500">{[p.model_used, p.repairs_used != null && `${p.repairs_used} repair${p.repairs_used === 1 ? '' : 's'}`, p.ms != null && `${(p.ms / 1000).toFixed(1)} s`, p.brief_version != null && `brief v${p.brief_version}`, p.version != null && `draft v${p.version}`].filter(Boolean).join(' · ')}</p>
+      {p.error && <Section title="Error"><p className="text-red-600 dark:text-red-400">{p.error}</p></Section>}
+      <Section title="Integrity">
+        {p.integrity ? <><span className={`pill ${p.integrity.passed ? 'pill-green' : 'pill-red'}`}>{p.integrity.passed ? 'passed' : 'failed'}</span><List items={p.integrity.details} /></> : <span className="text-slate-400">not checked</span>}
+      </Section>
+      <Section title="Kept segments">
+        <List items={(p.kept_segments ?? []).map((k: P) => <><span className="pill pill-green">{k.block_type}</span> {parts(k.part_ids)} {k.why && <span className="text-slate-600 dark:text-slate-300">{k.why}</span>}</>)} />
+      </Section>
+      <Section title="Dropped segments">
+        <List items={(p.dropped_segments ?? []).map((k: P) => <><span className="pill pill-amber">{k.block_type}</span> {parts(k.part_ids)} <span className="text-slate-600 dark:text-slate-300">{k.reason}</span></>)} />
+      </Section>
+      <Section title="Blocks (in order)">
+        {p.blocks?.length ? (
+          <ol className="list-decimal space-y-1 pl-5">{p.blocks.map((b: P, i: number) => <li key={b.id ?? i}><span className="font-mono text-xs">{b.id}</span> <span className={`pill ${b.type === 'rich_text' ? 'pill-gray' : 'pill-green'}`}>{b.type}</span> {parts((p.layout ?? []).find((l: P) => l.block_id === b.id)?.part_ids)}</li>)}</ol>
+        ) : <span className="text-slate-400">none: the post is plain Markdown</span>}
+      </Section>
+      <Section title="Parts of the post"><List items={(p.parts ?? []).map((x: P) => <><span className="font-mono text-xs">{x.id}</span> <span className="text-slate-500">{x.type}</span> {x.preview}</>)} /></Section>
+    </>
+  )
+}
+
 export function FriendlyView({ rec }: { rec: FullRecord }) {
   const p = (rec.payload ?? {}) as P
   if (typeof rec.payload === 'string') return <p className="whitespace-pre-wrap text-sm">{rec.payload}</p>
@@ -110,6 +138,7 @@ export function FriendlyView({ rec }: { rec: FullRecord }) {
     case 'draft': return <DraftView rec={rec} p={p} />
     case 'review': return <VerdictPanel review={p as Review} />
     case 'promo_pack': return <PromoView p={p} />
+    case 'block_doc': return <BlockDocView p={p} />
     default: return <FieldView data={p} />
   }
 }

@@ -1,5 +1,6 @@
 // /posts — the blog's posts (Phase 7): status, search visibility, live link, and the Publisher actions
-// (Republish, Unpublish, Hide / Show in search). Every action asks first; none of them uses AI.
+// (Republish, Unpublish, Hide / Show in search) and Re-run Designer (Phase 8). Every action asks first; only the
+// Designer uses AI (1–2 calls).
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ExternalLink } from 'lucide-react'
@@ -10,8 +11,9 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Card, EmptyState, PageHeader } from '../components/Page'
 import { StatusBadge } from '../components/StatusBadge'
 import { fmtDateTime } from '../format'
+import { COSTS } from '../config/costs'
 
-type Pending = { mode: PublishMode; post: PostItem; params: Record<string, unknown>; title: string; text: string; danger?: boolean }
+type Pending = { mode: PublishMode; post: PostItem; params: Record<string, unknown>; title: string; text: string; danger?: boolean; calls?: string }
 
 export default function Posts() {
   const posts = usePosts()
@@ -42,7 +44,7 @@ export default function Posts() {
     <>
       <PageHeader
         title="Posts"
-        subtitle={<>Posts on the blog{blog ? <> at <a className="text-sky-700 hover:underline dark:text-sky-300" href={blog.base_url} target="_blank" rel="noreferrer">{blog.base_url.replace(/^https:\/\//, '')}</a></> : ''}. Publishing uses no AI calls.</>}
+        subtitle={<>Posts on the blog{blog ? <> at <a className="text-sky-700 hover:underline dark:text-sky-300" href={blog.base_url} target="_blank" rel="noreferrer">{blog.base_url.replace(/^https:\/\//, '')}</a></> : ''}. Publishing uses no AI calls; the Designer uses {COSTS.designer.normal}.</>}
         actions={
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={dryRun ?? true} onChange={(e) => setDryRun(e.target.checked)} />
@@ -73,6 +75,7 @@ export default function Posts() {
                       <td className="px-2 py-2">
                         <div className="font-medium">{p.title}</div>
                         <div className="font-mono text-xs text-slate-500">{p.slug}{p.version ? ` · v${p.version}` : ''}{p.brief_id ? <> · <Link className="text-sky-700 hover:underline dark:text-sky-300" to={`/approvals/${p.brief_id}`}>{p.brief_id}</Link></> : ''}</div>
+                        {p.blocks !== undefined && <div className="mt-0.5 text-xs text-slate-500" data-testid="post-blocks">{p.blocks ? `${p.blocks} interactive blocks` : 'plain Markdown'}</div>}
                         {p.last_error && <div className="mt-1 text-xs text-red-600 dark:text-red-400">Last error: {p.last_error}</div>}
                       </td>
                       <td className="px-2 py-2"><StatusBadge status={p.status} /></td>
@@ -85,6 +88,12 @@ export default function Posts() {
                             <button type="button" className="btn-secondary px-2 py-1 text-xs" disabled={disabled}
                               onClick={() => ask({ mode: 'publish', post: p, params: { brief_id: p.brief_id }, title: `${live ? 'Republish' : 'Publish'} “${p.title}”?`, text: 'The approved draft is turned into the post again, the blog is rebuilt and deployed, and the live page is checked. The slug and first publish date stay the same.' })}>
                               {live ? 'Republish' : 'Publish again'}
+                            </button>
+                          )}
+                          {p.brief_id && p.status !== 'publishing' && built.has('designer') && (
+                            <button type="button" className="btn-secondary px-2 py-1 text-xs" disabled={pub.busy}
+                              onClick={() => ask({ mode: 'designer', post: p, params: { brief_id: p.brief_id }, calls: COSTS.designer.normal, title: `Re-run the Designer for “${p.title}”?`, text: 'The Designer picks the parts of the post that become interactive blocks; code builds them from the exact text and checks nothing changed. The live post changes only after Republish.' })}>
+                              Re-run Designer
                             </button>
                           )}
                           {live && (
@@ -109,9 +118,11 @@ export default function Posts() {
           </div>
         )}
       </Card>
-      <ConfirmDialog open={Boolean(pending)} title={pending?.title ?? ''} expectedCalls="0" confirmLabel={pending?.mode === 'unpublish' ? 'Unpublish' : 'Start'} danger={pending?.danger} busy={pub.busy} onConfirm={confirm} onCancel={() => setPending(null)}>
+      <ConfirmDialog open={Boolean(pending)} title={pending?.title ?? ''} expectedCalls={pending?.calls ?? '0'} confirmLabel={pending?.mode === 'unpublish' ? 'Unpublish' : 'Start'} danger={pending?.danger} busy={pub.busy} onConfirm={confirm} onCancel={() => setPending(null)}>
         <p>{pending?.text}</p>
-        <p data-testid="publish-dry">{dryRun ?? true ? 'Dry run: the blog is built locally only; nothing is deployed, saved or sent.' : 'Live: the blog is deployed to Embarko and Slack is told.'}</p>
+        <p data-testid="publish-dry">{pending?.mode === 'designer'
+          ? (dryRun ?? true ? 'Dry run: the plan is made (AI calls), but nothing is saved.' : 'The result is saved as a new block_doc. Nothing is deployed.')
+          : (dryRun ?? true ? 'Dry run: the blog is built locally only; nothing is deployed, saved or sent.' : 'Live: the blog is deployed to Embarko and Slack is told.')}</p>
       </ConfirmDialog>
     </>
   )

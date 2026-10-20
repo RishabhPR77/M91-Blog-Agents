@@ -23,6 +23,7 @@ export function StepOutputs({ outputs, records = [] }: { outputs: Output[]; reco
               {o.ts && <span className="text-xs text-slate-400">{fmtTime(o.ts)}</span>}
             </div>
             <div className="text-slate-700 dark:text-slate-300">{o.message}</div>
+            {o.step === 'designer' && o.data && <DesignerPills data={o.data} />}
             {ids.length > 0 && (
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {ids.map((id) => {
@@ -41,5 +42,21 @@ export function StepOutputs({ outputs, records = [] }: { outputs: Output[]; reco
         )
       })}
     </ul>
+  )
+}
+
+/** The Designer's step output (Phase 8): status, blocks, dropped segments, integrity, repairs. */
+function DesignerPills({ data }: { data: Record<string, unknown> }) {
+  const n = (v: unknown) => (typeof v === 'number' ? v : null)
+  const integrity = data.integrity as { passed?: boolean } | boolean | null | undefined
+  const passed = typeof integrity === 'boolean' ? integrity : integrity?.passed
+  return (
+    <div className="mt-1 flex flex-wrap gap-1.5 text-xs" data-testid="designer-pills">
+      {typeof data.status === 'string' && <span className={`pill ${data.status === 'ok' ? 'pill-green' : 'pill-amber'}`}>{data.status}</span>}
+      {n(data.blocks) !== null && <span className="pill pill-gray">{n(data.blocks)} blocks</span>}
+      {n(data.dropped) ? <span className="pill pill-amber">{n(data.dropped)} dropped</span> : null}
+      {passed !== undefined && passed !== null && <span className={`pill ${passed ? 'pill-green' : 'pill-red'}`}>integrity {passed ? 'passed' : 'failed'}</span>}
+      {n(data.repairs_used) ? <span className="pill pill-gray">{n(data.repairs_used)} repair</span> : null}
+    </div>
   )
 }

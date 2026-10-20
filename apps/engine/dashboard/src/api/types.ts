@@ -20,6 +20,8 @@ export type Settings = {
   /** Phase 7: the blog and the Publisher (deploy_token_set is yes/no only, never the token). */
   blog?: { auto_publish: boolean; app_name: string; base_url: string; noindex_first_n_posts: number; deploy_token_set: boolean }
   publish_modes?: string[]
+  /** Phase 8: interactive blocks. */
+  designer?: { max_interactive_blocks: number; max_repairs: number; interactive_default: boolean }
 }
 
 /** GET /api/posts: one row per published_post record (Phase 7). */
@@ -37,6 +39,8 @@ export type PostItem = {
   updated_at: string | null
   deployed_at: string | null
   last_error: string | null
+  /** Interactive blocks in the published post (0 = plain Markdown). Older engines don't send it. */
+  blocks?: number
 }
 
 export type RunStepSummary = { name: string; status: string; ms: number | null; ai_calls: number }

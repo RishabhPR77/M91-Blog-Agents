@@ -433,3 +433,36 @@ test('Phase 7: settings show the blog settings and deploy_token_set (never the t
     assert.equal((await call('GET', '/api/settings')).json.blog.deploy_token_set, false)
   })
 })
+
+test('interactive blocks API: the switch on the newest draft, the Designer result on the approval, blocks on posts, Designer settings', async () => {
+  const B = '261020-0900-QBLK'
+  await withApi({ env: { INTERACTIVE_DEFAULT: 'true' } }, async ({ call, store }) => {
+    await store.createRecord({ type: 'draft', briefId: B, payload: { title: 'T', version: 1, brief_version: 1, post_markdown: '# T' }, status: 'approved', version: 1, meta: { brief_version: 1 } })
+    let d = (await call('GET', `/api/approvals/${B}`)).json
+    assert.deepEqual(d.interactive, { on: true, default: true, set: false, block_doc: null })
+
+    assert.equal((await call('POST', `/api/drafts/${B}/interactive`, { on: 'no' })).json.error.code, 'bad_params')
+    assert.equal((await call('POST', '/api/drafts/bad/interactive', { on: true })).status, 400)
+    assert.equal((await call('POST', '/api/drafts/261020-0900-ZZZZ/interactive', { on: true })).status, 404)
+    const off = await call('POST', `/api/drafts/${B}/interactive`, { on: false })
+    assert.equal(off.status, 200)
+    assert.deepEqual(off.json, { brief_id: B, version: 1, on: false, saved: true })
+    d = (await call('GET', `/api/approvals/${B}`)).json
+    assert.equal(d.interactive.on, false)
+    assert.equal(d.interactive.set, true)
+
+    await store.createRecord({ type: 'block_doc', briefId: B, version: 1, status: 'ok', payload: { brief_id: B, version: 1, blocks: [{}, {}, {}], dropped_segments: [{}], integrity: { passed: true }, summary: '2 blocks: steps_checklist, phone_ring_sim · 1 dropped · integrity passed', created_at: '2026-10-20T09:00:00+05:30' } })
+    d = (await call('GET', `/api/approvals/${B}`)).json
+    assert.equal(d.interactive.block_doc.blocks, 3)
+    assert.equal(d.interactive.block_doc.dropped, 1)
+    assert.equal(d.interactive.block_doc.integrity_passed, true)
+    assert.match(d.interactive.block_doc.summary, /^2 blocks/)
+
+    await store.createRecord({ type: 'published_post', briefId: B, status: 'published', payload: { slug: 't', title: 'T', brief_id: B, version: 1, post: { slug: 't', blocks: [{}, {}] } } })
+    assert.equal((await call('GET', '/api/posts')).json.posts[0].blocks, 2)
+
+    const s = (await call('GET', '/api/settings')).json
+    assert.deepEqual(s.designer, { max_interactive_blocks: 6, max_repairs: 1, interactive_default: true })
+    assert.ok(s.models.designer)
+  })
+})

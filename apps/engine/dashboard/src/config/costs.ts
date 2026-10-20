@@ -12,6 +12,9 @@ export const COSTS = {
   promo: { normal: '1–2', lowCost: '1–2' },
   // Approval actions (Task 5): the low-cost switch does not apply to them.
   approve: { normal: '1–2', lowCost: '1–2', note: 'promo pack (1, +1 if it needs a repair)' },
+  // Phase 8: with interactive blocks on, approving also runs the Designer.
+  approve_interactive: { normal: '2–4', lowCost: '2–4', note: 'promo pack (1–2) + Designer (1–2)' },
+  designer: { normal: '1–2', lowCost: '1–2', note: 'Designer plan (1, +1 if it needs a repair)' },
   approval_review: { normal: '1–2', lowCost: '1–2' },
   human_revise_rereview: { normal: '2–4', lowCost: '2–4', note: 'Writer revision, then the Reviewer' },
   human_revise_no_rereview: { normal: '1–2', lowCost: '1–2', note: 'Writer revision only' },
