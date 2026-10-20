@@ -47,6 +47,7 @@ import { runScout } from './scout/index.js'
 import { runStrategist } from './strategist/index.js'
 import { listPins, addPin, cancelPin, DATE_RE } from './pins.js'
 import { engineUrl, runViaEngine, engineApi } from './enginecall.js'
+import { usageStatus, setUsage } from './util/mem0usage.js'
 
 /** --key=value, --key value, or a bare --flag (true). Anything else is positional. */
 export function parseArgs(argv) {
@@ -234,6 +235,14 @@ async function main() {
   setLevel(config.runtime.logLevel)
   const store = getStore()
   const notifier = createNotifier({ config })
+
+  // Phase 9 A5: this month's Mem0 usage estimate; --set=<n> takes the figure from the Mem0 console.
+  if (args._[0] === 'mem0-usage') {
+    const u = args.set !== undefined ? setUsage(config, Number(args.set)) : usageStatus(config)
+    console.log(`Mem0 requests this month (${u.month}, estimate): ${u.used}/${u.limit} (${u.pct}%) · level ${u.level} · resets ${u.resets_on.slice(0, 10)}${u.seed ? ` · ${u.seed} from the Mem0 console` : ''}`)
+    console.log(`counted here: reads ${u.total.reads}, searches ${u.total.searches}, writes ${u.total.writes}. The Mem0 console has the exact figure.`)
+    return
+  }
 
   // Clean-up deletes for real even when DRY_RUN=true: it only removes ids you list or confirm.
   if (args._[0] === 'cleanup') return cleanupCommand(args, { store: createStore({ config, dryRun: false }) })

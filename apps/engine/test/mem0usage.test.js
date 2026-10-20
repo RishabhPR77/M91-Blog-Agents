@@ -4,7 +4,7 @@ import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { configureUsage, recordUsage, usageStatus, resetsOn, stopMessage, resetUsageTarget, USAGE_FILE } from '../src/util/mem0usage.js'
+import { configureUsage, recordUsage, usageStatus, resetsOn, stopMessage, resetUsageTarget, setUsage, USAGE_FILE } from '../src/util/mem0usage.js'
 import { countMem0 } from '../src/util/mem0count.js'
 import { createRunManager, RunError } from '../src/runs.js'
 import { createServer } from '../src/server.js'
@@ -39,7 +39,7 @@ test('every counted request adds to the month and the day; cache hits do not; th
   t += 24 * 3600 * 1000
   recordUsage('writes')
   const file = JSON.parse(readFileSync(FILE, 'utf8'))
-  assert.deepEqual(file, { month: '2026-10', total: { reads: 2, searches: 1, writes: 2 }, days: { '2026-10-20': { reads: 2, searches: 1, writes: 1 }, '2026-10-21': { reads: 0, searches: 0, writes: 1 } } })
+  assert.deepEqual(file, { month: '2026-10', seed: 0, total: { reads: 2, searches: 1, writes: 2 }, days: { '2026-10-20': { reads: 2, searches: 1, writes: 1 }, '2026-10-21': { reads: 0, searches: 0, writes: 1 } } })
   assert.ok(!/[a-z]{12,}/i.test(readFileSync(FILE, 'utf8').replace(/reads|searches|writes|month|total|days/g, '')), 'no content, only numbers and dates')
   const u = usageStatus(config, { now: () => t })
   assert.deepEqual([u.used, u.limit, u.level, u.resets_on], [5, 1000, 'ok', '2026-11-01T00:00:00.000Z'])
@@ -117,4 +117,18 @@ test('API: /api/health shows the estimate; at the stop level POST /api/index/ref
     await new Promise((r) => server.close(r))
     restore()
   }
+})
+
+test('--set: the figure from the Mem0 console, plus what is counted after it; a new month starts from zero', () => {
+  const config = fakeConfig()
+  let t = OCT20
+  configureUsage(config, { now: () => t })
+  recordUsage('reads', 30)
+  const u = setUsage(config, 847, { now: () => t })
+  assert.deepEqual([u.used, u.level, u.seed], [847, 'warn', 847])
+  recordUsage('writes', 3)
+  assert.equal(usageStatus(config, { now: () => t }).used, 850)
+  assert.throws(() => setUsage(config, -1), /whole number/)
+  t = Date.parse('2026-11-01T00:00:01Z')
+  assert.equal(usageStatus(config, { now: () => t }).used, 0)
 })

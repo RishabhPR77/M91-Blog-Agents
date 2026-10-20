@@ -34,12 +34,26 @@ function readFile(file) {
   }
 }
 
-/** The file for the current month (a new month starts from zero). */
+/** The file for the current month (a new month starts from zero). seed: a figure set from the Mem0 console. */
 function current(file, t) {
   const month = monthOf(t)
   const v = readFile(file)
-  if (!v || v.month !== month) return { month, total: blank(), days: {} }
-  return { month, total: { ...blank(), ...v.total }, days: v.days ?? {} }
+  if (!v || v.month !== month) return { month, seed: 0, total: blank(), days: {} }
+  return { month, seed: Number(v.seed) || 0, total: { ...blank(), ...v.total }, days: v.days ?? {} }
+}
+
+/**
+ * Sets this month's figure to n (from the Mem0 console): the estimate becomes n plus what is counted from now.
+ * npm run mem0:usage -- --set=<n>
+ */
+export function setUsage(config, n, { now = Date.now } = {}) {
+  if (!Number.isInteger(n) || n < 0) throw new Error('the figure must be a whole number ≥ 0')
+  const t = now()
+  const file = join(dataDir(config), USAGE_FILE)
+  const v = current(file, t)
+  mkdirSync(join(file, '..'), { recursive: true })
+  writeFileSync(file, JSON.stringify({ month: v.month, seed: n, total: blank(), days: v.days }))
+  return usageStatus(config, { now })
 }
 
 /** Adds n requests of a kind (reads | searches | writes). Never throws. */
@@ -69,13 +83,13 @@ export function resetsOn(t) {
 export function usageStatus(config, { now = Date.now } = {}) {
   const t = now()
   const v = current(join(dataDir(config), USAGE_FILE), t)
-  const used = v.total.reads + v.total.searches + v.total.writes
+  const used = v.seed + v.total.reads + v.total.searches + v.total.writes
   const limit = config?.mem0?.monthlyLimit ?? 1000
   const pct = limit > 0 ? Math.round((used / limit) * 1000) / 10 : 0
   const warn = config?.mem0?.warnPct ?? 80
   const stop = config?.mem0?.stopPct ?? 95
   const level = pct >= stop ? 'stop' : pct >= warn ? 'warn' : 'ok'
-  return { month: v.month, used, limit, pct, level, warn_pct: warn, stop_pct: stop, resets_on: resetsOn(t), total: v.total, days: v.days }
+  return { month: v.month, used, limit, pct, level, warn_pct: warn, stop_pct: stop, resets_on: resetsOn(t), seed: v.seed, total: v.total, days: v.days }
 }
 
 /** "Mem0 quota almost used: 960/1000. Runs paused until 1 Nov 2026 or a higher limit." */

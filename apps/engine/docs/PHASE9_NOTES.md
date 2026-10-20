@@ -146,6 +146,49 @@ Decision runs (measured): Reviewer check 28, approve 34, publish 28, unpublish 2
 - **Visible:** the dashboard header always shows "Mem0 n/limit" (the reset date is in the tooltip).
   `/api/health` carries the estimate and reads no Mem0.
 
+## A6: before and after (measured)
+
+`test/fixtures/fullrun.js` runs a full pipeline over the real store with fake AI:
+- the real Scout, Strategist, Writer and Reviewer (the Reviewer fails v1, then passes v2);
+- a fake Mem0 client that counts every request, attributed to the step running at the time.
+
+The same file was run on the code before Phase 9 (`e71975f`, in a temporary worktree). Its total, 160, is
+within 3 of the real counter on 2026-10-19 (157), so the harness reflects real use. `test/fullrun-mem0.test.js`
+pins the new numbers.
+
+**Full run** (8 Scout calls, 1 Strategist, 2 Writer, 2 Reviewer; ends waiting for approval):
+
+| Step | Before: reads / searches / writes | Total | After: reads / searches / writes | Total |
+|---|---|---|---|---|
+| Scout | 27 / 2 / 15 | 44 | 8 / 0 / 3 | 11 |
+| Strategist | 15 / 1 / 6 | 22 | 3 / 0 / 2 | 5 |
+| Writer ×2 (with checks) | 27 / 0 / 16 | 43 | 1 / 0 / 4 | 5 |
+| Reviewer ×2 | 21 / 0 / 10 | 31 | 0 / 0 / 2 | 2 |
+| Run (record, lock, orchestrator) | 12 / 0 / 8 | 20 | 0 / 0 / 5 | 5 |
+| **Total** | **102 / 3 / 55** | **160** | **12 / 0 / 16** | **28** |
+
+That is 82% fewer requests per run. The remaining reads are the lists of data from before the run, each read
+once. No `run_log` and no lock records are written.
+
+**Decision runs** (after: measured cold, without the engine's index; started from the dashboard, the index
+removes most of these reads too):
+
+| Run | Before (real counter, 2026-10-19) | After |
+|---|---|---|
+| Counter prompt (Writer revise + Reviewer) | — | 17 (8 reads, 9 writes) |
+| Reviewer check | 28 | — |
+| Approve (promo pack + Designer) | 34 | 11 (5 reads, 6 writes) |
+| Designer re-run | — | 6 |
+| Publish | 28 | 13 (6 reads, 7 writes) |
+| Unpublish | 25 | 10 |
+
+The fake Mem0 answers an add with `results[].id`, as Mem0's docs describe for `infer: false`. If the real
+Mem0 answers with only an event id, each save costs one more read (the event poll); the first real run will
+show which.
+
+**The usage estimate starts at 0** on a new machine, or after a fresh data folder. Set it from the Mem0 console
+with `npm run mem0:usage -- --set=<n>`; `npm run mem0:usage` shows it.
+
 ## New settings
 
 | Key | Default | Meaning |
