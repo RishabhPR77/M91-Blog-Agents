@@ -23,11 +23,15 @@ test('weights add up to 100; total = Σ(score/10 × weight), 1 decimal', () => {
   assert.equal(computeTotal(mixed), 85)
 })
 
-test('pass rule edges: 84.9 fails, 85.0 passes; one area at 6 fails; a failed AI gate fails; a failed code gate fails even with 95', () => {
+test('pass rule edges: 79.9 fails, 80.0 passes (PASS_SCORE_MIN=80, Phase 9); 84.9 fails at 85; one area at 6 fails; a failed AI gate fails; a failed code gate fails even with 95', () => {
   const gates = [...GATE_IDS, 'checks_hard_passed', 'sources_contradicted'].map((id) => ({ id, passed: true }))
   const g = cfg.gates
-  assert.equal(passRule({ gates, areas: areasAll(9), total: 84.9 }, g), false)
-  assert.equal(passRule({ gates, areas: areasAll(9), total: 85.0 }, g), true)
+  assert.equal(g.passScoreMin, 80)
+  assert.equal(passRule({ gates, areas: areasAll(9), total: 79.9 }, g), false)
+  assert.equal(passRule({ gates, areas: areasAll(9), total: 80.0 }, g), true)
+  const g85 = { ...g, passScoreMin: 85 }
+  assert.equal(passRule({ gates, areas: areasAll(9), total: 84.9 }, g85), false)
+  assert.equal(passRule({ gates, areas: areasAll(9), total: 85.0 }, g85), true)
   assert.equal(passRule({ gates, areas: [...areasAll(10).slice(1), { id: 'answers_question', score: 6 }], total: 94 }, g), false)
 
   const failedGate = decide(reviewAnswer({ scores: {}, gates: { no_invented_content: false } }), ctx())

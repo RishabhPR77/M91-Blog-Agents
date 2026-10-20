@@ -7,6 +7,8 @@ type Props = {
   title: string
   children?: ReactNode
   expectedCalls: string
+  /** Phase 9: expected Mem0 requests (shown when given). */
+  expectedMem0?: string
   confirmLabel?: string
   danger?: boolean
   requireTick?: string
@@ -15,7 +17,7 @@ type Props = {
   onCancel: () => void
 }
 
-export function ConfirmDialog({ open, title, children, expectedCalls, confirmLabel = 'Confirm', danger, requireTick, busy, onConfirm, onCancel }: Props) {
+export function ConfirmDialog({ open, title, children, expectedCalls, expectedMem0, confirmLabel = 'Confirm', danger, requireTick, busy, onConfirm, onCancel }: Props) {
   const [ticked, setTicked] = useState(false)
   const cancelRef = useRef<HTMLButtonElement>(null)
   // The latest props for the Escape handler, so re-renders of the page never re-run the open-time setup.
@@ -41,6 +43,7 @@ export function ConfirmDialog({ open, title, children, expectedCalls, confirmLab
         <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-sm dark:bg-slate-800" data-testid="expected-calls">
           Expected AI calls: <strong>{expectedCalls}</strong>
         </p>
+        {expectedMem0 && <p className="mt-1 px-3 text-xs text-slate-500" data-testid="expected-mem0">Expected Mem0 requests: {expectedMem0}</p>}
         {requireTick && (
           <label className="mt-3 flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-0.5" checked={ticked} onChange={(e) => setTicked(e.target.checked)} />

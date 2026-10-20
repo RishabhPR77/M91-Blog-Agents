@@ -78,7 +78,7 @@ export function InteractiveCard({ briefId, status, version, info }: { briefId: s
           {status === 'published' && <p className="mt-1 text-xs text-slate-500" data-testid="republish-hint">The live post changes only after Republish (Publishing card or Posts).</p>}
         </>
       )}
-      <ConfirmDialog open={open} title={`Re-run the Designer for v${version}?`} expectedCalls={COSTS.designer.normal} confirmLabel="Run the Designer" busy={run.busy}
+      <ConfirmDialog open={open} title={`Re-run the Designer for v${version}?`} expectedCalls={COSTS.designer.normal} expectedMem0={COSTS.designer.mem0} confirmLabel="Run the Designer" busy={run.busy}
         onConfirm={async () => { if (!(await run.start('designer', { brief_id: briefId }, dry))) setOpen(false) }} onCancel={() => setOpen(false)}>
         <p>The Designer picks the parts of this post that become interactive blocks (one AI call, plus one repair if its plan is not valid). Code builds the blocks from the exact text and checks that nothing changed.</p>
         <p>{dry ? 'The engine default is a dry run: the plan is made, but nothing is saved.' : 'The result is saved as a new block_doc. Nothing is published.'}</p>

@@ -12,7 +12,7 @@ import { Card, EmptyState, PageHeader } from '../components/Page'
 import { RunButton } from '../components/RunButton'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toasts'
-import { expectedCalls, type CostKey } from '../config/costs'
+import { COSTS, expectedCalls, type CostKey } from '../config/costs'
 import { buildRunRequest, leastUsedGroup, TOPIC_GROUPS } from '../config/runOptions'
 import { fmtDateTime, fmtDuration } from '../format'
 import { useNow } from '../state/useRunView'
@@ -263,6 +263,7 @@ export default function Control() {
         open={Boolean(pending)}
         title={`Start: ${pending?.label ?? ''}`}
         expectedCalls={pending ? expectedCalls(pending.costKey, lowCost) : ''}
+        expectedMem0={pending ? COSTS[pending.costKey].mem0 : undefined}
         confirmLabel="Start the run"
         busy={starting}
         onConfirm={start}

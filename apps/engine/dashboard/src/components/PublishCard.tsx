@@ -6,6 +6,7 @@ import { useSettings } from '../api/queries'
 import { usePublishRun } from '../api/publishRun'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Card } from './Page'
+import { COSTS } from '../config/costs'
 
 export function PublishCard({ briefId, status, version, title }: { briefId: string; status: string; version: number; title: string }) {
   const settings = useSettings()
@@ -33,7 +34,7 @@ export function PublishCard({ briefId, status, version, title }: { briefId: stri
         {again ? 'Republish' : 'Publish'} · expected AI calls 0
       </button>
       {tokenMissing && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" data-testid="publish-token-missing">The deploy token is not set (EMBARKO_DEPLOY_TOKEN). Use a dry run from Control or Posts.</p>}
-      <ConfirmDialog open={open} title={`${again ? 'Republish' : 'Publish'} v${version}?`} expectedCalls="0" confirmLabel={again ? 'Republish' : 'Publish'} busy={pub.busy}
+      <ConfirmDialog open={open} title={`${again ? 'Republish' : 'Publish'} v${version}?`} expectedCalls="0" expectedMem0={COSTS.publish.mem0} confirmLabel={again ? 'Republish' : 'Publish'} busy={pub.busy}
         onConfirm={async () => { if (!(await pub.start('publish', { brief_id: briefId }, dry))) setOpen(false) }} onCancel={() => setOpen(false)}>
         <p>“{title}” is turned into a blog post, the blog is rebuilt and deployed to {s.blog.base_url}, and the live page is checked.</p>
         <p>{dry ? 'The engine default is a dry run: the blog is built locally only, and nothing is deployed.' : 'This deploys the live blog and tells Slack.'}</p>

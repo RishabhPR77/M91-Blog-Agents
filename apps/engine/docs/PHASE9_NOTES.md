@@ -189,6 +189,28 @@ show which.
 **The usage estimate starts at 0** on a new machine, or after a fresh data folder. Set it from the Mem0 console
 with `npm run mem0:usage -- --set=<n>`; `npm run mem0:usage` shows it.
 
+## Part B: quality tuning (no AI calls)
+
+- **B1: pass mark and estimates.**
+  - `PASS_SCORE_MIN` now defaults to 80 (it was 85); `MAX_WRITER_REVISIONS` stays 2.
+  - Every run button, and every confirm dialog (Control, approvals, Posts, Publish, Designer), now shows
+    "Expected Mem0 requests" next to the expected AI calls. The figures come from the A6 measurements
+    (`dashboard/src/config/costs.ts`). A full run is ≈28–45, which covers 1–2 Writer revisions.
+- **B2: acronyms:** already done in `e71975f` (title, `title_tag` and `meta_description`).
+- **B3: the Scout's stories call** asks for at most 5 stories, and the code keeps the first 5 with a
+  warning. It waits `SCOUT_STORIES_TIMEOUT_MS` (480 s; other calls keep `AI_RTLAYER_TIMEOUT_MS`, 300 s). A
+  timeout stays a warning, and the run goes on without new stories.
+- **B4: dropped tutorials:**
+  - Every dropped tutorial is now named with its reason, in the run's warnings and in the Scout's tutorials
+    step output (`dropped_items`). The reasons are: a step's URL is not in today's docs or the skill repo; a
+    step's page does not load; no steps; or a similar tutorial for the same target exists.
+  - **The likely cause was in our code.** A step was kept only if its URL matched today's docs sources
+    exactly, host included. Since the docs moved to `m91-api.msg91.com`, steps citing the same page on
+    `m91.msg91.com` (from the model, or from the skill repo's README) never matched, so the whole tutorial
+    was dropped.
+  - Now a docs link on either docs host whose path is in today's bundle maps to the bundle's URL. Links
+    elsewhere still drop the tutorial, now with a reason.
+
 ## New settings
 
 | Key | Default | Meaning |
@@ -200,3 +222,6 @@ with `npm run mem0:usage -- --set=<n>`; `npm run mem0:usage` shows it.
 | `MEM0_MONTHLY_LIMIT` | `1000` | Your Mem0 plan's monthly request limit. |
 | `MEM0_WARN_PCT` | `80` | Show a warning from this percent. |
 | `MEM0_STOP_PCT` | `95` | Refuse new runs and refreshes from this percent. |
+| `SCOUT_STORIES_TIMEOUT_MS` | `480000` | How long the Scout's stories call waits for its answer. |
+| `PASS_SCORE_MIN` | `80` (was 85) | The Reviewer's pass mark. |
+| `MAX_WRITER_REVISIONS` | `2` | Unchanged. |

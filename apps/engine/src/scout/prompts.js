@@ -58,7 +58,7 @@ For each story:
 - "topic_group": 1 to 5.
 
 Never present a story as M91's own experience. Never guess details that the source does not state.
-Return an empty list if you find nothing real.`
+Return at most {{stories_max}} stories, the most relevant first. Return an empty list if you find nothing real.`
 
 export const TUTORIALS = `Task: propose up to 5 tutorial ideas that readers would search for, such as connecting M91 to Cursor, Claude Code, LangGraph, the OpenAI Agents SDK, an n8n or viaSocket workflow, or a payment-failure webhook.
 

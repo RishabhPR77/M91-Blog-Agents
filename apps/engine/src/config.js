@@ -37,7 +37,7 @@ const DEFAULTS = {
   // Phase 9 A5: the Mem0 quota guard (an estimate kept in apps/engine/data/mem0-usage.json)
   MEM0_MONTHLY_LIMIT: '1000', MEM0_WARN_PCT: '80', MEM0_STOP_PCT: '95',
   M91_DOCS_URL: 'https://m91-api.msg91.com/llms.txt',
-  PASS_SCORE_MIN: '85', PASS_AREA_MIN: '7',
+  PASS_SCORE_MIN: '80', PASS_AREA_MIN: '7',
   MAX_WRITER_REVISIONS: '2', MAX_STRATEGIST_REBRIEFS: '1', MAX_SCOUT_RETRIES: '1', MAX_AI_ROUNDS_PER_POST: '5',
   TARGET_WORDS_MIN: '700', TARGET_WORDS_MAX: '1500',
   DEFAULT_TONE: 'friendly-teacher', TIMEZONE: 'Asia/Kolkata',
@@ -47,6 +47,7 @@ const DEFAULTS = {
   AI_RTLAYER_TIMEOUT_MS: '300000', AI_POLL_INTERVAL_MS: '3000', AI_MAX_RETRIES: '3',
   // Phase 2: Scout
   SCOUT_RESEARCH_DELIVERY: 'rtlayer', SCOUT_MAX_CALLS: '14', SCOUT_REUSE_HOURS: '24', SCOUT_MIN_OPEN_CLUSTERS: '5',
+  SCOUT_STORIES_TIMEOUT_MS: '480000',
   SCOUT_QUESTIONS_PER_GROUP: '8', SCOUT_QUESTION_GROUPS: '1,2,3,4,5', STORY_LOOKBACK_DAYS: '30', RAPID_RESPONSE_DAYS: '7', STYLE_REUSE_DAYS: '14',
   // viaSocket refuses a `message` over 50,000 characters; the docs bundle must leave room for the rest.
   DOCS_MAX_PAGES: '15', DOCS_MAX_CHARS: '45000', M91_DOCS_HOSTS: 'm91-api.msg91.com,m91.msg91.com', DEDUPE_SIMILARITY: '0.85',
@@ -230,6 +231,8 @@ export function loadConfig(env = process.env) {
       // Which topic groups get a question call (fewer = fewer AI credits, e.g. "1" for tests).
       questionGroups: questionGroups(),
       storyLookbackDays: int('STORY_LOOKBACK_DAYS', { min: 1 }),
+      // Phase 9 B3: the stories call's own answer timeout (rtlayer); other calls use AI_RTLAYER_TIMEOUT_MS
+      storiesTimeoutMs: int('SCOUT_STORIES_TIMEOUT_MS', { min: 1000 }),
       rapidResponseDays: int('RAPID_RESPONSE_DAYS', { min: 0 }),
       styleReuseDays: int('STYLE_REUSE_DAYS'),
       docsMaxPages: int('DOCS_MAX_PAGES', { min: 1 }),

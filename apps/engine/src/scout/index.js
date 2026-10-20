@@ -26,6 +26,8 @@ class BudgetError extends Error {}
 
 // Errors no retry or other call can get past: fail the run.
 const FATAL_KINDS = ['config', 'token', 'billing']
+/** Phase 9 B3: the stories call asks for at most this many (a long list made it hit the 300 s timeout). */
+export const STORIES_MAX = 5
 const urlKey = (u) => String(u).trim().replace(/\/+$/, '').toLowerCase()
 const daysBetweenIso = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000
 
@@ -52,7 +54,7 @@ export async function runScout(params = {}, deps = {}) {
 
   // ---------- AI calls: budget, schema retry, truncation retry, run_log ----------
 
-  async function callAi(call, { task, values = {}, sections = {}, schema, delivery, fewer, fallbackSchema }) {
+  async function callAi(call, { task, values = {}, sections = {}, schema, delivery, fewer, fallbackSchema, timeoutMs }) {
     let prompt = buildPrompt(task, { ...baseValues, ...values })
     const fitted = fitMessage({ today, ...sections })
     const message = fitted.message
@@ -78,6 +80,7 @@ export async function runScout(params = {}, deps = {}) {
           jsonSchema: activeSchema,
           threadId: newScoutThreadId(runId, call),
           delivery: delivery ?? sc.delivery,
+          ...(timeoutMs && { timeoutMs }),
           retries: Math.max(0, Math.min(config.viasocket.maxRetries ?? 3, sc.maxCalls - callsUsed)),
           onRetry: () => { callsUsed++; retries++ }
         })
@@ -114,7 +117,7 @@ export async function runScout(params = {}, deps = {}) {
     }
   }
 
-  async function runLog(meta, { returned = 0, kept = 0, dropped = 0, error = null } = {}) {
+  async function runLog(meta, { returned = 0, kept = 0, dropped = 0, error = null, details = [] } = {}) {
     const entry = {
       run_id: runId, agent: 'scout', call: meta.call, model: meta.model, delivery: meta.delivery, ms: meta.ms,
       items_returned: returned, items_kept: kept, items_dropped: dropped, retries: meta.retries, error, time: istIso(new Date(now()))
@@ -124,7 +127,9 @@ export async function runScout(params = {}, deps = {}) {
     if (meta.call !== 'research_summary') {
       const step = scoutStepName(meta.call)
       emit(error ? 'step.failed' : 'step.finished', { agent: 'scout', step, ...(error && { message: error }), data: { ms: meta.ms, retries: meta.retries, model: meta.model, delivery: meta.delivery } })
-      if (!error) emit('step.output', { agent: 'scout', step, message: `${kept} kept of ${returned} returned${dropped ? ` (${dropped} dropped)` : ''}`, data: { returned, kept, dropped } })
+      // Phase 9 B4: dropped items are named with their reason (tutorials).
+      const why = details.length ? `: ${details.map((d) => `"${d.title}" (${d.reason})`).join('; ')}` : ''
+      if (!error) emit('step.output', { agent: 'scout', step, message: `${kept} kept of ${returned} returned${dropped ? ` (${dropped} dropped)` : ''}${why}`, data: { returned, kept, dropped, ...(details.length && { dropped_items: details }) } })
     }
     try {
       await saveRunLog(store, { briefId: runId, payload: entry, status: error ? 'error' : 'ok' })
@@ -214,14 +219,18 @@ export async function runScout(params = {}, deps = {}) {
     {
       const res = await tryCall('stories', {
         task: STORIES,
-        values: { story_lookback_days: sc.storyLookbackDays, rapid_response_days: sc.rapidResponseDays },
+        values: { story_lookback_days: sc.storyLookbackDays, rapid_response_days: sc.rapidResponseDays, stories_max: STORIES_MAX },
         sections: { facts: factsSummary },
         schema: SCHEMAS.scout_stories,
-        delivery: sc.researchDelivery
+        delivery: sc.researchDelivery,
+        // Its own timeout (SCOUT_STORIES_TIMEOUT_MS): a web search for stories can take longer than the others.
+        // A timeout stays a warning: the run goes on without new stories.
+        timeoutMs: sc.storiesTimeoutMs
       })
       if (res) {
         const known = await storedStoryUrls(store)
-        const returned = res.value.stories
+        const returned = res.value.stories.slice(0, STORIES_MAX)
+        if (res.value.stories.length > STORIES_MAX) warnings.push(`stories: ${res.value.stories.length} returned, kept the first ${STORIES_MAX}`)
         for (const s of returned) {
           const rule = storyDateRule(s.published_date, { today, lookbackDays: sc.storyLookbackDays, rapidDays: sc.rapidResponseDays })
           if (!rule.keep) continue
@@ -250,6 +259,13 @@ export async function runScout(params = {}, deps = {}) {
       const repoPrefix = urlKey(readme.url ?? config.m91.skillRepoUrl)
       const allowed = new Set((facts.sources ?? []).map(urlKey))
       const isAllowed = (u) => allowed.has(urlKey(u)) || urlKey(u).startsWith(repoPrefix)
+      // Phase 9 B4: the docs moved hosts (m91.msg91.com → m91-api.msg91.com). A docs link on any docs host whose
+      // path is in today's bundle means that bundle page, so it maps to the bundle's URL instead of being dropped.
+      const pathOf = (u) => { try { return new URL(u).pathname.replace(/\/+$/, '').toLowerCase() } catch { return null } }
+      const hostOf = (u) => { try { return new URL(u).hostname.toLowerCase() } catch { return null } }
+      const bundleByPath = new Map((facts.sources ?? []).map((u) => [pathOf(u), u]))
+      const toAllowed = (u) => (isAllowed(u) ? u : sc.docsHosts.includes(hostOf(u)) ? bundleByPath.get(pathOf(u)) ?? null : null)
+      const droppedTutorials = []
       const res = await tryCall('tutorials', {
         task: TUTORIALS,
         sections: { facts: summariseFacts(facts, { only: ['can', 'integrations'] }), skillRepo: readme.text ?? `(README not available) ${config.m91.skillRepoUrl}` },
@@ -261,28 +277,38 @@ export async function runScout(params = {}, deps = {}) {
         const returned = res.value.tutorials
         for (const t of returned) {
           const steps = []
-          let lostStep = false
-          for (const step of t.steps_outline) {
-            const url = normaliseUrl(step.source_url, sc.docsHosts)
-            const live = url && isAllowed(url) ? await liveUrl(url) : null
-            if (!live) { lostStep = true; break }
+          let lost = null
+          for (const [i, step] of t.steps_outline.entries()) {
+            const raw = normaliseUrl(step.source_url, sc.docsHosts)
+            const url = raw && toAllowed(raw)
+            if (!url) { lost = `step ${i + 1} cites ${step.source_url ?? '(no URL)'}, which is not in today's docs or the skill repo`; break }
+            const live = await liveUrl(url)
+            if (!live) { lost = `step ${i + 1}'s page ${url} does not load`; break }
             steps.push({ ...step, source_url: live.url })
           }
-          if (lostStep || steps.length === 0) continue
+          if (lost || steps.length === 0) {
+            droppedTutorials.push({ title: t.title, reason: lost ?? 'no steps' })
+            continue
+          }
           const supporting = []
           for (const f of t.supporting_facts) {
-            const url = normaliseUrl(f.source_url, sc.docsHosts)
-            if (url && isAllowed(url)) supporting.push({ ...f, source_url: url })
+            const raw = normaliseUrl(f.source_url, sc.docsHosts)
+            const url = raw && toAllowed(raw)
+            if (url) supporting.push({ ...f, source_url: url })
           }
           protectFields(t, [], ['reader_outcome'])
-          if (await isDuplicateTutorial(store, t, dedupe.threshold, dedupe.mode)) continue
+          if (await isDuplicateTutorial(store, t, dedupe.threshold, dedupe.mode)) {
+            droppedTutorials.push({ title: t.title, reason: 'a similar tutorial for the same target already exists' })
+            continue
+          }
           const payload = { tutorial_id: newRecordId('T', new Date(now())), ...t, supporting_facts: supporting, steps_outline: steps }
           const rec = await store.createRecord({ type: 'tutorial_lead', briefId: null, payload, status: 'open', topicGroup: t.topic_group, date: today })
           newTutorials.push({ ...payload, id: rec.id })
           tutorialIds.push(payload.tutorial_id)
         }
         counts.tutorials = newTutorials.length
-        await runLog(res.meta, { returned: returned.length, kept: newTutorials.length, dropped: returned.length - newTutorials.length })
+        for (const d of droppedTutorials) warnings.push(`tutorials: dropped "${d.title}": ${d.reason}`)
+        await runLog(res.meta, { returned: returned.length, kept: newTutorials.length, dropped: returned.length - newTutorials.length, details: droppedTutorials })
       }
     }
 

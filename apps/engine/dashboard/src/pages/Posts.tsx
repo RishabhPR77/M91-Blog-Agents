@@ -118,7 +118,7 @@ export default function Posts() {
           </div>
         )}
       </Card>
-      <ConfirmDialog open={Boolean(pending)} title={pending?.title ?? ''} expectedCalls={pending?.calls ?? '0'} confirmLabel={pending?.mode === 'unpublish' ? 'Unpublish' : 'Start'} danger={pending?.danger} busy={pub.busy} onConfirm={confirm} onCancel={() => setPending(null)}>
+      <ConfirmDialog open={Boolean(pending)} title={pending?.title ?? ''} expectedCalls={pending?.calls ?? '0'} expectedMem0={pending ? COSTS[pending.mode].mem0 : undefined} confirmLabel={pending?.mode === 'unpublish' ? 'Unpublish' : 'Start'} danger={pending?.danger} busy={pub.busy} onConfirm={confirm} onCancel={() => setPending(null)}>
         <p>{pending?.text}</p>
         <p data-testid="publish-dry">{pending?.mode === 'designer'
           ? (dryRun ?? true ? 'Dry run: the plan is made (AI calls), but nothing is saved.' : 'The result is saved as a new block_doc. Nothing is deployed.')

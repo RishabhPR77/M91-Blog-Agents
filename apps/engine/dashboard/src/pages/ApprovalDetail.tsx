@@ -320,12 +320,12 @@ export default function ApprovalDetail() {
           </div>
         </div>
       ) : (
-        <ConfirmDialog open title={`Approve v${d.draft.version}?`} expectedCalls={approveCalls} confirmLabel="Approve" busy={busy} onConfirm={() => run(approveAction)} onCancel={() => setApproveOpen(false)}>
+        <ConfirmDialog open title={`Approve v${d.draft.version}?`} expectedCalls={approveCalls} expectedMem0={d.interactive?.on ? COSTS.approve_interactive.mem0 : COSTS.approve.mem0} confirmLabel="Approve" busy={busy} onConfirm={() => run(approveAction)} onCancel={() => setApproveOpen(false)}>
           <p>The promo pack is created, then the Designer step ({d.interactive?.on ? 'interactive blocks are on: it picks the parts that become blocks' : 'interactive blocks are off: it is skipped'}) and the Publisher step ({settings.data?.blog?.auto_publish ? 'AUTO_PUBLISH is on: the post is published to the blog, no AI calls' : 'AUTO_PUBLISH is off: publish it afterwards with Publish'}).{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>
         </ConfirmDialog>
       ))}
 
-      <ConfirmDialog open={Boolean(confirm)} title={confirm?.title ?? ''} expectedCalls={confirm?.calls ?? ''} confirmLabel={confirm?.action.kind === 'reject' ? 'Reject the topic' : 'Start'} danger={confirm?.danger} busy={busy} onConfirm={() => (confirm ? run(confirm.action) : undefined)} onCancel={() => setConfirm(null)}>
+      <ConfirmDialog open={Boolean(confirm)} title={confirm?.title ?? ''} expectedCalls={confirm?.calls ?? ''} expectedMem0={confirm ? { review: COSTS.approval_review.mem0, revise: rereviewOn ? COSTS.human_revise_rereview.mem0 : COSTS.human_revise_no_rereview.mem0, reject: COSTS.reject_topic.mem0, approve: COSTS.approve.mem0, force: COSTS.approve.mem0 }[confirm.action.kind] : undefined} confirmLabel={confirm?.action.kind === 'reject' ? 'Reject the topic' : 'Start'} danger={confirm?.danger} busy={busy} onConfirm={() => (confirm ? run(confirm.action) : undefined)} onCancel={() => setConfirm(null)}>
         <p>{confirm?.text}</p>
       </ConfirmDialog>
     </>

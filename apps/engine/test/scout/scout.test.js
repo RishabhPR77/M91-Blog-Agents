@@ -287,3 +287,44 @@ test('Phase 9 A2: one write per cluster — a new cluster is created with its ra
   assert.equal(c.source_urls.length, 1, 'the merge')
   assert.ok(typeof c.rank_score === 'number', 'and the rank, in the same write')
 })
+
+test('Phase 9 B3: the stories call asks for at most 5, waits SCOUT_STORIES_TIMEOUT_MS, keeps the first 5', async () => {
+  const many = { stories: Array.from({ length: 7 }, (_, i) => ({ ...VALID.scout_stories.stories[0], title: `Story ${i}`, source_url: `https://news.example.com/many-${i}` })) }
+  const s = setup({ env: { SCOUT_STORIES_TIMEOUT_MS: '480000' }, answers: { stories: many } })
+  const r = await s.run()
+  const q = s.ai.requests.find((x) => x.call === 'stories')
+  assert.match(q.prompt, /Return at most 5 stories, the most relevant first\./)
+  assert.equal(q.timeoutMs, 480000)
+  assert.ok(s.ai.requests.filter((x) => x.call !== 'stories').every((x) => x.timeoutMs === undefined), 'other calls keep AI_RTLAYER_TIMEOUT_MS')
+  assert.ok(r.warnings.some((w) => /stories: 7 returned, kept the first 5/.test(w)))
+  assert.ok(r.counts.stories <= 5)
+})
+
+test('Phase 9 B3: a stories timeout is a warning; the run goes on', async () => {
+  const s = setup({ answers: { stories: new AiError('No answer in thread history after 480 s', { kind: 'timeout' }) } })
+  const r = await s.run()
+  assert.equal(r.counts.stories, 0)
+  assert.ok(r.warnings.some((w) => /stories failed: No answer in thread history after 480 s/.test(w)))
+  assert.ok(r.counts.clusters_new + r.counts.clusters_merged > 0, 'clusters still made')
+})
+
+test('Phase 9 B4: every dropped tutorial is named with its reason (warnings and the step output)', async () => {
+  const s = setup()
+  const { withRun, replay, resetEvents } = await import('../../src/events.js')
+  resetEvents()
+  const r = await withRun('R-B4', () => s.run({ mode: 'research', runId: 'R-B4' }))
+  assert.ok(r.warnings.some((w) => w === 'tutorials: dropped "Unsupported tutorial": step 1 cites https://random.example.com/guide, which is not in today\'s docs or the skill repo'), JSON.stringify(r.warnings))
+  const out = replay('R-B4').find((e) => e.type === 'step.output' && e.step === 'scout.tutorials')
+  assert.match(out.message, /1 kept of 2 returned \(1 dropped\): "Unsupported tutorial" \(step 1 cites https:\/\/random\.example\.com\/guide/)
+  assert.deepEqual(out.data.dropped_items.map((d) => d.title), ['Unsupported tutorial'])
+})
+
+test('Phase 9 B4: a step citing the same docs page on the other docs host maps to today\'s bundle URL (not dropped)', async () => {
+  const moved = { tutorials: [{ ...VALID.scout_tutorials.tutorials[0], steps_outline: [{ step: 'Call the API', source_url: 'https://m91-api.msg91.com/docs/api.md' }], supporting_facts: [{ fact: 'Has an HTTP API', source_url: 'https://m91-api.msg91.com/docs/api.md' }] }] }
+  const s = setup({ answers: { tutorials: moved } })
+  const r = await s.run()
+  assert.equal(r.counts.tutorials, 1, JSON.stringify(r.warnings))
+  const t = [...s.store.records.values()].find((x) => x.type === 'tutorial_lead')
+  assert.equal(t.payload.steps_outline[0].source_url, 'https://m91.msg91.com/docs/api.md', 'the bundle\'s own URL')
+  assert.equal(t.payload.supporting_facts[0].source_url, 'https://m91.msg91.com/docs/api.md')
+})

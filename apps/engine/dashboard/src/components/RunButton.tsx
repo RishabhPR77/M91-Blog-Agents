@@ -29,6 +29,7 @@ export function RunButton({ title, description, costKey, lowCost, built, comingI
           <strong className={lowCost ? 'text-slate-900 dark:text-white' : ''}>{cost.lowCost}</strong> low-cost
         </p>
       )}
+      {cost && <p className="text-xs text-slate-500" data-testid="cost-mem0">Expected Mem0 requests: {cost.mem0}</p>}
       {children && <div className="mt-3 space-y-2">{children}</div>}
       <div className="mt-auto pt-3">
         <button type="button" className="btn-primary w-full" disabled={Boolean(blocked)} onClick={onRun} title={blocked ?? undefined}>
