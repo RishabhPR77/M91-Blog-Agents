@@ -73,15 +73,17 @@ describe('low-cost params', () => {
 })
 
 describe('Control page', () => {
-  it('shows expected calls; Run Scout asks first and sends the low-cost params with the default dry-run', async () => {
+  it('shows expected calls; with the low-cost preset, Run Scout asks first and sends the low-cost params with the default dry-run', async () => {
     const calls = mockFetch(routes({ 'POST /api/runs': { status: 202, body: { run_id: 'R-261019-1300-ABCD' } } }))
     page()
     await screen.findByRole('option', { name: /2 \(least used\)/ }, { timeout: 5000 })
+    await userEvent.click(screen.getByRole('radio', { name: /Low-cost test run/ }))
     expect(within(card('Run Scout')).getByTestId('cost')).toHaveTextContent(`Expected AI calls: ${COSTS.scout.normal} normal · ${COSTS.scout.lowCost} low-cost`)
     await userEvent.click(await runButton('Run Scout'))
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByTestId('expected-calls')).toHaveTextContent('Expected AI calls: 5–6')
-    expect(within(dialog).getByTestId('run-summary')).toHaveTextContent('Low coston (Scout group 2)')
+    expect(within(dialog).getByTestId('run-preset')).toHaveTextContent('Low-cost test run (Scout group 2)')
+    expect(within(dialog).getByTestId('expected-mem0')).toHaveTextContent(COSTS.scout.mem0LowCost!)
     expect(within(dialog).getByTestId('run-summary')).toHaveTextContent('Dry runyes')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Start the run' }))
     expect(await screen.findByText('live page')).toBeInTheDocument()
@@ -89,14 +91,16 @@ describe('Control page', () => {
     expect(post.body).toEqual({ mode: 'scout', dry_run: true, params: lowCostParams(2) })
   })
 
-  it('low cost off and dry run off: no extra params, normal estimate', async () => {
+  it('the Normal run preset is the default; with dry run off: no extra params, normal estimate', async () => {
     const calls = mockFetch(routes({ 'POST /api/runs': { status: 202, body: { run_id: 'R-261019-1300-ABCD' } } }))
     page()
     await screen.findByRole('option', { name: /least used/ }, { timeout: 5000 })
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Low cost' }))
+    expect(screen.getByRole('radio', { name: /Normal run/ })).toBeChecked()
     await userEvent.click(screen.getByRole('checkbox', { name: 'Dry run' }))
     await userEvent.click(await runButton('Run full pipeline'))
     expect(within(screen.getByRole('dialog')).getByTestId('expected-calls')).toHaveTextContent(COSTS.full.normal)
+    expect(within(screen.getByRole('dialog')).getByTestId('expected-mem0')).toHaveTextContent(COSTS.full.mem0)
+    expect(within(screen.getByRole('dialog')).getByTestId('run-preset')).toHaveTextContent('Normal run')
     await userEvent.click(screen.getByRole('button', { name: 'Start the run' }))
     await waitFor(() => expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ mode: 'full', dry_run: false, params: {} }))
   })
@@ -108,7 +112,7 @@ describe('Control page', () => {
     expect(within(card('Run Reviewer')).getByRole('button', { name: /Run Reviewer/ })).toBeDisabled()
     await userEvent.selectOptions(screen.getByLabelText('Draft for the Reviewer'), '261019-1055-BZ89|3')
     await userEvent.click(screen.getByLabelText('Also run the routing loop'))
-    expect(within(card('Run Reviewer')).getByTestId('cost')).toHaveTextContent(COSTS.reviewer_route.lowCost)
+    expect(within(card('Run Reviewer')).getByTestId('cost')).toHaveTextContent(COSTS.reviewer_route.normal)
     await userEvent.click(await runButton('Run Reviewer'))
     await userEvent.click(screen.getByRole('button', { name: 'Start the run' }))
     await waitFor(() => expect(calls.find((c) => c.method === 'POST')?.body).toMatchObject({ mode: 'reviewer', params: { brief_id: '261019-1055-BZ89', version: 3, route: true } }))

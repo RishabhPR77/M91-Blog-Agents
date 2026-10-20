@@ -3,11 +3,11 @@
 // mem0 (Phase 9): expected Mem0 requests, from the measured runs in apps/engine/docs/PHASE9_NOTES.md (A6).
 // They are "cold" numbers; a run started from the dashboard reads less, since the engine's index serves the
 // data it already holds. The full run's range covers 1–2 Writer revisions (MAX_WRITER_REVISIONS=2).
-export type Estimate = { normal: string; lowCost: string; mem0: string; note?: string }
+export type Estimate = { normal: string; lowCost: string; mem0: string; mem0LowCost?: string; note?: string }
 
 export const COSTS = {
-  full: { normal: '15–23', lowCost: '9–14', mem0: '≈28–45', note: 'Scout + Strategist + Writer + Reviewer, plus revision rounds' },
-  scout: { normal: '≈10', lowCost: '5–6', mem0: '≈10–15' },
+  full: { normal: '15–23', lowCost: '9–14', mem0: '≈28–45', mem0LowCost: '≈25–35', note: 'Scout + Strategist + Writer + Reviewer, plus revision rounds' },
+  scout: { normal: '≈10', lowCost: '5–6', mem0: '≈10–15', mem0LowCost: '≈8–11' },
   strategist: { normal: '1–2', lowCost: '1–2', mem0: '≈5–8' },
   writer: { normal: '1–2', lowCost: '1–2', mem0: '≈5–8' },
   reviewer: { normal: '1–2', lowCost: '1–2', mem0: '≈2–5' },
@@ -32,3 +32,16 @@ export const COSTS = {
 export type CostKey = keyof typeof COSTS
 
 export const expectedCalls = (key: CostKey, lowCost: boolean) => (lowCost ? COSTS[key].lowCost : COSTS[key].normal)
+
+/** Expected Mem0 requests for the chosen preset. */
+export const expectedMem0 = (key: CostKey, lowCost: boolean): string => {
+  const e: Estimate = COSTS[key]
+  return lowCost ? e.mem0LowCost ?? e.mem0 : e.mem0
+}
+
+/** Phase 9 C1: the two run presets on the Control page. */
+export const PRESETS = {
+  normal: { label: 'Normal run', text: 'Full research and up to 2 Writer revisions (MAX_WRITER_REVISIONS).' },
+  lowcost: { label: 'Low-cost test run', text: 'Scout: 1 question group, 3 questions, max 6 calls, smaller docs · 1 AI retry · 1 source check · 1 Writer revision · 2 AI rounds per post.' }
+} as const
+export type Preset = keyof typeof PRESETS

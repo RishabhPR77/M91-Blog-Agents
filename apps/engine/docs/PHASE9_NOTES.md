@@ -211,6 +211,17 @@ with `npm run mem0:usage -- --set=<n>`; `npm run mem0:usage` shows it.
   - Now a docs link on either docs host whose path is in today's bundle maps to the bundle's URL. Links
     elsewhere still drop the tutorial, now with a reason.
 
+## Part C: production readiness
+
+- **C1: run presets.** The Control page offers **Normal run** (the default) and **Low-cost test run**. Each shows
+  the expected AI calls and Mem0 requests of a full run, and the run buttons and the confirm dialog follow
+  the chosen preset. The confirm dialog names the preset. The old "Low cost" checkbox, which was on by
+  default, is gone.
+- **C3: [RUNBOOK.md](RUNBOOK.md)**, in plain language: starting everything, running the pipeline, approving or
+  sending a counter prompt, publishing, unpublishing, interactive blocks, the statuses, failed runs, the Mem0
+  quota banner, and stopping everything.
+- **C2 and C4** (the Slack and M91 test messages, and the first normal end-to-end run) wait for your ok.
+
 ## New settings
 
 | Key | Default | Meaning |

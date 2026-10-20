@@ -12,7 +12,7 @@ import { Card, EmptyState, PageHeader } from '../components/Page'
 import { RunButton } from '../components/RunButton'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toasts'
-import { COSTS, expectedCalls, type CostKey } from '../config/costs'
+import { expectedCalls, expectedMem0, PRESETS, type CostKey, type Preset } from '../config/costs'
 import { buildRunRequest, leastUsedGroup, TOPIC_GROUPS } from '../config/runOptions'
 import { fmtDateTime, fmtDuration } from '../format'
 import { useNow } from '../state/useRunView'
@@ -79,7 +79,9 @@ export default function Control() {
   const qc = useQueryClient()
 
   const [dryRun, setDryRun] = useState<boolean | null>(null)
-  const [lowCost, setLowCost] = useState(true)
+  // Phase 9 C1: two presets; a normal run is the default.
+  const [preset, setPreset] = useState<Preset>('normal')
+  const lowCost = preset === 'lowcost'
   const [group, setGroup] = useState<number | null>(null)
   const [briefId, setBriefId] = useState('')
   const [draftKey, setDraftKey] = useState('')
@@ -169,11 +171,18 @@ export default function Control() {
                 <p className="mt-1 text-xs text-slate-500">Engine default: {settings.data ? (settings.data.runtime.dry_run ? 'dry run' : 'live') : '…'}</p>
               </div>
               <div>
-                <label className="flex items-center gap-2 text-sm font-medium">
-                  <input type="checkbox" checked={lowCost} onChange={(e) => setLowCost(e.target.checked)} />
-                  Low cost
-                </label>
-                <p className="mt-1 text-xs text-slate-500">Scout: 1 question group, 3 questions, max 6 calls, smaller docs · 1 AI retry · 1 source check · 1 Writer revision · 2 AI rounds per post.</p>
+                <fieldset>
+                  <legend className="text-sm font-medium">Preset</legend>
+                  {(Object.keys(PRESETS) as Preset[]).map((p) => (
+                    <label key={p} className="mt-1 flex items-start gap-2 text-sm" data-testid={`preset-${p}`}>
+                      <input type="radio" name="preset" className="mt-1" checked={preset === p} onChange={() => setPreset(p)} />
+                      <span>
+                        <span className="font-medium">{PRESETS[p].label}</span>
+                        <span className="block text-xs text-slate-500">{PRESETS[p].text} Full run: {expectedCalls('full', p === 'lowcost')} AI calls · Mem0 {expectedMem0('full', p === 'lowcost')}.</span>
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
                 <label className="mt-2 flex items-center gap-2 text-xs">
                   Scout question group
                   <select aria-label="Scout question group" className="input w-auto py-1" value={effectiveGroup} disabled={!lowCost} onChange={(e) => setGroup(Number(e.target.value))}>
@@ -263,7 +272,7 @@ export default function Control() {
         open={Boolean(pending)}
         title={`Start: ${pending?.label ?? ''}`}
         expectedCalls={pending ? expectedCalls(pending.costKey, lowCost) : ''}
-        expectedMem0={pending ? COSTS[pending.costKey].mem0 : undefined}
+        expectedMem0={pending ? expectedMem0(pending.costKey, lowCost && !NO_AI_MODES.includes(pending.mode)) : undefined}
         confirmLabel="Start the run"
         busy={starting}
         onConfirm={start}
@@ -272,7 +281,7 @@ export default function Control() {
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1" data-testid="run-summary">
           <dt className="text-slate-500">Mode</dt><dd className="font-mono">{pending?.mode}</dd>
           <dt className="text-slate-500">Dry run</dt><dd>{dryRun ?? true ? 'yes: nothing is saved or sent (AI is still called)' : 'no: results are saved and Slack/M91 may be sent'}</dd>
-          <dt className="text-slate-500">Low cost</dt><dd>{pending && NO_AI_MODES.includes(pending.mode) ? 'not used (no AI)' : lowCost ? `on (Scout group ${effectiveGroup})` : 'off'}</dd>
+          <dt className="text-slate-500">Preset</dt><dd data-testid="run-preset">{pending && NO_AI_MODES.includes(pending.mode) ? 'not used (no AI)' : lowCost ? `${PRESETS.lowcost.label} (Scout group ${effectiveGroup})` : PRESETS.normal.label}</dd>
           {pending?.details.map(([k, v]) => <Fragment key={k}><dt className="text-slate-500">{k}</dt><dd>{v}</dd></Fragment>)}
         </dl>
       </ConfirmDialog>
