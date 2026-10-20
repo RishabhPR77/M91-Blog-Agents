@@ -181,5 +181,7 @@ setup made no AI calls and no Mem0 calls.
   - the tutorial link check.
 
   The Writer and the Reviewer allow whatever URLs the brief and the source pack contain, on either host.
-- Published posts that cite `m91.msg91.com/api/public/…` or `m91.msg91.com/llms.txt` now point at dead
-  pages. The Publisher does not rewrite those links.
+- **Old docs links at publish:** links to `m91.msg91.com/llms.txt` and `m91.msg91.com/api/public/<path>` move
+  to the same path on `m91-api.msg91.com`, in the body, the blocks and the sources. A link moves only when
+  its new address answers 200 to a GET. Each address is fetched once per publish run. Otherwise the old link
+  stays, and the run gets a warning naming it. The run's warnings also give the number of links moved.

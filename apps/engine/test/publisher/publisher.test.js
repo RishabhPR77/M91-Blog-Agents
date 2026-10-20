@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
-import { slugify, chooseSlug, stripTitleAndTldr, readingTime, tagsOf, sourcesOf, relatedSlugs, noindexFor, buildPost, PostBuildError, rewriteOldSiteLinks, OLD_M91_SITE } from '../../src/publisher/post.js'
+import { slugify, chooseSlug, stripTitleAndTldr, readingTime, tagsOf, sourcesOf, relatedSlugs, noindexFor, buildPost, PostBuildError, rewriteOldSiteLinks, OLD_M91_SITE, oldDocsLinks, docsTarget, planDocsRewrite } from '../../src/publisher/post.js'
 import { postsToExport, writePosts } from '../../src/publisher/export.js'
 import { buildEnv, checkBuild, BlogBuildError } from '../../src/publisher/build.js'
 import { deploy, EmbarkoError } from '../../src/publisher/embarko.js'
@@ -549,4 +549,76 @@ test('buildPost: old M91 site links become M91_CTA_URL in the body and the block
   assert.ok(!post.sources.some((s) => s.url.includes('m91-site') || s.url === CTA))
   assert.deepEqual(warnings, [`replaced 1 link to the old M91 site (https://m91-site.embarko.app) with M91_CTA_URL (${CTA})`])
   assert.equal(blocks[0].data.markdown, 'More at [the old site](https://m91-site.embarko.app/).', 'the caller\'s blocks are not changed')
+})
+
+// ---------- old M91 docs links (m91.msg91.com → m91-api.msg91.com) ----------
+
+const OLD_D = 'https://m91.msg91.com'
+const NEW_D = 'https://m91-api.msg91.com'
+
+test('oldDocsLinks / docsTarget: llms.txt and /api/public/ pages on the old host only, trailing punctuation dropped', () => {
+  const md = `See [docs](${OLD_D}/llms.txt), [fields](${OLD_D}/api/public/fields.md#ids) and ${OLD_D}/api/public/quickstart.md. Not: ${OLD_D}/signup, ${OLD_D}/, ${NEW_D}/llms.txt, http://m91.msg91.com/llms.txt`
+  assert.deepEqual(oldDocsLinks(md), [`${OLD_D}/llms.txt`, `${OLD_D}/api/public/fields.md#ids`, `${OLD_D}/api/public/quickstart.md`, 'http://m91.msg91.com/llms.txt'])
+  assert.equal(docsTarget(`${OLD_D}/api/public/fields.md#ids`), `${NEW_D}/api/public/fields.md#ids`)
+  assert.equal(docsTarget('http://m91.msg91.com/llms.txt'), `${NEW_D}/llms.txt`)
+})
+
+test('planDocsRewrite: a target that answers 200 moves, a 404 or a network error is kept; one GET per URL per run', async () => {
+  const calls = []
+  const fetch = async (url, opts) => {
+    calls.push([url, opts.method])
+    if (url.endsWith('/broken.md')) throw new Error('timeout')
+    return { status: url.endsWith('/gone.md') ? 404 : 200 }
+  }
+  const md = [`[a](${OLD_D}/llms.txt)`, `[b](${OLD_D}/api/public/fields.md)`, `[c](${OLD_D}/api/public/fields.md#ids)`, `[d](${OLD_D}/api/public/gone.md)`, `[e](${OLD_D}/api/public/broken.md)`].join(' ')
+  const cache = new Map()
+  const plan = await planDocsRewrite(md, { fetch, cache })
+  assert.deepEqual([...plan.map], [[`${OLD_D}/llms.txt`, `${NEW_D}/llms.txt`], [`${OLD_D}/api/public/fields.md`, `${NEW_D}/api/public/fields.md`], [`${OLD_D}/api/public/fields.md#ids`, `${NEW_D}/api/public/fields.md#ids`]])
+  assert.deepEqual(plan.kept, [
+    { url: `${OLD_D}/api/public/gone.md`, target: `${NEW_D}/api/public/gone.md`, status: 404 },
+    { url: `${OLD_D}/api/public/broken.md`, target: `${NEW_D}/api/public/broken.md`, status: 'error (timeout)' }
+  ])
+  assert.deepEqual(calls.map((c) => c[0]), [`${NEW_D}/llms.txt`, `${NEW_D}/api/public/fields.md`, `${NEW_D}/api/public/gone.md`, `${NEW_D}/api/public/broken.md`], 'fields.md fetched once (the #ids link reuses it)')
+  assert.ok(calls.every((c) => c[1] === 'GET'))
+  await planDocsRewrite(md, { fetch, cache })
+  assert.equal(calls.length, 4, 'the same run cache: no second GET')
+})
+
+test('buildPost with a docs plan: moved links in the body, blocks and sources; kept links stay, with a warning each', async () => {
+  const fetch = async (url) => ({ status: url.endsWith('/gone.md') ? 404 : 200 })
+  const extra = `\n\nRead [the fields](${OLD_D}/api/public/fields.md) and [an old page](${OLD_D}/api/public/gone.md).\n`
+  const md = draftAnswer().post_markdown.trimEnd() + extra
+  const plan = await planDocsRewrite(md, { fetch })
+  const blocks = [{ id: 'b1', type: 'rich_text', data: { markdown: `Read [the fields](${OLD_D}/api/public/fields.md) and [an old page](${OLD_D}/api/public/gone.md).` } }]
+  const { post, warnings } = buildPost({ draft: { version: 2, payload: draftAnswer({ post_markdown: md }) }, briefId: BRIEF_ID, brief: brief(), published: [], config: config(), now, istIso, blocks, docsPlan: plan })
+  assert.ok(post.markdown.includes(`(${NEW_D}/llms.txt)`) && post.markdown.includes(`(${NEW_D}/api/public/fields.md)`))
+  assert.ok(post.markdown.includes(`(${OLD_D}/api/public/gone.md)`), 'the 404 target: the old link stays')
+  assert.equal(post.blocks[0].data.markdown, `Read [the fields](${NEW_D}/api/public/fields.md) and [an old page](${OLD_D}/api/public/gone.md).`)
+  const srcs = post.sources.map((s) => s.url)
+  assert.ok(srcs.includes(`${NEW_D}/llms.txt`) && srcs.includes(`${NEW_D}/api/public/fields.md`) && !srcs.includes(`${OLD_D}/llms.txt`))
+  assert.deepEqual(warnings, [
+    'replaced 2 links to the old M91 docs host (m91.msg91.com) with m91-api.msg91.com (2 distinct)',
+    `kept the old M91 docs link ${OLD_D}/api/public/gone.md: ${NEW_D}/api/public/gone.md answered 404`
+  ])
+})
+
+test('publish: the docs rewrite runs inside the publish and its counts are in the run warnings', async () => {
+  const restore = quiet()
+  const s = await seeded()
+  const blog = fakeBlog()
+  const inner = blog.fetch
+  const docsCalls = []
+  blog.fetch = async (url, opts) => {
+    if (url.startsWith(NEW_D)) {
+      docsCalls.push(url)
+      return { status: 200 }
+    }
+    return inner(url, opts)
+  }
+  const { pub } = publisherFor(s, {}, blog)
+  const r = await pub.publish({ briefId: BRIEF_ID })
+  restore()
+  assert.deepEqual(docsCalls, [`${NEW_D}/llms.txt`])
+  assert.ok(r.warnings.includes('replaced 1 link to the old M91 docs host (m91.msg91.com) with m91-api.msg91.com (1 distinct)'), r.warnings.join(' | '))
+  assert.ok(r.post.markdown.includes(`${NEW_D}/llms.txt`) && !r.post.markdown.includes(`${OLD_D}/llms.txt`))
 })

@@ -142,19 +142,80 @@ export function rewriteOldSiteLinks(text, ctaUrl) {
   return { text: out, count }
 }
 /** The same rewrite in every string of the blocks' data (they are slices of the same body). */
-const rewriteDeep = (v, ctaUrl) =>
-  typeof v === 'string' ? rewriteOldSiteLinks(v, ctaUrl).text
-    : Array.isArray(v) ? v.map((x) => rewriteDeep(x, ctaUrl))
-      : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, rewriteDeep(x, ctaUrl)])) : v
+const rewriteDeep = (v, ctaUrl) => mapDeep(v, (x) => rewriteOldSiteLinks(x, ctaUrl).text)
+
+// ---------- the M91 docs moved (m91.msg91.com → m91-api.msg91.com, 2026-10-20) ----------
+
+export const OLD_DOCS_HOST = 'm91.msg91.com'
+export const NEW_DOCS_HOST = 'm91-api.msg91.com'
+const OLD_DOCS_RE = /https?:\/\/m91\.msg91\.com\/(?:llms\.txt|api\/public\/[^\s()<>[\]"'`]+)/gi
+
+/** Every link to llms.txt or an /api/public/ page on the old docs host, unique, in order (trailing punctuation dropped). */
+export function oldDocsLinks(text) {
+  const out = []
+  for (const m of String(text ?? '').matchAll(OLD_DOCS_RE)) {
+    const url = m[0].replace(/[.,;:!?]+$/, '')
+    if (!out.includes(url)) out.push(url)
+  }
+  return out
+}
+
+/** The same path on the new docs host (always https). */
+export const docsTarget = (url) => url.replace(/^https?:\/\/m91\.msg91\.com/i, `https://${NEW_DOCS_HOST}`)
+
+/**
+ * Which old docs links can move: each target is fetched once with a GET (cache: per run, by URL without its
+ * #fragment) and moves only when it answers 200. Returns { map: Map(old → new), kept: [{ url, target, status }] }.
+ */
+export async function planDocsRewrite(text, { fetch = globalThis.fetch, cache = new Map(), timeoutMs = 10000 } = {}) {
+  const map = new Map()
+  const kept = []
+  for (const url of oldDocsLinks(text)) {
+    const target = docsTarget(url)
+    const key = target.replace(/#.*$/, '')
+    if (!cache.has(key)) {
+      cache.set(key, (async () => {
+        try {
+          const res = await fetch(key, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(timeoutMs) })
+          try { await res.body?.cancel?.() } catch {}
+          return res.status
+        } catch (error) {
+          return `error (${error.message})`
+        }
+      })())
+    }
+    const status = await cache.get(key)
+    if (status === 200) map.set(url, target)
+    else kept.push({ url, target, status })
+  }
+  return { map, kept }
+}
+
+/** Replaces each mapped URL (longest first, so a URL is never cut inside a longer one). */
+function applyLinkMap(text, map) {
+  if (typeof text !== 'string' || !map?.size) return { text, count: 0 }
+  let count = 0
+  let out = text
+  for (const [from, to] of [...map].sort((a, b) => b[0].length - a[0].length)) {
+    const parts = out.split(from)
+    count += parts.length - 1
+    out = parts.join(to)
+  }
+  return { text: out, count }
+}
+const mapDeep = (v, fn) =>
+  typeof v === 'string' ? fn(v)
+    : Array.isArray(v) ? v.map((x) => mapDeep(x, fn))
+      : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, mapDeep(x, fn)])) : v
 
 /**
  * The post JSON (format v1).
- * @param {{ draft: object, briefId, brief, published: object[], config, now: () => number, istIso: (Date) => string, blocks?: object[]|null }} input
+ * @param {{ draft: object, briefId, brief, published: object[], config, now: () => number, istIso: (Date) => string, blocks?: object[]|null, docsPlan?: { map, kept } }} input
  *   draft: the draft record ({ version, payload }); published: every published_post record; blocks: from
  *   chooseBlocks (publisher/blocks.js), already checked against this body (null: plain Markdown).
  * @returns {{ post, slug, existing, warnings[] }}  Throws PostBuildError when the post is not valid.
  */
-export function buildPost({ draft, briefId, brief, published = [], config, now = Date.now, istIso, blocks = null }) {
+export function buildPost({ draft, briefId, brief, published = [], config, now = Date.now, istIso, blocks = null, docsPlan = null }) {
   const d = draft.payload ?? draft
   const warnings = []
   const baseUrl = config.blog.baseUrl
@@ -164,11 +225,18 @@ export function buildPost({ draft, briefId, brief, published = [], config, now =
   warnings.push(...stripWarnings)
   // Links to the old M91 site become M91_CTA_URL, in the body and the blocks alike (so the sources skip them too).
   const ctaUrl = config.m91?.ctaUrl
-  const { text: markdown, count: oldLinks } = rewriteOldSiteLinks(stripped, ctaUrl)
+  const { text: ctaFixed, count: oldLinks } = rewriteOldSiteLinks(stripped, ctaUrl)
   if (oldLinks) {
     blocks = blocks && rewriteDeep(blocks, ctaUrl)
     warnings.push(`replaced ${oldLinks} link${oldLinks === 1 ? '' : 's'} to the old M91 site (${OLD_M91_SITE}) with M91_CTA_URL (${ctaUrl})`)
   }
+  // Old docs links whose new address answered 200 (planDocsRewrite, checked by the caller) move to the new host.
+  const { text: markdown, count: docsMoved } = applyLinkMap(ctaFixed, docsPlan?.map)
+  if (docsMoved) {
+    blocks = blocks && mapDeep(blocks, (x) => applyLinkMap(x, docsPlan.map).text)
+    warnings.push(`replaced ${docsMoved} link${docsMoved === 1 ? '' : 's'} to the old M91 docs host (${OLD_DOCS_HOST}) with ${NEW_DOCS_HOST} (${docsPlan.map.size} distinct)`)
+  }
+  for (const k of docsPlan?.kept ?? []) warnings.push(`kept the old M91 docs link ${k.url}: ${k.target} answered ${k.status}`)
   const at = istIso(new Date(now()))
   const topicGroup = Number(brief?.topic_group ?? d.topic_group ?? 1)
   const post = {

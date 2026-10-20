@@ -11,7 +11,7 @@ import { istIso } from '../util/time.js'
 import { emit, throwIfCancelled, isCancel } from '../events.js'
 import { loadBrief } from '../writer/inputs.js'
 import { draftsOf, draftVersion, draftBriefVersion } from '../writer/save.js'
-import { buildPost } from './post.js'
+import { buildPost, planDocsRewrite } from './post.js'
 import { chooseBlocks } from './blocks.js'
 import { isInteractive, latestBlockDoc } from '../designer/index.js'
 import { bodyMarkdown } from '../designer/parts.js'
@@ -126,7 +126,9 @@ export function createPublisher({ config, store, notifier, fetch = globalThis.fe
     const doc = interactive ? await latestBlockDoc(store, briefId, draftVersion(draft)) : null
     const chosen = chooseBlocks({ interactive, doc, markdown: bodyMarkdown(draft.payload?.post_markdown) })
     if (chosen.warning) warnings.push(chosen.warning)
-    const { post, existing, warnings: postWarnings } = buildPost({ draft, briefId, brief: briefRec.payload, published, config, now, istIso, blocks: chosen.blocks })
+    // Old M91 docs links: each new address is checked once with a GET (cache for this run); only 200s move.
+    const docsPlan = await planDocsRewrite(draft.payload?.post_markdown, { fetch, cache: new Map(), timeoutMs: config.scout?.urlCheckTimeoutMs ?? 10000 })
+    const { post, existing, warnings: postWarnings } = buildPost({ draft, briefId, brief: briefRec.payload, published, config, now, istIso, blocks: chosen.blocks, docsPlan })
     warnings.push(...postWarnings)
     for (const w of postWarnings) log.warn('publisher', { briefId, warning: w })
     const test = draft.metadata?.test === true || briefRec.metadata?.test === true
