@@ -1,0 +1,49 @@
+---
+// route_compare: 2–4 routes to the same goal, each with its stops on a line. "Replay" lights the stops one by
+// one, every route at the same pace, so the shorter route arrives first. Without JS: every stop is visible.
+interface Props { id: string; caption: string; routes: { name: string; best_for: string | null; stops: string[]; highlight: boolean }[] }
+const { id, caption, routes } = Astro.props
+---
+<figure class="routes rv" data-gc="route_compare" data-gc-id={id}>
+  <figcaption class="routes-cap"><span>{caption}</span><button type="button" class="pill js-only" data-replay>Replay</button></figcaption>
+  <div class="routes-grid" style={`--cols:${routes.length}`}>
+    {routes.map((r) => (
+      <div class:list={['route', r.highlight && 'is-best']}>
+        <p class="route-n">{r.name}</p>
+        {r.best_for && <p class="route-b">Best for: {r.best_for}</p>}
+        <p class="mono-k route-c">{r.stops.length} {r.stops.length === 1 ? 'stop' : 'stops'}</p>
+        <ol class="route-stops">
+          {r.stops.map((s) => <li class="route-stop">{s}</li>)}
+          <li class="route-stop is-end">Answer</li>
+        </ol>
+      </div>
+    ))}
+  </div>
+</figure>
+
+<script>
+  for (const fig of document.querySelectorAll<HTMLElement>('[data-gc="route_compare"]')) {
+    const routes = [...fig.querySelectorAll<HTMLElement>('.route')]
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+    let timers: number[] = []
+    const play = () => {
+      timers.forEach(clearTimeout)
+      timers = []
+      for (const r of routes) {
+        const stops = [...r.querySelectorAll<HTMLElement>('.route-stop')]
+        if (reduced) { stops.forEach((s) => s.classList.add('is-lit')); continue }
+        stops.forEach((s) => s.classList.remove('is-lit'))
+        stops.forEach((s, i) => timers.push(window.setTimeout(() => s.classList.add('is-lit'), 250 + i * 420)))
+      }
+    }
+    fig.querySelector('[data-replay]')?.addEventListener('click', play)
+    if (!('IntersectionObserver' in window)) { play(); continue }
+    fig.classList.add('is-armed')
+    const io = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return
+      io.disconnect()
+      play()
+    }, { threshold: 0.3 })
+    io.observe(fig)
+  }
+</script>

@@ -297,3 +297,101 @@ test('motion is progressive: content is never hidden in the HTML, and reduced mo
   assert.match(css, /prefers-reduced-motion:\s?reduce\)\{[^@]*\.rv-on \.rv:not\(\.is-in\)\{opacity:1/)
   for (const p of [EVERY, 'index.html']) assert.ok(!read(dist, p).includes('rv-on'), `${p}: the hiding class is only added by the script`)
 })
+
+// ---------- Phase 10, Part B: guides ----------
+
+const GUIDE = 'posts/fixture-guide-post/index.html'
+
+test('a guide renders its chapters and every component, in order, with the accent and the example scene', () => {
+  const html = read(dist, GUIDE)
+  assert.match(html, /<div class="guide" data-guide="6">/)
+  assert.match(html, /<h1 class="gp-h1">Fixture: how to make your AI agent <span class="acc">ask before<\/span> it refunds a customer<\/h1>/)
+  // Chapter labels and headings (ids for links and the rail)
+  assert.match(html, /<p class="gch-k" aria-hidden="true">01 — The problem<\/p>\s*<h2 class="gch-h" id="why-a-refund-needs-a-person">Why a refund needs a person<\/h2>/)
+  const order = [...html.matchAll(/data-gc="([a-z_]+)" data-gc-id="(g[\w-]+)"/g)].map((m) => `${m[1]}:${m[2]}`)
+  assert.deepEqual(order, ['journey_steps:g2', 'route_compare:g6', 'approve_demo:g7', 'steps_checklist:g9', 'tool_picker:g10', 'file_card:g10-http', 'file_card:g11', 'troubleshooting_picker:g12'])
+  assert.match(html, /data-block="phone_ring_sim" data-block-id="g5"/)
+  assert.match(html, /data-block="comparison_table" data-block-id="g3"/)
+  assert.match(html, /data-block="faq_accordion" data-block-id="g13"/)
+  // Hero scene from guide.hero, marked as an example
+  assert.match(html, /<span class="scene-k">1 · Refund agent<\/span>/)
+  assert.match(html, /Calling Priya, support lead/)
+  assert.match(html, /<figcaption class="scene-ex"><span class="ex-tag">Example<\/span> Names and amounts are made up\.<\/figcaption>/)
+  // The rail: the guide's states, each chapter linked to its state; Stuck? goes to the troubleshooting chapter
+  const rail = html.match(/<aside class="rail"[\s\S]*?<\/aside>/)[0]
+  assert.deepEqual([...rail.matchAll(/class="status-s" data-state="([a-z]+)"/g)].map((m) => m[1]), ['waiting', 'ringing', 'approved', 'continuing'])
+  assert.deepEqual([...rail.matchAll(/data-ch="[^"]+" data-state="([a-z]+)"/g)].map((m) => m[1]), ['waiting', 'ringing', 'approved', 'continuing', 'continuing', 'continuing'])
+  assert.match(rail, /<a class="stuck" href="#if-something-goes-wrong">/)
+  // The end: two FAQ questions; Your turn from the guide
+  assert.match(html, /data-questions>2<\/dd>/)
+  assert.match(html, /<h2 id="your-turn" class="strip-t mt-2">Let your agent ask before it refunds\.<\/h2>/)
+})
+
+test('without JavaScript a guide is complete: every outcome, tool, step and fix is in the HTML; controls are js-only', () => {
+  const html = read(dist, GUIDE)
+  // approve_demo: both outcomes with their labels; the buttons need JS
+  assert.match(html, /<div class="demo-btns js-only" role="group"/)
+  assert.match(html, /If you approve:[\s\S]*The agent sends the refund and logs who approved it\./)
+  assert.match(html, /If you reject:[\s\S]*The agent does not refund/)
+  assert.match(html, /<p class="demo-top"><span class="demo-app">M91 · decision needed<\/span><span class="ex-tag">Example<\/span>/)
+  // tool_picker: every tool's panel, each named; the picker needs JS
+  assert.equal(count(html, /<div class="tools-panel[^"]*" data-panel="/g), 2)
+  assert.match(html, /<div class="tools-pills js-only" role="radiogroup"/)
+  assert.match(html, /<span class="mono-k">Built in<\/span> LangGraph/)
+  // steps: all three, with "Stuck here?" as native details; tap numbers are js-only, plain numbers otherwise
+  assert.equal(count(html, /<li class="gstep" data-step="\d">/g), 3)
+  assert.equal(count(html, /<button type="button" class="gstep-num js-only"/g), 3)
+  assert.equal(count(html, /<span class="gstep-num no-js-only"/g), 3)
+  assert.match(html, /<details class="stuckhint"><summary>Stuck here\?<\/summary>/)
+  assert.match(html, /data-key="m91-blog:fixture-guide-post:g9"/)
+  // troubleshooting: each problem with cause and fix; the picker and the table need JS
+  assert.equal(count(html, /<div class="tlog-item" id="/g), 2)
+  assert.match(html, /<div class="tlog-item" id="the-phone-does-not-ring">/)
+  assert.match(html, /<details class="tlog-all js-only">/)
+  // file card: the whole file is in the page, with what it does; Copy and "Show the full file" need JS
+  assert.match(html, /<figcaption class="filecard-tab"><span>approval-request\.json<\/span><button type="button" class="fcard-copy js-only" data-copy>Copy<\/button><\/figcaption>/)
+  assert.match(html, /<span class="mono-k">What this does<\/span> Asks one person to approve this refund\./)
+  assert.match(html, /<button type="button" class="fcard-more js-only" aria-expanded="false" data-more>Show the full file \(4 lines\)<\/button>/)
+  assert.match(html, /<pre class="shiki[^"]*"[^>]*><code>[\s\S]*refund-1182/)
+  // route compare: every stop listed; Replay is js-only
+  assert.equal(count(html, /<li class="route-stop">/g), 9)
+  assert.match(html, /<button type="button" class="pill js-only" data-replay>Replay<\/button>/)
+  // journey: "You are here" on the current step
+  assert.match(html, /<li class="journey-s is-now" aria-current="step">[\s\S]*?<span class="journey-here">You are here<\/span>/)
+})
+
+test('guide scripts: one bundled file per component type, only on guide pages; no inline handlers', () => {
+  const html = read(dist, GUIDE)
+  const srcs = [...html.matchAll(/<script type="module" src="([^"]+)"/g)].map((m) => m[1]).filter((s) => !SHELL.test(s))
+  for (const name of ['ApproveDemo', 'RouteCompare', 'GuideSteps', 'ToolPicker', 'FileCard', 'TroubleshootLog', 'PhoneRingSim', 'FaqAccordion']) {
+    assert.ok(srcs.some((s) => s.includes(`/${name}.astro_`)), name)
+  }
+  for (const src of srcs) assert.ok(existsSync(join(dist, src)), src)
+  assert.ok(!/ on[a-z]+="/.test(html.replace(/<script[\s\S]*?<\/script>/g, '')), 'no inline event handlers')
+  const plain = [...read(dist, 'posts/fixture-indexed-post/index.html').matchAll(/<script type="module" src="([^"]+)"/g)].map((m) => m[1])
+  assert.ok(!plain.some((s) => /ApproveDemo|ToolPicker|RouteCompare/.test(s)), 'no guide script on a plain post')
+})
+
+test('reduced motion: guide animations are off and nothing stays dimmed', () => {
+  const css = files(join(dist, '_astro')).filter((f) => f.endsWith('.css')).map((f) => readFileSync(f, 'utf8')).join('\n')
+  const reduced = [...css.matchAll(/@media \(prefers-reduced-motion:\s?reduce\)\{([^@]*)\}/g)].map((m) => m[1]).join('\n')
+  assert.match(reduced, /\.routes\.is-armed \.route-stop:not\(\.is-lit\)\{opacity:1\}/)
+  assert.match(reduced, /\.js \.scene\.is-armed \.scene-m:not\(\.is-lit\)\{opacity:1\}/)
+  assert.match(reduced, /animation:none/)
+})
+
+test('an invalid guide is dropped with a warning: the post shows its Markdown in the same shell', () => {
+  assert.match(built.output, /\[guide\] fixture-invalid-guide-post\.json: guide not valid, showing the post without it/)
+  const html = read(dist, 'posts/fixture-invalid-guide-post/index.html')
+  assert.ok(!html.includes('class="guide"'))
+  assert.match(html, /The guide is dropped: this Markdown is shown\./)
+  assert.match(html, /<aside class="rail"/)
+})
+
+test('the sample guide is valid, uses every component and builds without warnings', async () => {
+  const { validatePost, GUIDE_COMPONENT_TYPES } = await import('@m91/content')
+  const sample = JSON.parse(readFileSync(join(root, 'samples', 'sample-guide-refund-approval.json'), 'utf8'))
+  assert.deepEqual(validatePost(sample), { valid: true, errors: [] })
+  assert.deepEqual([...new Set(sample.guide.chapters.flatMap((c) => c.components.map((x) => x.type)))].sort(), [...GUIDE_COMPONENT_TYPES].sort())
+  assert.ok(!/\[guide\] fixture-guide-post/.test(built.output))
+})

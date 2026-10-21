@@ -3,6 +3,7 @@
 @import "tailwindcss";
 @import "./site.css";
 @import "./guides.css";
+@import "./guide-components.css";
 
 /* The M91 site's own tokens. Light only, like the site. */
 :root {

@@ -1,0 +1,35 @@
+---
+// file_card: a code, prompt or payload "file" with its name on a tab, one line on what it does, Copy, and
+// "Show the full file" when it is longer than its preview. Without JS the whole file shows.
+import type { FilePrep } from '../../lib/guide'
+interface Props { id: string; file: FilePrep }
+const { id, file } = Astro.props
+---
+<figure class="filecard fcard rv" data-gc="file_card" data-gc-id={id} data-preview={file.preview ?? ''} data-code={file.code}>
+  <figcaption class="filecard-tab"><span>{file.filename}</span><button type="button" class="fcard-copy js-only" data-copy>Copy</button></figcaption>
+  <p class="fcard-what"><span class="mono-k">What this does</span> {file.what}</p>
+  <div class="fcard-code" set:html={file.html} />
+  {file.preview && <button type="button" class="fcard-more js-only" aria-expanded="false" data-more>Show the full file ({file.lines} lines)</button>}
+</figure>
+
+<script>
+  for (const card of document.querySelectorAll<HTMLElement>('[data-gc="file_card"]')) {
+    const code = card.dataset.code ?? ''
+    const copy = card.querySelector<HTMLButtonElement>('[data-copy]')
+    copy?.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(code); copy.textContent = 'Copied' } catch { copy.textContent = 'Select to copy' }
+      setTimeout(() => { copy.textContent = 'Copy' }, 1600)
+    })
+    const lines = Number(card.dataset.preview)
+    const more = card.querySelector<HTMLButtonElement>('[data-more]')
+    if (lines && more) {
+      card.style.setProperty('--preview', String(lines))
+      card.classList.add('is-clipped')
+      more.addEventListener('click', () => {
+        const clipped = card.classList.toggle('is-clipped')
+        more.setAttribute('aria-expanded', String(!clipped))
+        more.textContent = clipped ? `Show the full file (${code.split('\n').length} lines)` : 'Show less'
+      })
+    }
+  }
+</script>

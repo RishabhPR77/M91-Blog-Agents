@@ -1,0 +1,36 @@
+---
+// approve_demo: a pretend approval request the reader can answer. Approve or Reject shows what happens next.
+// Always labelled "Example". Without JavaScript both outcomes are shown, each with its label.
+interface Props { id: string; request: string; context: string | null; approve: { label: string; html: string }; reject: { label: string; html: string } }
+const { id, request, context, approve, reject } = Astro.props
+---
+<section class="demo rv" data-gc="approve_demo" data-gc-id={id} aria-label="Try an approval request (example)">
+  <div class="demo-card">
+    <p class="demo-top"><span class="demo-app">M91 · decision needed</span><span class="ex-tag">Example</span></p>
+    <p class="demo-req">{request}</p>
+    {context && <p class="demo-ctx">{context}</p>}
+    <div class="demo-btns js-only" role="group" aria-label="Your answer">
+      <button type="button" class="demo-btn is-yes" aria-pressed="false" data-choice="approve">{approve.label}</button>
+      <button type="button" class="demo-btn" aria-pressed="false" data-choice="reject">{reject.label}</button>
+    </div>
+    <p class="demo-hint js-only" data-hint>Tap an answer to see what your agent does next.</p>
+  </div>
+  <div class="demo-out" data-out="approve"><p class="demo-out-k no-js-only">If you {approve.label.toLowerCase()}:</p><p class="mono-k demo-out-st js-only">approved → continuing</p><div set:html={approve.html} /></div>
+  <div class="demo-out" data-out="reject"><p class="demo-out-k no-js-only">If you {reject.label.toLowerCase()}:</p><p class="mono-k demo-out-st js-only">rejected → stopped</p><div set:html={reject.html} /></div>
+</section>
+
+<script>
+  for (const demo of document.querySelectorAll<HTMLElement>('[data-gc="approve_demo"]')) {
+    const buttons = [...demo.querySelectorAll<HTMLButtonElement>('[data-choice]')]
+    const outs = [...demo.querySelectorAll<HTMLElement>('[data-out]')]
+    const hint = demo.querySelector<HTMLElement>('[data-hint]')
+    demo.classList.add('is-live')
+    for (const b of buttons) {
+      b.addEventListener('click', () => {
+        for (const x of buttons) x.setAttribute('aria-pressed', String(x === b))
+        for (const o of outs) o.classList.toggle('is-shown', o.dataset.out === b.dataset.choice)
+        if (hint) hint.hidden = true
+      })
+    }
+  }
+</script>

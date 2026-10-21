@@ -1,0 +1,45 @@
+---
+// The guide's chapters (Phase 10, B3): "01 — The problem" above each chapter heading, the chapter's short intro,
+// then its components in order. Prose and the Writer's text use the post's reading styles (prose-m91).
+import RichText from '../blocks/RichText.astro'
+import ComparisonTable from '../blocks/ComparisonTable.astro'
+import FaqAccordion from '../blocks/FaqAccordion.astro'
+import PhoneRingSim from '../blocks/PhoneRingSim.astro'
+import JourneySteps from './JourneySteps.astro'
+import ApproveDemo from './ApproveDemo.astro'
+import RouteCompare from './RouteCompare.astro'
+import GuideSteps from './GuideSteps.astro'
+import ToolPicker from './ToolPicker.astro'
+import FileCard from './FileCard.astro'
+import TroubleshootLog from './TroubleshootLog.astro'
+import type { PreparedChapter } from '../../lib/guide'
+interface Props { chapters: PreparedChapter[]; slug: string }
+const { chapters, slug } = Astro.props
+const two = (n: number) => String(n).padStart(2, '0')
+---
+<div class="guide" data-guide={chapters.length}>
+  {chapters.map((c) => (
+    <section class="gch" aria-labelledby={c.anchor} data-chapter={c.id}>
+      <p class="gch-k" aria-hidden="true">{two(c.number)} — {c.label}</p>
+      <h2 class="gch-h" id={c.anchor}>{c.heading}</h2>
+      {c.intro && <div class="prose-m91 gch-intro" set:html={c.intro} />}
+      <div class="gch-body">
+        {c.items.map((x) => {
+          switch (x.type) {
+            case 'prose': return <div class="prose-m91"><RichText html={x.html} /></div>
+            case 'journey_steps': return <JourneySteps id={x.id} steps={x.steps} current={x.current} />
+            case 'phone_ring_sim': return <div class="prose-m91 blocks gphone"><PhoneRingSim id={x.id} moments={x.moments} /></div>
+            case 'approve_demo': return <ApproveDemo id={x.id} request={x.request} context={x.context} approve={x.approve} reject={x.reject} />
+            case 'route_compare': return <RouteCompare id={x.id} caption={x.caption} routes={x.routes} />
+            case 'steps_checklist': return <GuideSteps id={x.id} slug={slug} intro={x.intro} steps={x.steps} />
+            case 'tool_picker': return <ToolPicker id={x.id} question={x.question} options={x.options} />
+            case 'file_card': return <FileCard id={x.id} file={x.file} />
+            case 'troubleshooting_picker': return <TroubleshootLog id={x.id} question={x.question} items={x.items} />
+            case 'comparison_table': return <figure class="gtable prose-m91 rv">{x.caption && <figcaption class="gtable-cap">{x.caption}</figcaption>}<ComparisonTable id={x.id} html={x.html} /></figure>
+            case 'faq': return <div class="prose-m91"><FaqAccordion id={x.id} items={x.items} /></div>
+          }
+        })}
+      </div>
+    </section>
+  ))}
+</div>

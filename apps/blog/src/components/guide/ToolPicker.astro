@@ -1,0 +1,39 @@
+---
+// tool_picker: "Where does your agent run?" Pick one and only that tool's steps show (the choice is remembered
+// on this device). Without JS every tool's steps show, one after another, each under its name.
+import FileCard from './FileCard.astro'
+import type { FilePrep } from '../../lib/guide'
+interface Props { id: string; question: string; options: { id: string; label: string; steps: string[]; file: FilePrep | null; done: string | null }[] }
+const { id, question, options } = Astro.props
+---
+<section class="tools rv" data-gc="tool_picker" data-gc-id={id} aria-label={question}>
+  <p class="tools-q">{question}</p>
+  <div class="tools-pills js-only" role="radiogroup" aria-label={question}>
+    {options.map((o, i) => <button type="button" role="radio" class="pill" aria-checked={i === 0 ? 'true' : 'false'} data-pick={o.id}>{o.label}</button>)}
+  </div>
+  {options.map((o, i) => (
+    <div class:list={['tools-panel', i === 0 && 'is-on']} data-panel={o.id}>
+      <p class="tools-for"><span class="mono-k">Built in</span> {o.label}</p>
+      <ol class="tools-steps">{o.steps.map((s) => <li set:html={s} />)}</ol>
+      {o.file && <FileCard id={`${id}-${o.id}`} file={o.file} />}
+      {o.done && <p class="tools-done" set:html={o.done} />}
+    </div>
+  ))}
+</section>
+
+<script>
+  const KEY = 'm91-blog:tool'
+  for (const box of document.querySelectorAll<HTMLElement>('[data-gc="tool_picker"]')) {
+    const pills = [...box.querySelectorAll<HTMLButtonElement>('[data-pick]')]
+    const panels = [...box.querySelectorAll<HTMLElement>('[data-panel]')]
+    const pick = (value: string, store: boolean) => {
+      if (!pills.some((p) => p.dataset.pick === value)) return
+      for (const p of pills) p.setAttribute('aria-checked', String(p.dataset.pick === value))
+      for (const p of panels) p.classList.toggle('is-on', p.dataset.panel === value)
+      if (store) try { localStorage.setItem(KEY, value) } catch { /* storage may be blocked */ }
+    }
+    box.classList.add('is-live')
+    for (const p of pills) p.addEventListener('click', () => pick(p.dataset.pick ?? '', true))
+    try { pick(localStorage.getItem(KEY) ?? '', false) } catch { /* no saved choice */ }
+  }
+</script>

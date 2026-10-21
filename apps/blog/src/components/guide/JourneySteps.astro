@@ -1,0 +1,15 @@
+---
+// journey_steps: 3–5 numbered stages on one line, with "You are here" on the current one. No script needed.
+interface Props { id: string; steps: { title: string; html: string }[]; current: number }
+const { id, steps, current } = Astro.props
+---
+<ol class="journey rv" data-gc="journey_steps" data-gc-id={id} style={`--n:${steps.length}`}>
+  {steps.map((s, i) => (
+    <li class:list={['journey-s', i < current && 'is-past', i === current && 'is-now']} aria-current={i === current ? 'step' : undefined}>
+      <span class="journey-n" aria-hidden="true">{i + 1}</span>
+      {i === current && <span class="journey-here">You are here</span>}
+      <span class="journey-t">{s.title}</span>
+      <span class="journey-d" set:html={s.html} />
+    </li>
+  ))}
+</ol>

@@ -21,6 +21,19 @@ export type Post = {
   canonical_url: string
   brief_id: string
   version: number
+  guide?: Guide | null
+}
+
+/** Phase 10: the guide document (validated with @m91/content when the post is loaded). */
+export type GuideState = 'waiting' | 'ringing' | 'approved' | 'rejected' | 'continuing'
+export type GuideComponent = { type: string; id: string; data: Record<string, any> }
+export type Guide = {
+  version: 1
+  title_accent: string
+  hero: { example: true; agent: string; request: string; person: string; decision: 'approved' | 'rejected'; result: string }
+  status_states: { state: GuideState; chapter: string }[]
+  chapters: { id: string; number: number; label: string; heading: string; intro_markdown?: string; components: GuideComponent[] }[]
+  your_turn: { title: string }
 }
 
 let cache: { posts: Post[]; sample: boolean } | null = null

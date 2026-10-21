@@ -7,6 +7,7 @@ import BaseLayout from './BaseLayout.astro'
 import StoryScene from '../components/guide/StoryScene.astro'
 import TakeawaysLog from '../components/guide/TakeawaysLog.astro'
 import GuideRail from '../components/guide/GuideRail.astro'
+import GuideBody from '../components/guide/GuideBody.astro'
 import EndMeta from '../components/guide/EndMeta.astro'
 import PromptStrip from '../components/PromptStrip.astro'
 import BlockRenderer from '../components/BlockRenderer.astro'
@@ -18,6 +19,7 @@ import type { Post } from '../lib/posts'
 import { topicOf, relatedPosts, formatDate, url } from '../lib/posts'
 import { renderMarkdown } from '../lib/markdown'
 import { chaptersOf, stuckChapter, questionCount, DEFAULT_STATES } from '../lib/chapters'
+import { prepareGuide } from '../lib/guide'
 import { blogPostingLd, breadcrumbLd } from '../lib/seo'
 import { SITE } from '../config/site'
 
@@ -25,9 +27,26 @@ interface Props { post: Post }
 const { post } = Astro.props
 const topic = topicOf(post)
 const { html, headings } = await renderMarkdown(post.markdown)
-const states = DEFAULT_STATES
-const chapters = chaptersOf(headings, states)
-const stuck = stuckChapter(chapters)
+// A guide (Phase 10) sets the chapters, states, scene and accent; without one (or if it can't be prepared) the
+// post shows its blocks or Markdown in the same shell.
+const prepared = post.guide ? await prepareGuide(post.guide) : null
+if (prepared && !prepared.ok) console.warn(`[guide] ${post.slug}: ${prepared.reason}: showing the post without its guide`)
+const guide = prepared?.ok ? prepared.guide : null
+const states = guide?.states ?? DEFAULT_STATES
+const chapters = guide?.rail ?? chaptersOf(headings, states)
+const stuck = guide ? guide.stuck : stuckChapter(chapters)
+const questions = guide?.questions ?? questionCount(headings)
+// The title with its accent phrase in italics (the first time it appears).
+const accent = guide && post.guide ? post.guide.title_accent : ''
+const at = accent ? post.title.indexOf(accent) : -1
+const titleParts = at >= 0 ? [post.title.slice(0, at), accent, post.title.slice(at + accent.length)] : [post.title, '', '']
+const hero = guide && post.guide ? post.guide.hero : null
+const heroMoments = hero ? [
+  { key: 'asks' as const, label: `1 · ${hero.agent}`, value: hero.request },
+  { key: 'ringing' as const, label: '2 · Phone rings', value: `Calling ${hero.person}` },
+  { key: 'decides' as const, label: '3 · Person decides', value: hero.decision === 'approved' ? 'Taps Approve' : 'Taps Reject' },
+  { key: 'continuing' as const, label: '4 · Agent continues', value: hero.result }
+] : undefined
 const updated = post.updated_at.slice(0, 10) !== post.published_at.slice(0, 10)
 ---
 <BaseLayout
@@ -51,7 +70,7 @@ const updated = post.updated_at.slice(0, 10) !== post.published_at.slice(0, 10)
         </nav>
         <header class="gp-hero">
           <p class="flex flex-wrap items-center gap-2"><span class="tag-lime">Guide</span><span class="mono-k">{topic.short} · {post.reading_time_min} min read</span></p>
-          <h1 class="gp-h1">{post.title}</h1>
+          <h1 class="gp-h1">{titleParts[0]}{titleParts[1] && <span class="acc">{titleParts[1]}</span>}{titleParts[2]}</h1>
           <p class="gp-desc">{post.description}</p>
           <div class="gp-by">
             <span class="gp-by-who"><span class="gc-av" aria-hidden="true">M</span>{SITE.author}</span>
@@ -59,19 +78,21 @@ const updated = post.updated_at.slice(0, 10) !== post.published_at.slice(0, 10)
             <button type="button" class="pill js-only" data-copy-link={post.canonical_url}>Share</button>
           </div>
         </header>
-        <StoryScene />
+        <StoryScene moments={heroMoments} decision={hero?.decision} example={Boolean(hero)} />
         <TakeawaysLog items={post.tldr} />
         <GuideRail chapters={chapters} states={states} stuck={stuck} place="bar" />
         <div class="gp-body">
-          {post.blocks
+          {guide
+            ? <GuideBody chapters={guide.chapters} slug={post.slug} />
+            : post.blocks
             ? <BlockRenderer blocks={post.blocks} slug={post.slug} headingIds={headings.map((h) => h.id)} fallbackHtml={html} />
             : <div class="prose-m91" set:html={html} />}
           <CodeCopy />
         </div>
         <div class="gp-end">
           <SourcesList sources={post.sources} />
-          <EndMeta published={post.published_at} updated={post.updated_at} minutes={post.reading_time_min} questions={questionCount(headings)} />
-          <PromptStrip id="your-turn" label="Your turn" title="Let your agent ask before it acts." />
+          <EndMeta published={post.published_at} updated={post.updated_at} minutes={post.reading_time_min} questions={questions} />
+          <PromptStrip id="your-turn" label="Your turn" title={post.guide && guide ? post.guide.your_turn.title : 'Let your agent ask before it acts.'} />
           <ShareLinks url={post.canonical_url} title={post.title} />
         </div>
       </article>

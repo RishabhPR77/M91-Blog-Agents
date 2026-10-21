@@ -2,7 +2,7 @@
    search, the dark call to action and the footer panel. Values are the site's own (its CSS variables and
    rules), so the blog reads as part of the site. */
 :root {
-  --ink-3: #8b95a0;
+  --ink-3: #6b7480;
   --lime: #dff56b;
   --lime-tint: #f4fbd3;
   --lime-deep: #55651a;
@@ -91,7 +91,7 @@
   .cta-card.is-done .cta-chip { background: #1d9a5b; color: #fff; }
   .cta-card-t { display: block; font-size: 15.5px; font-weight: 700; letter-spacing: -0.016em; line-height: 1.2; }
   .cta-card-s { display: block; margin-top: 2px; font-size: 12px; line-height: 1.2; color: rgba(255, 255, 255, 0.6); }
-  .cta-note { margin-top: 28px; font: 600 14.5px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: #6c7987; }
+  .cta-note { margin-top: 28px; font: 600 14.5px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: #8b95a0; }
   .foot { background: var(--dark-bg); padding: 0 0 28px; }
   .foot:first-child, :not(.cta-band) + .foot { padding-top: 32px; }
   .foot-panel { background: rgba(255, 255, 255, 0.035); border: 1px solid var(--dark-line); border-radius: 26px; padding: 44px 44px 40px; margin-bottom: 22px; }
@@ -104,7 +104,7 @@
   .foot-app { display: inline-flex; align-items: center; gap: 8px; padding: 10px 17px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.22); color: #fff; font-size: 13px; font-weight: 600; transition: border-color 180ms, background 180ms, transform 180ms; }
   .foot-app:hover { border-color: rgba(255, 255, 255, 0.6); background: rgba(255, 255, 255, 0.08); transform: translateY(-1px); }
   .foot-app svg { width: 15px; height: 15px; flex: none; }
-  .foot-col-t { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font: 700 10px/1 var(--mono); letter-spacing: 0.15em; text-transform: uppercase; color: #6c7987; }
+  .foot-col-t { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font: 700 10px/1 var(--mono); letter-spacing: 0.15em; text-transform: uppercase; color: #8b95a0; }
   .foot-col-t::after { content: ""; flex: 1; height: 1px; background: var(--dark-line); }
   .foot-link { position: relative; display: block; width: fit-content; padding: 7px 0; font-size: 14px; color: var(--dark-ink-2); transition: color 160ms; }
   .foot-link::after { content: ""; position: absolute; left: 0; right: 100%; bottom: 5px; height: 1px; background: var(--lime); transition: right 260ms var(--ease); }
@@ -112,9 +112,9 @@
   .foot-link:hover::after { right: 0; }
   .foot-link code { font: 500 12.5px/1 var(--mono); color: var(--lime); }
   .foot-tag { display: inline-block; margin-left: 7px; padding: 2px 6px; border-radius: 5px; font: 700 8px/1.4 var(--mono); letter-spacing: 0.1em; background: rgba(223, 245, 107, 0.14); color: var(--lime); vertical-align: 1px; }
-  .foot-bottom { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; padding: 0 8px; font-size: 13px; color: #6c7987; }
+  .foot-bottom { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; padding: 0 8px; font-size: 13px; color: #8b95a0; }
   .foot-legal { display: flex; gap: 22px; flex-wrap: wrap; }
-  .foot-legal a { color: #6c7987; transition: color 160ms; }
+  .foot-legal a { color: #8b95a0; transition: color 160ms; }
   .foot-legal a:hover { color: var(--dark-ink-2); }
   .foot a:focus-visible, .cta-band a:focus-visible, .cta-band button:focus-visible { outline-color: #fff; }
   @media (max-width: 860px) { .foot-panel { padding: 32px 26px 28px; border-radius: 22px; } .foot-top { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px; } .foot-brand { grid-column: 1 / -1; } }

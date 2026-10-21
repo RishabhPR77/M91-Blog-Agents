@@ -1,0 +1,55 @@
+---
+// steps_checklist (guide): numbered steps; tap a number when the step is done ("N of M done", remembered on this
+// device if storage is allowed). A step may have a "Stuck here?" hint (native <details>). Without JS the numbers
+// are plain labels and every step reads as a list.
+interface Props { id: string; slug: string; intro: string | null; steps: { title: string | null; html: string; stuck: { cause: string; fix: string } | null }[] }
+const { id, slug, intro, steps } = Astro.props
+---
+<section class="gsteps rv" data-gc="steps_checklist" data-gc-id={id} data-key={`m91-blog:${slug}:${id}`} aria-label="Steps">
+  <p class="gsteps-top">
+    {intro && <span>{intro}</span>}
+    <span class="gsteps-n js-only" aria-live="polite"><span data-done>0</span> of {steps.length} done</span>
+  </p>
+  <ol class="gsteps-list">
+    {steps.map((s, i) => (
+      <li class="gstep" data-step={i}>
+        <button type="button" class="gstep-num js-only" aria-pressed="false" data-tick={i}><span aria-hidden="true">{i + 1}</span><span class="sr-only">Step {i + 1} done</span></button>
+        <span class="gstep-num no-js-only" aria-hidden="true">{i + 1}</span>
+        <div class="gstep-body">
+          {s.title && <p class="gstep-t">{s.title}</p>}
+          <div class="gstep-text" set:html={s.html} />
+          {s.stuck && (
+            <details class="stuckhint">
+              <summary>Stuck here?</summary>
+              <div class="stuckhint-b"><div class="stuckhint-c"><span class="mono-k">Likely cause</span><div set:html={s.stuck.cause} /></div><div class="stuckhint-f"><span class="mono-k">Fix</span><div set:html={s.stuck.fix} /></div></div>
+            </details>
+          )}
+        </div>
+      </li>
+    ))}
+  </ol>
+</section>
+
+<script>
+  for (const block of document.querySelectorAll<HTMLElement>('[data-gc="steps_checklist"]')) {
+    const key = block.dataset.key ?? ''
+    const ticks = [...block.querySelectorAll<HTMLButtonElement>('[data-tick]')]
+    const done = block.querySelector<HTMLElement>('[data-done]')
+    let saved: number[] = []
+    try { saved = JSON.parse(localStorage.getItem(key) ?? '[]') } catch { saved = [] }
+    const update = (store: boolean) => {
+      const on = ticks.filter((t) => t.getAttribute('aria-pressed') === 'true')
+      if (done) done.textContent = String(on.length)
+      for (const t of ticks) t.closest('li')?.classList.toggle('is-done', t.getAttribute('aria-pressed') === 'true')
+      if (store) try { localStorage.setItem(key, JSON.stringify(on.map((t) => Number(t.dataset.tick)))) } catch { /* storage may be blocked */ }
+    }
+    for (const t of ticks) {
+      t.setAttribute('aria-pressed', String(Array.isArray(saved) && saved.includes(Number(t.dataset.tick))))
+      t.addEventListener('click', () => {
+        t.setAttribute('aria-pressed', String(t.getAttribute('aria-pressed') !== 'true'))
+        update(true)
+      })
+    }
+    update(false)
+  }
+</script>

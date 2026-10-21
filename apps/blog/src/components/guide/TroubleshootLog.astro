@@ -1,0 +1,44 @@
+---
+// troubleshooting_picker (guide): "What are you seeing?" → the likely cause and the fix, styled as a log, plus
+// "See every error at once" (a table in a native <details>). Without JS every problem shows with its fix.
+interface Props { id: string; question: string; items: { anchor: string; problem: string; cause: string; fix: string }[] }
+const { id, question, items } = Astro.props
+---
+<section class="tlog rv" data-gc="troubleshooting_picker" data-gc-id={id} aria-label="Troubleshooting">
+  <p class="tlog-q js-only">{question}</p>
+  <div class="tlog-pills js-only" role="group" aria-label="Problems">
+    {items.map((it) => <button type="button" class="tlog-pill" aria-pressed="false" aria-controls={it.anchor} set:html={it.problem} />)}
+  </div>
+  {items.map((it) => (
+    <div class="tlog-item" id={it.anchor}>
+      <p class="tlog-line tlog-err"><span class="mono-k">seeing</span><span set:html={it.problem} /></p>
+      <div class="tlog-line"><span class="mono-k">cause</span><div set:html={it.cause} /></div>
+      <div class="tlog-line tlog-fix"><span class="mono-k">fix</span><div set:html={it.fix} /></div>
+    </div>
+  ))}
+  <details class="tlog-all js-only">
+    <summary>See every error at once</summary>
+    <div class="table-wrap" role="region" aria-label="Every error" tabindex="0">
+      <table><thead><tr><th>What you see</th><th>Likely cause</th><th>Fix</th></tr></thead>
+        <tbody>{items.map((it) => <tr><td set:html={it.problem} /><td set:html={it.cause} /><td set:html={it.fix} /></tr>)}</tbody>
+      </table>
+    </div>
+  </details>
+</section>
+
+<script>
+  for (const box of document.querySelectorAll<HTMLElement>('[data-gc="troubleshooting_picker"]')) {
+    const pills = [...box.querySelectorAll<HTMLButtonElement>('.tlog-pill')]
+    const items = [...box.querySelectorAll<HTMLElement>('.tlog-item')]
+    const show = (anchor: string) => {
+      for (const p of pills) p.setAttribute('aria-pressed', String(p.getAttribute('aria-controls') === anchor))
+      for (const it of items) it.classList.toggle('is-on', it.id === anchor)
+    }
+    box.classList.add('is-live')
+    for (const p of pills) p.addEventListener('click', () => show(p.getAttribute('aria-controls') ?? ''))
+    // A link to a problem (#its-id) opens it.
+    const fromHash = () => { const id = decodeURIComponent(location.hash.slice(1)); if (items.some((i) => i.id === id)) show(id) }
+    addEventListener('hashchange', fromHash)
+    fromHash()
+  }
+</script>
