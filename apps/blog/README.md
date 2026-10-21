@@ -11,7 +11,7 @@ npm project (not a workspace): `npm run install:blog` from the repo root install
 - **Samples:** `npm run dev` with no posts shows `samples/` with a "Sample content" badge. A build never
   includes them.
 - **Noindex posts** (`noindex: true`) get `<meta name="robots" content="noindex, nofollow">` and are
-  left out of the home page, topic pages, RSS, the sitemap and `llms.txt`; their page works by link.
+  left out of the home page (and its search), RSS, the sitemap and `llms.txt`; their page works by link.
 - **No outside requests:** system fonts (as on the M91 site), no analytics, no third-party scripts.
   OG images are drawn at build time with Inter (SIL OFL 1.1, `src/og/fonts/OFL.txt`).
 - **Safety:** a CSP meta tag on every page; raw HTML in post Markdown is dropped, never rendered.

@@ -62,8 +62,8 @@ the slug, `-2`, `-3` and so on are added. Slugs are at most 60 characters.
 
 - While fewer than `NOINDEX_FIRST_N_POSTS` posts have ever been published, a new post is `noindex`.
   Unpublished test posts don't count.
-- A noindex post has `<meta name="robots" content="noindex, nofollow">` and is left out of the home page,
-  topic pages, RSS, the sitemap and `llms.txt`. Its URL still works.
+- A noindex post has `<meta name="robots" content="noindex, nofollow">` and is left out of the home page
+  (and its search), RSS, the sitemap and `llms.txt`. Its URL still works.
 - Switch it with **Hide / Show in search** on the dashboard's Posts page, or:
 
 ```bash
