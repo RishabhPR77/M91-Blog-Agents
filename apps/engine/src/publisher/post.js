@@ -215,7 +215,7 @@ const mapDeep = (v, fn) =>
  *   chooseBlocks (publisher/blocks.js), already checked against this body (null: plain Markdown).
  * @returns {{ post, slug, existing, warnings[] }}  Throws PostBuildError when the post is not valid.
  */
-export function buildPost({ draft, briefId, brief, published = [], config, now = Date.now, istIso, blocks = null, docsPlan = null }) {
+export function buildPost({ draft, briefId, brief, published = [], config, now = Date.now, istIso, blocks = null, guide = null, docsPlan = null }) {
   const d = draft.payload ?? draft
   const warnings = []
   const baseUrl = config.blog.baseUrl
@@ -228,12 +228,14 @@ export function buildPost({ draft, briefId, brief, published = [], config, now =
   const { text: ctaFixed, count: oldLinks } = rewriteOldSiteLinks(stripped, ctaUrl)
   if (oldLinks) {
     blocks = blocks && rewriteDeep(blocks, ctaUrl)
+    guide = guide && rewriteDeep(guide, ctaUrl)
     warnings.push(`replaced ${oldLinks} link${oldLinks === 1 ? '' : 's'} to the old M91 site (${OLD_M91_SITE}) with M91_CTA_URL (${ctaUrl})`)
   }
   // Old docs links whose new address answered 200 (planDocsRewrite, checked by the caller) move to the new host.
   const { text: markdown, count: docsMoved } = applyLinkMap(ctaFixed, docsPlan?.map)
   if (docsMoved) {
     blocks = blocks && mapDeep(blocks, (x) => applyLinkMap(x, docsPlan.map).text)
+    guide = guide && mapDeep(guide, (x) => applyLinkMap(x, docsPlan.map).text)
     warnings.push(`replaced ${docsMoved} link${docsMoved === 1 ? '' : 's'} to the old M91 docs host (${OLD_DOCS_HOST}) with ${NEW_DOCS_HOST} (${docsPlan.map.size} distinct)`)
   }
   for (const k of docsPlan?.kept ?? []) warnings.push(`kept the old M91 docs link ${k.url}: ${k.target} answered ${k.status}`)
@@ -257,7 +259,8 @@ export function buildPost({ draft, briefId, brief, published = [], config, now =
     noindex: noindexFor({ existing, published, firstN: config.blog.noindexFirstNPosts }),
     canonical_url: `${baseUrl}/posts/${slug}/`,
     brief_id: briefId,
-    version: Number(draft.version ?? d.version)
+    version: Number(draft.version ?? d.version),
+    ...(guide && { guide })
   }
   const { valid, errors } = validatePost(post)
   if (!valid) throw new PostBuildError(`the post JSON is not valid (format v1): ${errors.slice(0, 5).join('; ')}`, errors)

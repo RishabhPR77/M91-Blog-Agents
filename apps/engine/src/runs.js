@@ -24,7 +24,7 @@ import { runPipeline, defaultAgents, acquireLock, LockedError, summariseOutput }
 import { runReviewer } from './reviewer/index.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { runPromo, approvedDraft } from './promo/index.js'
-import { runDesigner, designableDraft } from './designer/index.js'
+import { runExperience, designableDraft } from './experience/index.js'
 import { createPublisher, publishPreflight, PublishError } from './publisher/index.js'
 import { draftsOf } from './writer/save.js'
 import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopic, runApprovalReview } from './approval.js'
@@ -355,16 +355,17 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       return { status, brief_id: params.brief_id, summary: r.error ?? r.summary ?? `review loop ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
     }
     if (mode === 'designer') {
-      // Phase 8: re-run the Designer for a brief's approved (or published) draft. A fallback is not a failure.
+      // Phase 10: re-run the Experience Designer alone on a brief's newest waiting, approved or published draft
+      // (1–2 AI calls, no review). A fallback (no guide) is not a failure.
       emit('step.started', { agent: 'designer', step: 'designer' })
       try {
         const out = agents?.designer
           ? (await agents.designer({ runId, briefId: params.brief_id, draft: { version: params.version }, config: runConfig })).output
-          : await runDesigner({ briefId: params.brief_id, version: params.version, runId }, { config: runConfig, store })
+          : await runExperience({ briefId: params.brief_id, version: params.version, runId }, { config: runConfig, store })
         emit('step.finished', { agent: 'designer', step: 'designer' })
         const s = summariseOutput('designer', out)
         if (s) emit('step.output', { agent: 'designer', step: 'designer', ...s })
-        return { status: 'succeeded', brief_id: params.brief_id, summary: `Designer for ${params.brief_id} v${out.version}: ${out.summary_line}`, warnings: out.warnings, output: out }
+        return { status: 'succeeded', brief_id: params.brief_id, summary: `Experience Designer for ${params.brief_id} v${out.version}: ${out.summary_line}`, warnings: out.warnings, output: out }
       } catch (error) {
         stepEnded('designer', error, signal)
         throw error
@@ -439,11 +440,11 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (!draft) throw new RunError('no_approved_draft', `brief ${params.brief_id} has no approved draft${params.version ? ` v${params.version}` : ''}`)
   }
 
-  /** designer mode: params.brief_id of a brief with an approved or published draft (params.version optional). */
+  /** designer mode: params.brief_id of a brief with a waiting, approved or published draft (params.version optional). */
   async function checkDesignerParams(params, runConfig) {
     checkDraftParams(params, 'designer')
     const draft = await designableDraft(readStore(runConfig), params.brief_id, { version: params.version })
-    if (!draft) throw new RunError('no_draft', `brief ${params.brief_id} has no approved or published draft${params.version ? ` v${params.version}` : ''}`, 409)
+    if (!draft) throw new RunError('no_draft', `brief ${params.brief_id} has no waiting, approved or published draft${params.version ? ` v${params.version}` : ''}`, 409)
   }
 
   /** The Publisher's modes: preflight (token, site URL) and params, before the run starts. */

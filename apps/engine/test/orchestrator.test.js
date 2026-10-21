@@ -78,7 +78,7 @@ test('happy path with stubs: a pass ends at awaiting_human, a step log per step 
   assert.equal(r.version, 1)
   assert.equal(store.byType('brief')[0].status, 'awaiting_human')
   // Phase 9 A2: the step log stays in the result (and the run record's timeline); only errors become run_log records.
-  assert.deepEqual(r.steps.map((l) => l.agent), ['scout', 'strategist', 'writer', 'reviewer', 'orchestrator'])
+  assert.deepEqual(r.steps.map((l) => l.agent), ['scout', 'strategist', 'writer', 'designer', 'reviewer', 'orchestrator'])
   for (const l of r.steps) for (const k of ['time', 'agent', 'model', 'ms', 'result', 'error']) assert.ok(k in l, `step log has ${k}`)
   assert.equal(store.byType('run_log').length, 0, 'no run_log for successful steps')
   assert.equal(store.byType('brief').length, 1)
@@ -148,8 +148,8 @@ test('a loop.route event for every decision, with the reason and counters; cance
   const routes = replay('R-route').filter((e) => e.type === 'loop.route')
   assert.deepEqual(routes.map((e) => [e.data.action, e.data.send_to]), [['revise', 'writer'], ['approve', null]])
   assert.match(routes[0].message, /^send_to writer: fix for writer$/)
-  assert.deepEqual(routes[0].data.counters, { writerRevisions: 0, rebriefs: 0, scoutRetries: 0, rounds: 0 })
-  assert.deepEqual(routes[1].data.counters, { writerRevisions: 1, rebriefs: 0, scoutRetries: 0, rounds: 1 })
+  assert.deepEqual(routes[0].data.counters, { writerRevisions: 0, rebriefs: 0, scoutRetries: 0, designerRevisions: 0, rounds: 0 })
+  assert.deepEqual(routes[1].data.counters, { writerRevisions: 1, rebriefs: 0, scoutRetries: 0, designerRevisions: 0, rounds: 1 })
   const ac = new AbortController()
   const c = scripted([fail('writer')])
   const reviewer = c.agents.reviewer
@@ -259,4 +259,45 @@ test('B1: a pass → draft and brief awaiting_human (one waiting draft per brief
   const ev = replay('R-wait')
   assert.deepEqual(ev.find((e) => e.type === 'approval.waiting').data, { brief_id: B, version: 2, total: 87 })
   assert.equal(ev.find((e) => e.type === 'step.output' && e.step === 'approval').message, 'Awaiting human approval')
+})
+
+test('Phase 10 C4: design-only "must" items re-run the Experience Designer; with text items they never reach the Writer', () => {
+  const lim = { ...limits, maxDesignerRevisions: 2 }
+  const design = { area: 'experience', quote: 'Tap to approve', problem: 'The demo label is unclear.', fix: 'Name the action.', severity: 'must', send_to: 'designer', claims: [] }
+  const designShould = { ...design, problem: 'Hero line is long.', severity: 'should' }
+  const r = decideAfterReview({ pass: false, total: 70, feedback: [design, designShould] }, counters(), lim)
+  assert.equal(r.action, 'redesign')
+  assert.equal(r.send_to, 'designer')
+  assert.deepEqual(r.feedback.map((f) => f.problem), ['The demo label is unclear.', 'Hero line is long.'])
+  assert.match(decideAfterReview({ pass: false, total: 70, feedback: [design] }, counters({ designerRevisions: 2 }), lim).reason, /MAX_DESIGNER_REVISIONS \(2\)/)
+  // Text and design together: the Writer revises with the text items only (the design items wait for the next design run).
+  const mixed = decideAfterReview({ pass: false, total: 70, feedback: [it('writer'), design, designShould] }, counters(), lim)
+  assert.equal(mixed.action, 'revise')
+  assert.ok(mixed.feedback.every((f) => f.problem !== design.problem && f.problem !== designShould.problem))
+  const rescout = decideAfterReview({ pass: false, total: 70, feedback: [it('scout'), design] }, counters(), lim)
+  assert.equal(rescout.action, 'rescout')
+  assert.ok(rescout.feedback.every((f) => f.problem !== design.problem), 'design items are not sent to the Writer after the Scout')
+})
+
+test('Phase 10 C4: a design-only fail re-runs the Experience Designer (not the Writer) with the feedback, then the Reviewer sees the new guide', async () => {
+  resetEvents()
+  const s = scripted([fail('designer'), { pass: true, total: 90, feedback: [] }])
+  const designCalls = []
+  const reviewedGuides = []
+  const guide = (n) => ({ chapters: [{ components: [{ type: 'prose' }, { type: 'approve_demo' }] }], n })
+  s.agents.designer = async (ctx) => {
+    s.calls.push('designer')
+    designCalls.push(ctx.designFeedback.map((f) => f.problem))
+    return { model: 'stub', output: { status: 'ok', guide: guide(designCalls.length), dropped: [], summary_line: `guide ${designCalls.length}`, warnings: [] } }
+  }
+  const review = s.agents.reviewer
+  s.agents.reviewer = async (ctx) => { reviewedGuides.push(ctx.guideDoc?.n ?? null); return review(ctx) }
+  const r = await withRun('R-redesign', () => runPipeline({ config: fakeConfig({ DRY_RUN: 'true' }), store: memoryStore(), notifier: fakeNotifier(), agents: s.agents }))
+  assert.equal(r.state, 'awaiting_human')
+  assert.deepEqual(s.calls.filter((c) => c === 'writer' || c === 'designer'), ['writer', 'designer', 'designer'])
+  assert.deepEqual(designCalls, [[], ['fix for designer']])
+  assert.deepEqual(reviewedGuides, [1, 2])
+  const routes = replay('R-redesign').filter((e) => e.type === 'loop.route')
+  assert.deepEqual(routes.map((e) => [e.data.action, e.data.send_to]), [['redesign', 'designer'], ['approve', null]])
+  assert.equal(routes[1].data.counters.designerRevisions, 1)
 })

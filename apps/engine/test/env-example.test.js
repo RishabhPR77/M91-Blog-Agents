@@ -11,7 +11,7 @@ const entries = Object.fromEntries(example.split(/\r?\n/).filter((l) => /^[A-Z0-
 
 function keysReadByConfig() {
   const keys = new Set([...source.matchAll(/(?:str|int|bool|url|oneOf|num|list)\('([A-Z0-9_]+)'/g)].map((m) => m[1]))
-  for (const a of [...AGENTS, 'designer']) for (const s of ['_AI_SERVICE', '_AI_MODEL', '_DELIVERY']) keys.add(a.toUpperCase() + s)
+  for (const a of [...AGENTS, 'experience']) for (const s of ['_AI_SERVICE', '_AI_MODEL', '_DELIVERY']) keys.add(a.toUpperCase() + s)
   return keys
 }
 
@@ -34,16 +34,19 @@ test('the defaults written in env.example are valid config values', () => {
   assert.doesNotThrow(() => loadConfig(env))
 })
 
-test('Phase 3.5 keys: designer validated, blog settings, dashboard password only with auth', () => {
+test('Phase 3.5 keys: the Experience Designer (Phase 10) validated, promo off, blog settings, dashboard password only with auth', () => {
   const c = loadConfig(fakeEnv())
-  assert.deepEqual(c.designer, { service: 'openai', model: 'gpt-5.6-luna', delivery: 'sync', maxInteractiveBlocks: 6, maxRepairs: 1, interactiveDefault: true })
-  assert.throws(() => loadConfig(fakeEnv({ DESIGNER_MAX_INTERACTIVE_BLOCKS: '21' })), /DESIGNER_MAX_INTERACTIVE_BLOCKS/)
+  assert.deepEqual(c.designer, { service: 'anthropic', model: 'claude-sonnet-4-6', delivery: 'rtlayer', maxRepairs: 1, maxComponents: 10, interactiveDefault: true })
+  assert.equal(c.promo.enabled, false)
+  assert.equal(c.limits.maxDesignerRevisions, 2)
+  assert.throws(() => loadConfig(fakeEnv({ EXPERIENCE_MAX_COMPONENTS: '31' })), /EXPERIENCE_MAX_COMPONENTS/)
+  assert.throws(() => loadConfig(fakeEnv({ PROMO_ENABLED: 'maybe' })), /PROMO_ENABLED/)
   assert.throws(() => loadConfig(fakeEnv({ INTERACTIVE_DEFAULT: 'maybe' })), /INTERACTIVE_DEFAULT/)
-  assert.equal(loadConfig(fakeEnv({ INTERACTIVE_DEFAULT: 'false', DESIGNER_MAX_REPAIRS: '0' })).designer.interactiveDefault, false)
+  assert.equal(loadConfig(fakeEnv({ INTERACTIVE_DEFAULT: 'false', EXPERIENCE_MAX_REPAIRS: '0' })).designer.interactiveDefault, false)
   assert.deepEqual(c.blog, { appName: 'm91-blog', baseUrl: 'https://m91-blog.embarko.app', embarkoDeployToken: undefined, noindexFirstNPosts: 10, embarkoApiBase: 'https://ship.embarko.ai', embarkoAgentName: 'm91-blog-engine', buildTimeoutMs: 300000, publishVerifyTimeoutMs: 120000 })
   assert.equal(c.dashboard.port, 5173)
   assert.equal(c.schedule, undefined, 'no scheduler for now')
   assert.equal(c.publish, undefined)
-  assert.throws(() => loadConfig(fakeEnv({ DESIGNER_AI_MODEL: 'gpt-99' })), /DESIGNER_AI_MODEL/)
+  assert.throws(() => loadConfig(fakeEnv({ EXPERIENCE_AI_MODEL: 'gpt-99' })), /EXPERIENCE_AI_MODEL/)
   assert.throws(() => loadConfig(fakeEnv({ BLOG_BASE_URL: 'not a url' })), /BLOG_BASE_URL/)
 })

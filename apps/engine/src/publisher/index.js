@@ -12,8 +12,8 @@ import { emit, throwIfCancelled, isCancel } from '../events.js'
 import { loadBrief } from '../writer/inputs.js'
 import { draftsOf, draftVersion, draftBriefVersion } from '../writer/save.js'
 import { buildPost, planDocsRewrite } from './post.js'
-import { chooseBlocks } from './blocks.js'
-import { isInteractive, latestBlockDoc } from '../designer/index.js'
+import { chooseBlocks, chooseGuide, latestBlockDoc } from './blocks.js'
+import { isInteractive, latestGuideDoc } from '../experience/index.js'
 import { bodyMarkdown } from '../designer/parts.js'
 import { exportPublished, BLOG_DIR, CONTENT_DIR } from './export.js'
 import { runBlogBuild, checkBuild } from './build.js'
@@ -121,14 +121,19 @@ export function createPublisher({ config, store, notifier, fetch = globalThis.fe
     const briefRec = await loadBrief(store, briefId, draftBriefVersion(draft))
     if (!briefRec) throw new PublishError('unknown_brief', `no brief ${briefId}`, 404)
     const published = await store.getRecords({ type: 'published_post' })
-    // Phase 8: the interactive blocks from the newest block_doc of this version (a republish reuses it: no AI).
+    // Phase 10: the guide from the newest guide_doc of this version; without one, the Phase 8 blocks (older
+    // posts). A republish reuses them: no AI.
     const interactive = isInteractive(draft, config)
-    const doc = interactive ? await latestBlockDoc(store, briefId, draftVersion(draft)) : null
-    const chosen = chooseBlocks({ interactive, doc, markdown: bodyMarkdown(draft.payload?.post_markdown) })
+    const body = bodyMarkdown(draft.payload?.post_markdown)
+    const guideDoc = interactive ? await latestGuideDoc(store, briefId, draftVersion(draft), draftBriefVersion(draft)) : null
+    const pickedGuide = chooseGuide({ interactive, doc: guideDoc, markdown: body })
+    if (pickedGuide.warning) warnings.push(pickedGuide.warning)
+    const doc = interactive && !pickedGuide.guide ? await latestBlockDoc(store, briefId, draftVersion(draft)) : null
+    const chosen = pickedGuide.guide ? { blocks: null, note: pickedGuide.note } : chooseBlocks({ interactive, doc, markdown: body })
     if (chosen.warning) warnings.push(chosen.warning)
     // Old M91 docs links: each new address is checked once with a GET (cache for this run); only 200s move.
     const docsPlan = await planDocsRewrite(draft.payload?.post_markdown, { fetch, cache: new Map(), timeoutMs: config.scout?.urlCheckTimeoutMs ?? 10000 })
-    const { post, existing, warnings: postWarnings } = buildPost({ draft, briefId, brief: briefRec.payload, published, config, now, istIso, blocks: chosen.blocks, docsPlan })
+    const { post, existing, warnings: postWarnings } = buildPost({ draft, briefId, brief: briefRec.payload, published, config, now, istIso, blocks: chosen.blocks, guide: pickedGuide.guide, docsPlan })
     warnings.push(...postWarnings)
     for (const w of postWarnings) log.warn('publisher', { briefId, warning: w })
     const test = draft.metadata?.test === true || briefRec.metadata?.test === true

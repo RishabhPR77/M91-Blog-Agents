@@ -97,14 +97,14 @@ ${u}`,
     }
   },
 
-  // Phase 8: a Designer that chose no interactive block (tests), shaped like runDesigner's output. No AI call.
+  // Phase 10: an Experience Designer that built no guide (tests), shaped like runExperience's output. No AI call.
   async designer(ctx = {}) {
     return {
       model: STUB_MODEL,
       output: {
-        brief_id: ctx.briefId ?? null, version: ctx.draft?.version ?? null, status: 'ok', blocks: null, layout: null, kept: [], dropped: [],
-        integrity: { passed: true, details: [] }, record_id: null, model_used: STUB_MODEL, repairs_used: 0, warnings: [], calls: [],
-        summary_line: 'no interactive blocks · integrity passed', error: null
+        brief_id: ctx.briefId ?? null, version: ctx.draft?.version ?? null, status: 'fallback', guide: null, dropped: [],
+        coverage: { passed: true, details: [] }, checks: { first: [], final: [], problems: [] }, record_id: null, model_used: STUB_MODEL,
+        repairs_used: 0, warnings: [], calls: [], summary_line: 'no guide (the post is shown as written): stub', error: 'stub'
       }
     }
   }

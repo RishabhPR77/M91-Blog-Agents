@@ -213,7 +213,7 @@ test('orchestrator: Scout stub → real Strategist → Writer stub; a pass marks
   const agents = { ...defaultAgents({ config: cfg, store, notifier, agentDeps: { aiSend: fakeAi(), now } }), scout: stubAgents.scout, writer: stubAgents.writer, reviewer: mockReviewer() }
   const r = await runPipeline({ config: cfg, store, notifier, agents, now, briefId: '261017-1405-ABCD' })
   assert.equal(r.state, 'awaiting_human')
-  assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 4), ['scout', 'strategist', 'writer', 'reviewer'])
+  assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 5), ['scout', 'strategist', 'writer', 'designer', 'reviewer'])
   const brief = recordsOf(store, 'brief')
   assert.equal(brief.length, 1)
   assert.equal(brief[0].status, 'awaiting_human')

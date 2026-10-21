@@ -12,7 +12,7 @@
 // npm run lessons -- --list | --delete <memory_id>
 // npm run reviewer -- --brief-id=<id> [--version=<n>] [--brief-version=<n>] [--route]
 // npm run promo -- --brief-id=<id> [--version=<n>]
-// npm run designer -- --brief-id=<id> [--version=<n>]   the Designer for an approved or published draft (1–2 AI calls)
+// npm run designer -- --brief-id=<id> [--version=<n>]   the Experience Designer alone, on a waiting, approved or published draft (1–2 AI calls)
 // npm run test:await -- --brief-id=<id> [--version=<n>]   TEST-ONLY, needs ALLOW_TEST_COMMANDS=true
 // npm run publish -- --brief-id=<id> · unpublish -- --slug=<slug> · set-index -- --slug=<slug> --noindex=true|false · rebuild-blog
 // npm run blog:sync   (published posts from Mem0 → apps/blog/src/content/posts; no build, no deploy)
@@ -112,17 +112,18 @@ export async function startAndWait(config, { mode, params = {}, dryRun, engineUr
   return manager.wait(run_id)
 }
 
-/** The Designer's result: the blocks it kept (with why), dropped segments (with reasons), integrity, calls. */
+/** The Experience Designer's result: chapters and components, what was dropped (with reasons), checks, calls. */
 export function printDesigner(d, print = console.log) {
-  print(`--- Designer for ${d.brief_id} v${d.version} · ${d.status} · ${d.model_used} · repairs ${d.repairs_used} · block_doc ${d.record_id} ---`)
+  print(`--- Experience Designer for ${d.brief_id} v${d.version} · ${d.status} · ${d.model_used} · repairs ${d.repairs_used} · guide_doc ${d.record_id} ---`)
   print(d.summary_line)
-  print(`KEPT (${d.kept.length})`)
-  for (const k of d.kept) print(`  ${k.block_type} ${k.part_ids.join(',')}: ${k.why}`)
-  print(`DROPPED (${d.dropped.length})`)
-  for (const x of d.dropped) print(`  ${x.block_type} ${x.part_ids.join(',')}: ${x.reason}`)
-  print(`INTEGRITY ${d.integrity?.passed ? 'passed' : 'FAILED'}${d.integrity?.details?.length ? `: ${d.integrity.details.join(' | ')}` : ''}`)
-  print(`BLOCKS ${d.blocks ? d.blocks.map((b) => `${b.id} ${b.type}`).join(' · ') : 'none (the post stays plain Markdown)'}`)
-  if (d.error) print(`FALLBACK: ${d.error}`)
+  if (d.guide) {
+    for (const c of d.guide.chapters) print(`  ${String(c.number).padStart(2, '0')} — ${c.label}: ${c.components.map((x) => x.type).join(', ')}`)
+  }
+  print(`DROPPED (${d.dropped?.length ?? 0})`)
+  for (const x of d.dropped ?? []) print(`  ${x.type ?? 'component'} (chapter ${x.chapter}): ${x.reason}`)
+  print(`COVERAGE ${d.coverage?.passed ? 'passed' : 'FAILED'}${d.coverage?.details?.length ? `: ${d.coverage.details.join(' | ')}` : ''}`)
+  print(`CHECKS first answer ${d.checks?.first?.length ?? 0} problem(s) · final ${d.checks?.final?.length ?? 0}`)
+  if (d.error) print(`NO GUIDE: ${d.error}`)
 }
 
 /** A review in full: gates and areas with evidence, total, feedback with quote_found, sources, lessons. */

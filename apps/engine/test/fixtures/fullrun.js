@@ -16,6 +16,7 @@ import { fakeAi as scoutAi, fakeWeb, fakeChecker, LLMS } from '../scout/fixtures
 import { seededStore, fakeAi as strategistAi, CTA } from '../strategist/fixtures.js'
 import { fakeAi as writerAi, draftAnswer, GOOD_MD } from '../writer/fixtures.js'
 import { fakeReviewerAi, reviewAnswer, item } from '../reviewer/fixtures.js'
+import { plainPlan } from './plain-plan.js'
 
 const NOW = Date.parse('2026-10-17T08:35:00Z')
 const STEPS = ['scout', 'strategist', 'writer', 'checks', 'reviewer', 'promo', 'designer', 'publisher']
@@ -127,7 +128,8 @@ export async function measureFullRun(env = {}, { decisions = false } = {}) {
   const quote = GOOD_MD.split('\n').find((l) => l.startsWith('Agent approval means')).split('. ')[0] + '.'
   ai.reviewer = fakeReviewerAi([reviewAnswer({ scores: { simplicity: 5 }, feedback: [item({ quote, severity: 'must' })] }), reviewAnswer()])
   ai.promo = async (opts) => done(opts, PACK)
-  ai.designer = async (opts) => done(opts, { segments: [], notes: 'plain post' })
+  // Phase 10: the Experience Designer gets a plain guide (one chapter per H2, all prose) for every draft.
+  ai.designer = async (opts) => done(opts, plainPlan(GOOD_MD, draftAnswer().title))
   const calls = { scout: 0, strategist: 0, writer: 0, reviewer: 0 }
   const aiSend = async (opts) => {
     const agent = opts.agent ?? String(opts.threadId).split('-')[0]

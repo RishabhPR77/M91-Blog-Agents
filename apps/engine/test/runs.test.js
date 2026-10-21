@@ -44,7 +44,7 @@ test('full run: run_id format, separate brief_id, run record lifecycle, events, 
   assert.equal(p.mode, 'full')
   assert.equal(p.dry_run, false)
   assert.ok(p.finished_at && p.ms >= 0)
-  assert.deepEqual(p.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['reviewer', 'succeeded']])
+  assert.deepEqual(p.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['designer', 'succeeded'], ['reviewer', 'succeeded']])
   assert.match(p.brief_id, BRIEF_ID_RE)
   assert.notEqual(p.brief_id, run_id)
   // Phase 9 A2: saved at the start (create), when the run waits for approval, and at the end; not per step.

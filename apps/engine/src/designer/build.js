@@ -197,6 +197,20 @@ const BUILDERS = {
 }
 
 /**
+ * One block's data from parts, by its builder's pattern (Phase 10: the Experience Designer reuses these for the
+ * guide components that hold the Writer's text). Returns { ok: true, data } or { ok: false, reason }.
+ */
+export function buildFromParts(type, parts, seg, md) {
+  if (!BUILDERS[type]) return { ok: false, reason: `no builder for "${type}"` }
+  try {
+    return { ok: true, data: BUILDERS[type](parts, seg, md) }
+  } catch (error) {
+    if (error instanceof PatternError) return { ok: false, reason: error.message }
+    throw error
+  }
+}
+
+/**
  * Builds the post's blocks from a plan.
  * @param {{ segments: object[] }} plan  the Designer's plan (section 7.3)
  * @param {{ markdown: string, parts: object[] }} parsed  from parseParts()

@@ -1,5 +1,6 @@
 // Pipeline state machine: new → drafting → reviewing → (revising) → approved | failed.
-// Reviewer routing by send_to (writer | strategist | scout) with per-route limits and a hard cap on rounds.
+// Reviewer routing by send_to (writer | strategist | scout | designer) with per-route limits and a hard cap on rounds.
+// Phase 10: after each draft the Experience Designer builds the guide; the Reviewer reviews the whole guide.
 
 import { getConfig } from './config.js'
 import { log } from './util/log.js'
@@ -11,7 +12,7 @@ import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
 import { runReviewer } from './reviewer/index.js'
 import { runPromo } from './promo/index.js'
-import { runDesigner } from './designer/index.js'
+import { runExperience, isInteractive } from './experience/index.js'
 import { loadBrief } from './writer/inputs.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { draftVersion, draftBriefVersion } from './writer/save.js'
@@ -50,7 +51,9 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
       const facts = (ctx.leads?.dry_run_records?.m91_facts ?? []).find((r) => r.status === 'current')?.payload
       const output = await runReviewer({
         briefId: ctx.briefId, runId: ctx.runId, version: ctx.draft?.version, briefVersion: ctx.draft?.brief_version ?? ctx.briefVersion,
-        draft: dry ? inMemoryDraft(ctx) : null, brief: ctx.brief, previousReview: dry ? ctx.review : null, facts, sourcePack: ctx.sourcePack
+        draft: dry ? inMemoryDraft(ctx) : null, brief: ctx.brief, previousReview: dry ? ctx.review : null, facts, sourcePack: ctx.sourcePack,
+        // The guide just built (null: no guide, the post is reviewed as written; undefined: load the newest).
+        guideDoc: ctx.guideDoc === undefined ? undefined : ctx.guideDoc
       }, deps)
       return { model: output.model_used ?? config.reviewer.model, output }
     },
@@ -59,9 +62,14 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
       const output = await runPromo({ briefId: ctx.briefId, runId: ctx.runId, version: ctx.draft?.version, briefVersion: ctx.draft?.brief_version ?? ctx.briefVersion, draft: dry ? inMemoryDraft(ctx) : null, brief: ctx.brief }, deps)
       return { model: output.model_used ?? config.promo.model, output }
     },
+    // Phase 10: the Experience Designer (step "designer"), on the draft just written, with design feedback if any.
     async designer(ctx) {
       const dry = config.runtime.dryRun
-      const output = await runDesigner({ briefId: ctx.briefId, runId: ctx.runId, version: ctx.draft?.version, draft: dry ? inMemoryDraft(ctx) : null, brief: ctx.brief }, deps)
+      const facts = (ctx.leads?.dry_run_records?.m91_facts ?? []).find((r) => r.status === 'current')?.payload
+      const output = await runExperience({
+        briefId: ctx.briefId, runId: ctx.runId, version: ctx.draft?.version, briefVersion: ctx.draft?.brief_version ?? ctx.briefVersion,
+        draft: dry ? inMemoryDraft(ctx) : null, brief: ctx.brief, facts, feedback: ctx.designFeedback ?? []
+      }, deps)
       return { model: output.model_used ?? config.designer.model, output }
     },
     async strategist(ctx) {
@@ -111,9 +119,14 @@ export function summariseOutput(agent, out) {
   }
   if (out.placeholder) return { message: out.message, data: { placeholder: true } }
   if (agent === 'designer' && out.summary_line) {
+    const comps = out.guide ? out.guide.chapters.flatMap((c) => c.components).filter((x) => x.type !== 'prose') : []
     return {
       message: out.summary_line,
-      data: { record_id: out.record_id ?? null, status: out.status, blocks: out.kept?.length ?? 0, dropped: out.dropped?.length ?? 0, integrity: out.integrity?.passed ?? null, repairs_used: out.repairs_used ?? 0 }
+      data: {
+        record_id: out.record_id ?? null, status: out.status, chapters: out.guide?.chapters.length ?? 0, components: comps.map((x) => x.type),
+        dropped: (out.dropped ?? []).map((d) => ({ type: d.type, chapter: d.chapter, reason: d.reason })), coverage: out.coverage?.passed ?? null,
+        checks: { first: out.checks?.first?.length ?? 0, final: out.checks?.final?.length ?? 0 }, repairs_used: out.repairs_used ?? 0
+      }
     }
   }
   if (agent === 'publisher' && out.summary) return { message: out.summary, data: { url: out.url ?? null, dist: out.dist ?? null } }
@@ -148,11 +161,13 @@ function writerItems(must, should, maxItems) {
 
 /**
  * What to do after a review (Phase 5 brief, C1), from the review's "must" items, in this order:
- * strategist (re-brief) → scout (sources for claims) → writer (revise) → fail. Fallbacks: strategist
+ * strategist (re-brief) → scout (sources for claims) → writer (revise) → designer (design only) → fail. Fallbacks: strategist
  * items with no re-briefs left go to the Writer as "must" items; scout items with no retries left go
  * to the Writer with UNVERIFIED_FIX. Every route is one round towards MAX_AI_ROUNDS_PER_POST.
  * counters: { writerRevisions, rebriefs, scoutRetries, rounds }; limits: config.limits + feedbackMaxItems.
- * Returns { action: 'approve'|'rebrief'|'rescout'|'revise'|'fail', send_to, reason, feedback?, claims? }.
+ * Returns { action: 'approve'|'rebrief'|'rescout'|'revise'|'redesign'|'fail', send_to, reason, feedback?, claims? }.
+ * Design items (send_to "designer") never go to the Writer: alone they re-run the Experience Designer
+ * (MAX_DESIGNER_REVISIONS); with text items they wait for the Experience Designer run after the revision.
  */
 export function decideAfterReview(review, counters, limits) {
   if (review?.pass === true) return { action: 'approve', send_to: null, reason: `pass (${review.total ?? review.score ?? '?'})` }
@@ -165,19 +180,27 @@ export function decideAfterReview(review, counters, limits) {
   const maxItems = limits.feedbackMaxItems ?? 8
   const strat = must.filter((f) => f.send_to === 'strategist')
   const scout = must.filter((f) => f.send_to === 'scout' && f.claims?.length)
+  const design = must.filter((f) => f.send_to === 'designer')
+  const text = must.filter((f) => f.send_to !== 'designer')
   const why = (items) => items.map((f) => f.problem).filter(Boolean).slice(0, 2).join('; ')
 
   if (strat.length && counters.rebriefs < limits.maxStrategistRebriefs) {
     return { action: 'rebrief', send_to: 'strategist', reason: why(strat), feedback: strat }
   }
   if (scout.length && counters.scoutRetries < limits.maxScoutRetries) {
-    return { action: 'rescout', send_to: 'scout', reason: why(scout), claims: [...new Set(scout.flatMap((f) => f.claims))], feedback: writerItems(must, should, maxItems) }
+    return { action: 'rescout', send_to: 'scout', reason: why(scout), claims: [...new Set(scout.flatMap((f) => f.claims))], feedback: writerItems(text, should.filter((f) => f.send_to !== 'designer'), maxItems) }
   }
+  // Phase 10: only the design needs work: re-run the Experience Designer with its items (cheaper than a revision).
+  if (design.length && !text.length && (counters.designerRevisions ?? 0) < (limits.maxDesignerRevisions ?? 0)) {
+    return { action: 'redesign', send_to: 'designer', reason: why(design), feedback: [...design, ...should.filter((f) => f.send_to === 'designer')].slice(0, maxItems) }
+  }
+  if (!text.length && design.length) return { action: 'fail', send_to: null, reason: `hit MAX_DESIGNER_REVISIONS (${limits.maxDesignerRevisions})` }
   if (counters.writerRevisions < limits.maxWriterRevisions) {
     // Limits reached upstream: those items go to the Writer instead.
-    const fallback = must.map((f) => (f.send_to === 'scout' ? { ...f, fix: [f.fix, UNVERIFIED_FIX].filter(Boolean).join(' ') } : f))
+    // Design items stay with the Experience Designer (it runs again after the revision, with them).
+    const fallback = text.map((f) => (f.send_to === 'scout' ? { ...f, fix: [f.fix, UNVERIFIED_FIX].filter(Boolean).join(' ') } : f))
     const notes = [strat.length && 'strategist items to the Writer (no re-briefs left)', scout.length && 'unsourced claims to the Writer (no Scout retries left)'].filter(Boolean)
-    return { action: 'revise', send_to: 'writer', reason: [why(must) || 'score below the pass mark', ...notes].join(' · '), feedback: writerItems(fallback, should, maxItems) }
+    return { action: 'revise', send_to: 'writer', reason: [why(must) || 'score below the pass mark', ...notes].join(' · '), feedback: writerItems(fallback, should.filter((f) => f.send_to !== 'designer'), maxItems) }
   }
   return { action: 'fail', send_to: null, reason: `hit MAX_WRITER_REVISIONS (${limits.maxWriterRevisions})` }
 }
@@ -198,7 +221,7 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   agents ??= defaultAgents({ config, store, notifier })
   const limits = config.limits
   const dryRun = config.runtime.dryRun
-  const counters = { writerRevisions: 0, rebriefs: 0, scoutRetries: 0, rounds: 0 }
+  const counters = { writerRevisions: 0, rebriefs: 0, scoutRetries: 0, designerRevisions: 0, rounds: 0 }
   const steps = []
   let state = 'new'
   let version = 0
@@ -209,10 +232,14 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   let briefVersion = 0
   let routeFeedback = null
   let routeClaims = null
+  // Phase 10: the guide of the current draft (null: none, the post is reviewed as written; undefined: not built in
+  // this run, the Reviewer loads the newest) and the design feedback for the next Experience Designer run.
+  let guideDoc
+  let designFeedback = []
   let best = null
   let reviews = 0
   const warnings = []
-  const ctx = () => ({ runId, briefId, version, round: counters.rounds, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, writerMode, routeFeedback, routeClaims, config })
+  const ctx = () => ({ runId, briefId, version, round: counters.rounds, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, writerMode, routeFeedback, routeClaims, guideDoc, designFeedback, config })
 
   const setState = (to) => {
     state = assertTransition(state, to)
@@ -248,6 +275,27 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
       else emit('step.failed', { agent, step: agent, message: error.message, data: { ms: now() - started } })
       throw error
     }
+  }
+
+  // The Experience Designer on the current draft, if the post is interactive. It never fails the run: an error
+  // means no guide (the post is reviewed and published as written).
+  async function design() {
+    const latest = draft?.record_id ? (await store.getRecords({ type: 'draft', brief_id: briefId })).find((d) => d.id === draft.record_id) : null
+    if (!isInteractive(latest ?? { metadata: {} }, config)) {
+      guideDoc = null
+      emit('step.output', { agent: 'designer', step: 'designer', message: 'Interactive guides are off for this post: the Experience Designer did not run', data: { placeholder: true } })
+      return
+    }
+    try {
+      const out = await step('designer', ctx())
+      guideDoc = out?.status === 'ok' && out.guide ? out.guide : null
+      warnings.push(...(out?.warnings ?? []))
+    } catch (error) {
+      if (isCancel(error, signal)) throw error
+      guideDoc = null
+      warnings.push(`Experience Designer failed (no guide for this version): ${error.message}`)
+    }
+    designFeedback = []
   }
 
   async function research() {
@@ -300,6 +348,10 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
         writerMode = 'revise'
         routeFeedback = resume.feedback ?? []
       }
+      if (resume.startAt === 'designer') {
+        // Phase 10 C5 ("Change the design"): only the Experience Designer runs again, with the human's feedback.
+        designFeedback = resume.feedback ?? []
+      }
     } else {
       await research()
       await plan()
@@ -307,6 +359,7 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     setState('drafting')
 
     let skipWriter = Boolean(resume) && resume.startAt !== 'writer'
+    let redesign = resume?.startAt === 'designer'
     let skipReview = Boolean(resume?.skipReview)
     for (;;) {
       if (skipWriter) skipWriter = false
@@ -316,6 +369,11 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
         // The real Writer saves its own draft (and numbers it); a stub's draft is saved here.
         if (draft?.record_id) version = draft.version
         else await store.createRecord({ type: 'draft', briefId, payload: draft, status: 'drafted', version, topicGroup: brief?.topic_group ?? null })
+        redesign = true
+      }
+      if (redesign) {
+        redesign = false
+        await design()
       }
       setState('reviewing')
       if (skipReview) {
@@ -352,6 +410,13 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
       if (decision.action === 'revise') {
         counters.writerRevisions++
         writerMode = 'revise'
+        designFeedback = (review?.feedback ?? []).filter((f) => typeof f === 'object' && f.send_to === 'designer')
+      }
+      if (decision.action === 'redesign') {
+        counters.designerRevisions++
+        designFeedback = decision.feedback ?? []
+        skipWriter = true
+        redesign = true
       }
       if (decision.action === 'rebrief') {
         counters.rebriefs++

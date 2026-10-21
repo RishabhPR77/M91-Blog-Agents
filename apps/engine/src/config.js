@@ -72,9 +72,11 @@ const DEFAULTS = {
   ALLOW_TEST_COMMANDS: 'false',
   // Phase 3.5: dashboard API
   DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', PORT: '8080',
-  // Designer (Phase 8) and blog + Embarko (Phase 7)
-  DESIGNER_AI_SERVICE: 'openai', DESIGNER_AI_MODEL: 'gpt-5.6-luna', DESIGNER_DELIVERY: 'sync',
-  DESIGNER_MAX_INTERACTIVE_BLOCKS: '6', DESIGNER_MAX_REPAIRS: '1', INTERACTIVE_DEFAULT: 'true',
+  // Phase 10: the Experience Designer (writes the guide's interactive parts, before the Reviewer); the promo
+  // pack is off unless PROMO_ENABLED=true. Blog + Embarko (Phase 7).
+  EXPERIENCE_AI_SERVICE: 'anthropic', EXPERIENCE_AI_MODEL: 'claude-sonnet-4-6', EXPERIENCE_DELIVERY: 'rtlayer',
+  EXPERIENCE_MAX_REPAIRS: '1', EXPERIENCE_MAX_COMPONENTS: '10', MAX_DESIGNER_REVISIONS: '2', INTERACTIVE_DEFAULT: 'true',
+  PROMO_ENABLED: 'false',
   BLOG_APP_NAME: 'm91-blog', BLOG_BASE_URL: 'https://m91-blog.embarko.app', NOINDEX_FIRST_N_POSTS: '10',
   // Phase 3: Strategist
   STRATEGIST_MAX_REPAIRS: '1', RECENT_BRIEFS_WINDOW: '10', TITLE_MAX_CHARS: '70', KEYWORD_MAX_WORDS: '6', OUTLINE_MIN_SECTIONS: '4',
@@ -278,6 +280,8 @@ export function loadConfig(env = process.env) {
     },
     promo: {
       ...agent('promo'),
+      // Phase 10: off by default (the code and tests stay; approving never runs it unless this is true)
+      enabled: bool('PROMO_ENABLED'),
       linkedinMaxChars: int('PROMO_LINKEDIN_MAX_CHARS', { min: 100, max: 3000 }),
       xPostMaxChars: int('PROMO_X_POST_MAX_CHARS', { min: 50, max: 280 })
     },
@@ -323,7 +327,9 @@ export function loadConfig(env = process.env) {
       maxWriterRevisions: int('MAX_WRITER_REVISIONS'),
       maxStrategistRebriefs: int('MAX_STRATEGIST_REBRIEFS'),
       maxScoutRetries: int('MAX_SCOUT_RETRIES'),
-      maxAiRoundsPerPost: int('MAX_AI_ROUNDS_PER_POST', { min: 1 })
+      maxAiRoundsPerPost: int('MAX_AI_ROUNDS_PER_POST', { min: 1 }),
+      // Phase 10: Reviewer feedback for the design only (send_to "designer") re-runs the Experience Designer
+      maxDesignerRevisions: int('MAX_DESIGNER_REVISIONS', { max: 10 })
     },
     content: {
       targetWordsMin: int('TARGET_WORDS_MIN', { min: 1 }),
@@ -353,11 +359,12 @@ export function loadConfig(env = process.env) {
       auth: dashboardAuth,
       password: str('DASHBOARD_PASSWORD', { required: dashboardAuth === true })
     },
-    // Phase 8: the Designer chooses interactive blocks (it never writes text).
+    // Phase 10: the Experience Designer turns each draft into an interactive guide (it writes short interface
+    // text only; the post's own text and code are placed by code). It runs before the Reviewer.
     designer: {
-      ...agent('designer'),
-      maxInteractiveBlocks: int('DESIGNER_MAX_INTERACTIVE_BLOCKS', { max: 20 }),
-      maxRepairs: int('DESIGNER_MAX_REPAIRS', { max: 3 }),
+      ...agent('experience'),
+      maxRepairs: int('EXPERIENCE_MAX_REPAIRS', { max: 3 }),
+      maxComponents: int('EXPERIENCE_MAX_COMPONENTS', { min: 1, max: 30 }),
       interactiveDefault: bool('INTERACTIVE_DEFAULT')
     },
     // Blog + Embarko, used from Phase 7. The deploy token is optional until then.
