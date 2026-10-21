@@ -28,10 +28,12 @@ export function buildEnv(env = process.env) {
  * Runs the blog build (node scripts/astro.mjs build in apps/blog). onLine(level, text) gets its warning and
  * error lines (trimmed). Resolves { ms, dist }; rejects with BlogBuildError on a failure or the timeout.
  */
-export function runBlogBuild({ blogDir = BLOG_DIR, timeoutMs, onLine = () => {}, spawnFn = spawn } = {}) {
+export function runBlogBuild({ blogDir = BLOG_DIR, timeoutMs, onLine = () => {}, spawnFn = spawn, outDir = null, extraEnv = {} } = {}) {
   return new Promise((resolve, reject) => {
     const started = Date.now()
-    const child = spawnFn(process.execPath, [join(blogDir, 'scripts', 'astro.mjs'), 'build'], { cwd: blogDir, env: buildEnv(), windowsHide: true })
+    // outDir / extraEnv: the page preview (Phase 10 D1) builds elsewhere, with its content folder and base path (no secrets).
+    const args = [join(blogDir, 'scripts', 'astro.mjs'), 'build', ...(outDir ? ['--outDir', outDir] : [])]
+    const child = spawnFn(process.execPath, args, { cwd: blogDir, env: { ...buildEnv(), ...extraEnv }, windowsHide: true })
     const tail = []
     const take = (chunk) => {
       for (const raw of String(chunk).split(/\r?\n/)) {
@@ -55,7 +57,7 @@ export function runBlogBuild({ blogDir = BLOG_DIR, timeoutMs, onLine = () => {},
     })
     child.on('close', (code) => {
       clearTimeout(timer)
-      if (code === 0) return resolve({ ms: Date.now() - started, dist: join(blogDir, 'dist') })
+      if (code === 0) return resolve({ ms: Date.now() - started, dist: outDir ?? join(blogDir, 'dist') })
       const reason = tail.filter((l) => /error|invalid|failed/i.test(l)).slice(-3).join(' | ') || tail.slice(-3).join(' | ')
       reject(new BlogBuildError(`the blog build failed (exit ${code}): ${reason.slice(0, 600)}`, { tail }))
     })

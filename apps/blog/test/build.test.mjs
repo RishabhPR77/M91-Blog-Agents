@@ -9,10 +9,10 @@ const root = resolve(import.meta.dirname, '..')
 const tmp = join(root, 'test', '.tmp')
 const SITE = 'https://m91-blog.embarko.app'
 
-function build(contentDir, outDir) {
+function build(contentDir, outDir, env = {}) {
   const r = spawnSync(process.execPath, [join(root, 'scripts', 'astro.mjs'), 'build', '--outDir', outDir], {
     cwd: root,
-    env: { ...process.env, BLOG_CONTENT_DIR: contentDir },
+    env: { ...process.env, BLOG_CONTENT_DIR: contentDir, ...env },
     encoding: 'utf8'
   })
   return { code: r.status, output: `${r.stdout}\n${r.stderr}` }
@@ -394,4 +394,24 @@ test('the sample guide is valid, uses every component and builds without warning
   assert.deepEqual(validatePost(sample), { valid: true, errors: [] })
   assert.deepEqual([...new Set(sample.guide.chapters.flatMap((c) => c.components.map((x) => x.type)))].sort(), [...GUIDE_COMPONENT_TYPES].sort())
   assert.ok(!/\[guide\] fixture-guide-post/.test(built.output))
+})
+
+test('Phase 10 D1: a page preview builds under /preview/<brief_id>/, every page noindex with a Preview badge, no sitemap', () => {
+  const content = join(tmp, 'content-preview')
+  mkdirSync(content, { recursive: true })
+  cpSync(join(root, 'test', 'fixtures', 'posts', 'fixture-guide-post.json'), join(content, 'fixture-guide-post.json'))
+  const out = join(tmp, 'dist-preview')
+  const r = build(content, out, { BLOG_PREVIEW_BASE: '/preview/261021-0937-JHTR/' })
+  assert.equal(r.code, 0, r.output.slice(-1500))
+  const html = read(out, 'posts/fixture-guide-post/index.html')
+  assert.match(html, /<meta name="robots" content="noindex, nofollow">/)
+  assert.match(html, /data-preview-badge>Preview · not published</)
+  const srcs = [...html.matchAll(/(?:src|href)="(\/[^"]*)"/g)].map((m) => m[1])
+  assert.ok(srcs.length > 3)
+  assert.deepEqual(srcs.filter((u) => !u.startsWith('/preview/261021-0937-JHTR/')), [], 'every local link and asset is under the preview path')
+  assert.ok(!existsSync(join(out, 'sitemap-index.xml')), 'no sitemap')
+  assert.match(read(out, 'index.html'), /<meta name="robots" content="noindex, nofollow">/)
+  const bad = build(content, join(tmp, 'dist-bad'), { BLOG_PREVIEW_BASE: '/elsewhere/' })
+  assert.notEqual(bad.code, 0)
+  assert.match(bad.output, /BLOG_PREVIEW_BASE must look like \/preview\/<brief_id>\//)
 })

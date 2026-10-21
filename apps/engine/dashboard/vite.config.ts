@@ -17,7 +17,8 @@ export default defineConfig({
     host: '127.0.0.1',
     port: uiPort,
     strictPort: true,
-    proxy: { '/api': { target: `http://127.0.0.1:${enginePort}`, changeOrigin: false } }
+    // /preview: the engine's page previews (Phase 10 D1), embedded on the approval screen.
+    proxy: { '/api': { target: `http://127.0.0.1:${enginePort}`, changeOrigin: false }, '/preview': { target: `http://127.0.0.1:${enginePort}`, changeOrigin: false } }
   },
   build: { outDir: 'dist', emptyOutDir: true, sourcemap: false },
   test: {

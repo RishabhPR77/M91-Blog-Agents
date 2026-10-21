@@ -30,6 +30,10 @@ The Live run page shows these as sub-steps of the `publisher` step:
 1. **build post**: the post JSON (format v1) from the approved draft: slug, description, TL;DR, tags,
    reading time, sources, related posts, noindex, canonical URL. The H1 line and the TL;DR block are
    removed from the Markdown (the page renders them itself). The `published_post` record goes `publishing`.
+   **Phase 10:** when the post is interactive, the newest `guide_doc` of this version goes in as `guide`, but
+   only if it was built from exactly this body (a hash is stored with it); otherwise the post goes out with its
+   Phase 8 blocks (older posts) or as plain Markdown, and the run gets a warning. Old site and old docs links
+   are fixed in the body, the blocks and the guide alike.
 2. **export**: every published post from Mem0 is written to `apps/blog/src/content/posts/`.
 3. **build blog**: `astro build` in `apps/blog`, run with a clean environment (no `.env` value reaches it),
    then safety checks on `dist/`: `index.html` and the post page exist, there is no `.env` file, and no file
@@ -51,6 +55,15 @@ The Live run page shows these as sub-steps of the `publisher` step:
 
 **DRY_RUN:** the blog is built locally in `apps/blog/dist` with the post included, and nothing is deployed,
 written to Mem0 or sent. Preview it with `npm run preview` in `apps/blog`.
+
+## Page preview (Phase 10)
+
+Before you approve, **Preview the page** on the approval screen builds the blog with only this draft (and
+its guide) into `apps/engine/data/previews/<brief_id>/` and shows it at
+`http://127.0.0.1:8080/preview/<brief_id>/`. It uses no AI and makes no Mem0 writes, deploys nothing, and every
+page is `noindex` with a "Preview · not published" badge. The page can only be framed by the dashboard. With
+`DASHBOARD_AUTH=true` it needs the dashboard login. The same link fixes as a publish run first (old docs links
+move only when the new page answers 200). One preview builds at a time, and never during a run (409).
 
 ## Republishing
 

@@ -8,7 +8,7 @@ import http from 'node:http'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
-import { extname, resolve, sep } from 'node:path'
+import { extname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pathToFileURL } from 'node:url'
 import { getConfig, ConfigError } from './config.js'
@@ -22,6 +22,7 @@ import { BRIEF_ID_RE } from './util/ids.js'
 import { reviewOfDraft, hardChecksPassed } from './approval.js'
 import { lessonText } from './lessons.js'
 import { isInteractive, latestGuideDoc } from './experience/index.js'
+import { buildPreview, readPreview, previewDir, PREVIEW_ROOT, PreviewError } from './publisher/preview.js'
 import { withMem0Count, mem0Requests } from './util/mem0count.js'
 import { createEngineIndex } from './engineindex.js'
 import { usageStatus, stopMessage } from './util/mem0usage.js'
@@ -154,6 +155,14 @@ export function resolveInside(dir, urlPath) {
   return file === root || file.startsWith(root + sep) ? file : null
 }
 
+async function isDir(p) {
+  try {
+    return (await stat(p)).isDirectory()
+  } catch {
+    return false
+  }
+}
+
 async function isFile(p) {
   try {
     return (await stat(p)).isFile()
@@ -202,8 +211,10 @@ const parseCookies = (header = '') => Object.fromEntries(header.split(';').map((
  *   `run` alone keeps the Phase 1 behaviour (POST /run runs it); with `manager`, /run and /api use the run manager.
  *   dashboardDir: the built dashboard (default dashboard/dist); null serves none.
  */
-export function createServer({ triggerKey, run, manager, store, config, now = Date.now, keepAliveMs = 15000, sessionMs = 12 * 3600 * 1000, dashboardDir = DEFAULT_DASHBOARD_DIR } = {}) {
+export function createServer({ triggerKey, run, manager, store, config, now = Date.now, keepAliveMs = 15000, sessionMs = 12 * 3600 * 1000, dashboardDir = DEFAULT_DASHBOARD_DIR, previewRoot = PREVIEW_ROOT, previewDeps = {} } = {}) {
   let legacyRunning = null
+  // Phase 10 D1: one page preview build at a time (it uses the blog's build folder like the Publisher).
+  let previewBuilding = null
   // Phase 9 A4: every API read goes through the engine's index (0 Mem0 requests once a type is loaded),
   // and the run manager's checks and runs start from it too.
   if (store && !store.isIndex) store = createEngineIndex(store, { config, now })
@@ -250,6 +261,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       },
       review: review && { total: review.total, pass: review.pass, gates: review.gates, areas: review.areas, feedback: review.feedback, summary: review.summary, sources_checked: review.sources_checked },
       checks: p.checks?.results ?? [],
+      // Phase 10 D1: the page preview built for this brief, if any (read from disk, no Mem0).
+      preview: readPreview(briefId, previewRoot),
       // Counter prompts used for this brief: writing changes (human_feedback) and design changes (C5).
       revisions_used: drafts.filter((x) => x.payload?.human_feedback).length + drafts.reduce((n, x) => n + (x.payload?.design_feedback?.length ?? 0), 0),
       interactive: config?.designer ? {
@@ -411,6 +424,30 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       return
     }
 
+    // Phase 10 D1: the page preview of a brief's newest draft. POST builds it (no AI, nothing saved or deployed);
+    // GET returns what was built. It is served at /preview/<brief_id>/.
+    if (seg[1] === 'approvals' && seg[2] && seg[3] === 'preview' && seg.length === 4) {
+      const briefId = seg[2]
+      if (!BRIEF_ID_RE.test(briefId)) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')
+      if (method === 'GET') {
+        const m = readPreview(briefId, previewRoot)
+        return m ? send(res, 200, m) : fail(res, 404, 'not_found', `no preview of ${briefId} yet`)
+      }
+      if (method === 'POST') {
+        if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: build the preview when it has finished')
+        if (previewBuilding) throw new ApiError(409, 'preview_in_progress', `a preview of ${previewBuilding} is being built`)
+        previewBuilding = briefId
+        try {
+          return send(res, 200, await buildPreview({ briefId, store, config, now, root: previewRoot, ...previewDeps }))
+        } catch (error) {
+          if (error instanceof PreviewError) throw new ApiError(error.status, error.code, error.message)
+          throw new ApiError(500, 'preview_failed', `the preview could not be built: ${error.message}`)
+        } finally {
+          previewBuilding = null
+        }
+      }
+    }
+
     // Approvals (Phase 5.5 B7): drafts waiting for the human, and the human's three decisions.
     if (path === '/api/approvals' && method === 'GET') {
       const waiting = (await store.getRecords({ type: 'draft', status: 'awaiting_human' }))
@@ -536,6 +573,34 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     return result
   })
 
+  /**
+   * Phase 10 D1: GET /preview/<brief_id>/… — the built preview. Never indexed, never cached, framed only by the
+   * dashboard (same origin); with DASHBOARD_AUTH=true it needs the dashboard session like the API.
+   */
+  async function servePreview(req, res, url) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return false
+    const [, , briefId, ...rest] = url.pathname.split('/')
+    if (!BRIEF_ID_RE.test(briefId ?? '')) return false
+    const headers = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'x-content-type-options': 'nosniff', 'referrer-policy': 'same-origin', 'content-security-policy': "frame-ancestors 'self'" }
+    if (!authed(req)) {
+      res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8', ...headers })
+      res.end('Log in to the dashboard first.\n')
+      return true
+    }
+    const dist = join(previewDir(briefId, previewRoot), 'dist')
+    let file = resolveInside(dist, `/${rest.join('/')}`)
+    if (file && (await isDir(file))) file = join(file, 'index.html')
+    if (!file || !(await isFile(file))) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', ...headers })
+      res.end('No preview page here. Build it with "Preview the page" on the approval screen.\n')
+      return true
+    }
+    const body = await readFile(file)
+    res.writeHead(200, { 'content-type': CONTENT_TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream', 'content-length': body.length, ...headers })
+    res.end(req.method === 'HEAD' ? undefined : body)
+    return true
+  }
+
   async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost')
     try {
@@ -556,6 +621,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
           .finally(() => { legacyRunning = null })
         return send(res, 202, { accepted: true })
       }
+      if (url.pathname.startsWith('/preview/') && (await servePreview(req, res, url))) return
       if (dashboardDir && (await serveDashboard(req, res, url, dashboardDir))) return
       return send(res, 404, { error: 'not found' })
     } catch (error) {

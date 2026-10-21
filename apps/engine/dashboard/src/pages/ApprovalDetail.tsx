@@ -12,6 +12,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MarkdownPreview } from '../components/MarkdownPreview'
 import { PublishCard } from '../components/PublishCard'
 import { InteractiveCard, type InteractiveInfo } from '../components/InteractiveCard'
+import { PreviewCard, type PreviewInfo } from '../components/PreviewCard'
 import { Card, EmptyState, PageHeader } from '../components/Page'
 import { VerdictPanel, type Review } from '../components/VerdictPanel'
 import { StatusBadge } from '../components/StatusBadge'
@@ -37,6 +38,8 @@ export type ApprovalDetailData = {
   checks: CheckResult[]
   /** Phase 10: the interactive guide (null or missing from older engines). */
   interactive?: InteractiveInfo | null
+  /** Phase 10 D1: the page preview built for this brief (null: none yet; missing: older engine). */
+  preview?: PreviewInfo | null
   /** Counter prompts used for this brief (writing and design); older engines: counted from earlier versions. */
   revisions_used?: number
   earlier: { version: number; brief_version: number; status: string; title: string; score: number | null; total?: number | null; human_feedback: HumanFeedback; record_id?: string }[]
@@ -179,6 +182,7 @@ export default function ApprovalDetail() {
 
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3">
+          <PreviewCard briefId={d.brief_id} version={d.draft.version} preview={d.preview} />
           <Card title="Draft">
             <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
               <div className="sm:col-span-2"><dt className="text-xs text-slate-500">SEO title</dt><dd>{d.draft.seo?.title_tag ?? '—'}</dd></div>

@@ -64,3 +64,5 @@ export const formatDate = (iso: string) =>
 
 /** A path under the base path: url('/posts/x/') → '/posts/x/' (or '/blog/posts/x/' after a move). */
 export const url = (path: string) => `${import.meta.env.BASE_URL.replace(/\/$/, '')}${path}`
+/** A page preview built by the engine (Phase 10 D1): every page is noindex and says it is a preview. */
+export const isPreview = (): boolean => import.meta.env.BASE_URL.startsWith('/preview/')

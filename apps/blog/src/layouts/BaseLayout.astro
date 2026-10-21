@@ -6,7 +6,7 @@ import Header from '../components/Header.astro'
 import Footer from '../components/Footer.astro'
 import Motion from '../components/Motion.astro'
 import { SITE, SITE_URL } from '../config/site'
-import { isSample, url } from '../lib/posts'
+import { isPreview, isSample, url } from '../lib/posts'
 
 interface Props {
   title: string
@@ -36,7 +36,7 @@ const csp = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-
     <title>{title}</title>
     <meta name="description" content={description} />
     {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
-    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    {(noindex || isPreview()) && <meta name="robots" content="noindex, nofollow" />}
     <meta property="og:site_name" content={SITE.name} />
     <meta property="og:type" content={ogType} />
     <meta property="og:title" content={title} />
@@ -63,6 +63,9 @@ const csp = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-
     <Header />
     {isSample() && (
       <div class="shell pt-3"><span class="chip" data-sample-badge>Sample content</span></div>
+    )}
+    {isPreview() && (
+      <div class="shell pt-3"><span class="chip" data-preview-badge>Preview · not published</span></div>
     )}
     <main id="main" class="flex-1">
       <slot />
