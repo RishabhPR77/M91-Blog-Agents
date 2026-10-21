@@ -4,6 +4,7 @@ import { urlKey } from '../checks/content.js'
 import { MESSAGE_MAX } from '../scout/prompts.js'
 import { allowedUrlSet, supportedSources, toneSection } from '../writer/inputs.js'
 import { draftVersion, draftBriefVersion, isEarlierDraft } from '../writer/save.js'
+import { guideForReviewer } from '../experience/review.js'
 
 export class ReviewerInputError extends Error {
   constructor(message) {
@@ -62,7 +63,7 @@ export function labelledAllowedUrls(brief, { sourcePack = null, ctaUrl, snippets
  * Builds the message sections (B3). Returns { sections, allowed }.
  * @param {{ draft, brief, facts, sourcePack, story, previousReview, snippets }} input
  */
-export async function buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets = [] }) {
+export async function buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets = [], guide = null }) {
   const allowed = labelledAllowedUrls(brief, { sourcePack, ctaUrl: config.m91.ctaUrl, snippets })
   const results = (draft.checks?.results ?? []).map(({ id, passed, severity, value, detail }) => ({ id, passed, severity, value, detail }))
   const isTutorial = brief.post_type === 'tutorial' || brief.tutorial?.use === true
@@ -75,6 +76,8 @@ export async function buildReviewerSections({ store, config, draft, brief, facts
       'post_markdown:',
       draft.post_markdown ?? ''
     ].join('\n'),
+    // Phase 10: the guide built from this draft (null: no guide; the post is reviewed as written).
+    guide: guide ? JSON.stringify(guideForReviewer(guide)) : null,
     brief: JSON.stringify(brief),
     checks: JSON.stringify(results),
     facts: facts ? JSON.stringify({ can: facts.can ?? [], cannot: facts.cannot ?? [], integrations: facts.integrations ?? [] }) : '(no current m91_facts record: treat every M91 claim as unverified)',
@@ -97,7 +100,7 @@ export async function buildReviewerSections({ store, config, draft, brief, facts
  */
 export function buildReviewerMessage(s, tail = '', max = MESSAGE_MAX) {
   const order = [
-    ['post', 'POST'], ['brief', 'BRIEF'], ['checks', 'CHECK RESULTS'], ['facts', 'M91 FACTS'], ['allowedUrls', 'ALLOWED URLS'],
+    ['post', 'POST'], ['guide', 'GUIDE'], ['brief', 'BRIEF'], ['checks', 'CHECK RESULTS'], ['facts', 'M91 FACTS'], ['allowedUrls', 'ALLOWED URLS'],
     ['story', 'STORY'], ['tutorial', 'TUTORIAL'], ['sourcePack', 'SOURCE PACK'], ['previousReview', 'PREVIOUS REVIEW'], ['tone', 'TONE NOTES']
   ]
   const sec = { ...s }

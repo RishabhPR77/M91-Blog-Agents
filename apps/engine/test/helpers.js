@@ -127,7 +127,7 @@ export function mockReviewer(script = ['pass']) {
   const fn = async (ctx = {}) => {
     let s = script[Math.min(n++, script.length - 1)]
     if (typeof s === 'function') s = s(ctx, n)
-    if (s === 'pass') return { model: 'mock', output: { pass: true, total: 90, feedback: [], summary_line: 'Score 90/100 · pass · gates 10/10 · 0 should-fix items' } }
+    if (s === 'pass') return { model: 'mock', output: { pass: true, total: 90, feedback: [], summary_line: 'Score 90/100 · pass · gates 11/11 · 0 should-fix items' } }
     if (s === 'fail') {
       const quotes = sampleSentences(ctx.draft?.draft?.post_markdown ?? ctx.draft?.post_markdown ?? '', 2)
       const feedback = [

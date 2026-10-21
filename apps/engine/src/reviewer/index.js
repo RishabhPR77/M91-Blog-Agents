@@ -14,6 +14,8 @@ import { reviewer_result, reviewSchemaErrors } from './schemas.js'
 import { buildReviewerPrompt, reviewRepairTail, quotesProblem } from './prompts.js'
 import { loadDraft, loadFacts, loadPreviousReview, buildReviewerSections, buildReviewerMessage } from './inputs.js'
 import { decide, missingQuotes, reviewSummaryLine } from './decide.js'
+import { latestGuideDoc } from '../experience/index.js'
+import { guideText } from '../experience/review.js'
 import { saveRunLog } from '../util/runlog.js'
 
 export class ReviewerError extends Error {
@@ -31,7 +33,8 @@ export const reviewerThreadId = (briefId, version) => `reviewer-${briefId}-v${ve
 
 /**
  * Reviews one draft.
- * @param {{ briefId, version?, briefVersion?, runId?, draft?, brief?, previousReview?, facts?, sourcePack? }} params
+ * @param {{ briefId, version?, briefVersion?, runId?, draft?, brief?, previousReview?, facts?, sourcePack?, guideDoc? }} params
+ *   guideDoc: the guide built in this run (null: none); undefined: the newest "ok" guide_doc of this version.
  *   draft/brief/previousReview/facts: in-memory hand-over for DRY_RUN (nothing was saved).
  * @param {{ config?, store, aiSend?, now? }} deps
  */
@@ -62,7 +65,12 @@ export async function runReviewer(params = {}, deps = {}) {
   const story = brief.story?.use ? (await store.getRecords({ type: 'story_lead' })).find((r) => r.payload?.story_id === brief.story.story_id)?.payload ?? null : null
   const current = { version, metadata: { brief_version: briefVersion } }
   const previousReview = version > 1 || briefVersion > 1 ? params.previousReview ?? (await loadPreviousReview(store, params.briefId, current)) : null
-  const { sections, allowed } = await buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets: draft.snippets ?? [] })
+  let guide = params.guideDoc
+  if (guide === undefined) {
+    const doc = await latestGuideDoc(store, params.briefId, version, briefVersion)
+    guide = doc?.status === 'ok' ? doc.payload?.guide ?? null : null
+  }
+  const { sections, allowed } = await buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets: draft.snippets ?? [], guide })
   const prompt = buildReviewerPrompt(config)
   const warnings = []
   if (!facts) warnings.push('no current m91_facts record: the Reviewer judged M91 claims without M91 FACTS')
@@ -107,7 +115,7 @@ export async function runReviewer(params = {}, deps = {}) {
     res = await send('review_repair', res.answer ? reviewRepairTail(res.answer, res.problems) : '')
   }
   // B6.3: more than half the quotes missing → one repair call asking for exact quotes.
-  const missing = missingQuotes(draft.post_markdown, res.answer.feedback)
+  const missing = missingQuotes(`${draft.post_markdown}\n${guideText(guide)}`, res.answer.feedback)
   if (res.answer.feedback.length && missing.length > res.answer.feedback.length / 2) {
     repairs++
     const fixed = await send('review_repair', reviewRepairTail(res.answer, [quotesProblem(missing)]))
@@ -117,14 +125,15 @@ export async function runReviewer(params = {}, deps = {}) {
 
   // ---------- decide ----------
   throwIfCancelled()
-  const d = decide(res.answer, { markdown: draft.post_markdown, checkResults: draft.checks?.results ?? [], allowedUrls: allowed.set, urlKey, config })
+  const d = decide(res.answer, { markdown: draft.post_markdown, checkResults: draft.checks?.results ?? [], allowedUrls: allowed.set, urlKey, config, guide, guideText: guideText(guide) })
   warnings.push(...d.warnings)
   for (const w of d.warnings) log.warn('reviewer', { briefId: params.briefId, version, warning: w })
   const ms = now() - started
   const payload = {
     brief_id: params.briefId, brief_version: briefVersion, version,
     gates: d.gates, areas: d.areas, total: d.total, pass: d.pass, feedback: d.feedback, fixed_previous: d.fixed_previous,
-    sources_checked: d.sources_checked, lessons: d.lessons, summary: d.summary, model_used: res.model, ms, repairs_used: repairs
+    sources_checked: d.sources_checked, lessons: d.lessons, summary: d.summary, model_used: res.model, ms, repairs_used: repairs,
+    guide_reviewed: Boolean(guide)
   }
 
   // ---------- save (B7) ----------

@@ -47,7 +47,7 @@ test('pass rule edges: 79.9 fails, 80.0 passes (PASS_SCORE_MIN=80, Phase 9); 84.
   const contradicted = decide(reviewAnswer({ sources: [{ url: 'https://m91.msg91.com/llms.txt', claim: 'rings until answered', verdict: 'contradicts' }] }), ctx())
   assert.equal(contradicted.gates.find((x) => x.id === 'sources_contradicted').passed, false)
   assert.equal(contradicted.pass, false)
-  assert.equal(contradicted.gates.length, 10)
+  assert.equal(contradicted.gates.length, 11, '9 AI gates (Phase 10: no_new_facts_in_design) + 2 code gates')
 })
 
 test('consistency rules: a fail with no "must" item gets generic ones; a pass with "must" items downgrades them', () => {
@@ -61,7 +61,7 @@ test('consistency rules: a fail with no "must" item gets generic ones; a pass wi
   const passWithMust = decide(reviewAnswer({ feedback: [item({ severity: 'must' })] }), ctx())
   assert.equal(passWithMust.pass, true)
   assert.deepEqual(passWithMust.feedback.map((f) => f.severity), ['should'])
-  assert.match(reviewSummaryLine(passWithMust), /^Score 90\/100 · pass · gates 10\/10 · 1 should-fix item$/)
+  assert.match(reviewSummaryLine(passWithMust), /^Score 90\/100 · pass · gates 11\/11 · 1 should-fix item$/)
   assert.match(reviewSummaryLine(failNoMust), /^Score \d+(\.\d)?\/100 · fail · simplicity 5 → writer$/)
 })
 
@@ -111,7 +111,7 @@ test('schema: exactly one entry per gate and area id', () => {
   const a = reviewAnswer()
   a.gates.pop()
   a.areas.push({ id: 'seo', score: 5, evidence: 'x' })
-  assert.deepEqual(reviewSchemaErrors(a), ['missing gate id(s): no_legal_advice_framing', 'duplicate area id(s): seo'])
+  assert.deepEqual(reviewSchemaErrors(a), ['missing gate id(s): no_new_facts_in_design', 'duplicate area id(s): seo'])
   assert.match(reviewSchemaErrors({ gates: [] })[0], /must have required property/)
 })
 
@@ -155,7 +155,7 @@ test('runReviewer: one call on a fresh reviewer thread, inputs in B3 order, revi
   assert.match(q.message, /- https:\/\/m91\.msg91\.com\/llms\.txt \(source: x; M91 fact: Rings every phone/)
   assert.equal(r.pass, true)
   assert.equal(r.total, 90)
-  assert.equal(r.gates.length, 10)
+  assert.equal(r.gates.length, 11)
   const rec = s.store.byType('review')[0]
   assert.equal(rec.status, 'pass')
   assert.deepEqual([rec.metadata.brief_version, rec.metadata.pass, rec.metadata.total, rec.version], [1, true, 90, 1])
@@ -228,4 +228,66 @@ test('the Reviewer prompt uses PASS_AREA_MIN for the publishing minimum and for 
   const p7 = buildReviewerPrompt(config({ PASS_AREA_MIN: '7' }))
   assert.ok(p7.includes('7 = acceptable minimum for publishing;') && p7.includes('an area below 7;'))
   assert.ok(!p6.includes('{{'), 'every placeholder filled')
+})
+
+// ---------- Phase 10 C4: the Reviewer reviews the guide ----------
+
+const GUIDE = {
+  version: 1, title_accent: 'phone call',
+  hero: { example: true, agent: 'Refund bot', request: 'Refund order #1182?', person: 'Asha (on call)', decision: 'approved', result: 'Refund sent' },
+  status_states: ['waiting', 'ringing', 'approved', 'continuing'],
+  chapters: [{ id: 'c1', number: 1, label: 'The problem', heading: 'Why a phone call', intro_markdown: 'Start here.', components: [
+    { type: 'prose', id: 'p1', data: { markdown: 'x', part_ids: ['N1', 'N2'] } },
+    { type: 'approve_demo', id: 'd1', data: { example: true, request: 'Your agent wants to refund order #1182', approve: { label: 'Approve', outcome_markdown: 'The refund goes out.' }, reject: { label: 'Reject', outcome_markdown: 'Nothing happens.' } } }
+  ] }],
+  faq: [], your_turn: { title: 'Try it on one risky step' }
+}
+
+test('C4 decide: no guide → experience scored as structure and no_new_facts_in_design passes (code); with a guide the AI scores count', () => {
+  const answer = reviewAnswer({ scores: { structure: 8, experience: 4 }, gates: { no_new_facts_in_design: false } })
+  const plain = decide(answer, ctx())
+  assert.deepEqual(plain.areas.find((a) => a.id === 'experience'), { id: 'experience', score: 8, evidence: 'no guide: scored as structure', source: 'code' })
+  assert.equal(plain.gates.find((g) => g.id === 'no_new_facts_in_design').passed, true)
+  const guided = decide(answer, ctx({ guide: GUIDE, guideText: 'Your agent wants to refund order #1182' }))
+  assert.equal(guided.areas.find((a) => a.id === 'experience').score, 4)
+  assert.equal(guided.gates.find((g) => g.id === 'no_new_facts_in_design').passed, false)
+  assert.equal(guided.pass, false, 'a failed design gate fails the review')
+  assert.equal(WEIGHTS.experience, 10)
+})
+
+test('C4 decide: feedback may quote the guide text; design-only "must" items give route_hint "designer"', () => {
+  const fb = [item({ quote: 'Your agent wants to refund order #1182', severity: 'must', send_to: 'designer', area: 'experience' })]
+  const d = decide(reviewAnswer({ scores: { experience: 5 }, feedback: fb }), ctx({ guide: GUIDE, guideText: 'Your agent wants to refund order #1182' }))
+  assert.equal(d.feedback[0].quote_found, true)
+  assert.equal(d.route_hint, 'designer')
+  const mixed = decide(reviewAnswer({ scores: { experience: 5 }, feedback: [...fb, item({ severity: 'must' })] }), ctx({ guide: GUIDE, guideText: 'Your agent wants to refund order #1182' }))
+  assert.equal(mixed.route_hint, 'writer')
+})
+
+test('C4 prompt and schema: the new gate, the experience area and send_to "designer"', () => {
+  assert.ok(GATE_IDS.includes('no_new_facts_in_design') && AREA_IDS.includes('experience'))
+  assert.match(REVIEWER_PROMPT, /- no_new_facts_in_design: the text in GUIDE/)
+  assert.match(REVIEWER_PROMPT, /- experience: each interactive part in GUIDE helps the reader/)
+  assert.match(REVIEWER_PROMPT, /"send_to": "designer" when only the GUIDE's own text/)
+})
+
+test('C4 runReviewer: a guide adds a GUIDE section after POST (designer text only, Writer text pointed to); guide_reviewed is saved', async () => {
+  const restore = quiet()
+  const s = await setup()
+  await s.run({ guideDoc: GUIDE })
+  restore()
+  const q = s.ai.requests[0]
+  const order = [...q.message.matchAll(/^--- ([A-Z0-9 ]+) ---$/gm)].map((m) => m[1])
+  assert.deepEqual(order.slice(0, 3), ['POST', 'GUIDE', 'BRIEF'])
+  const guide = JSON.parse(q.message.match(/--- GUIDE ---\n(.+)\n/)[1])
+  assert.deepEqual(guide.chapters[0].components[0], { type: 'prose', writer_parts: 'N1–N2' })
+  assert.equal(guide.chapters[0].components[1].request, 'Your agent wants to refund order #1182')
+  assert.equal(s.store.byType('review')[0].payload.guide_reviewed, true)
+  // Without a guide (null): no GUIDE section, guide_reviewed false.
+  const restore2 = quiet()
+  const p = await setup()
+  await p.run({ guideDoc: null })
+  restore2()
+  assert.ok(!/--- GUIDE ---/.test(p.ai.requests[0].message))
+  assert.equal(p.store.byType('review')[0].payload.guide_reviewed, false)
 })

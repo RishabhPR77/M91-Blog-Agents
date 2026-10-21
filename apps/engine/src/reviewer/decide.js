@@ -4,9 +4,10 @@
 import { hardProblems } from '../checks/content.js'
 import { GATE_IDS, AREA_IDS } from './schemas.js'
 
+// Phase 10: experience (10) is new; structure and originality give 5 each (the guide now carries structure).
 export const WEIGHTS = Object.freeze({
-  answers_question: 15, simplicity: 15, accuracy: 15, seo: 10, structure: 10,
-  tone: 10, originality: 10, ai_answer_readiness: 5, to_the_point: 5, m91_fit_cta: 5
+  answers_question: 15, simplicity: 15, accuracy: 15, seo: 10, structure: 5,
+  tone: 10, originality: 5, ai_answer_readiness: 5, to_the_point: 5, m91_fit_cta: 5, experience: 10
 })
 
 export const CODE_GATE_IDS = Object.freeze(['checks_hard_passed', 'sources_contradicted'])
@@ -60,14 +61,23 @@ export function codeGates({ checkResults = [], sourcesChecked = [] }) {
 /**
  * Applies B6.2–B6.6 to a valid answer.
  * @param {object} answer   the parsed reviewer_result
- * @param {object} ctx      { markdown, checkResults, allowedUrls (Set of urlKeys), urlKey, config }
+ * @param {object} ctx      { markdown, checkResults, allowedUrls (Set of urlKeys), urlKey, config, guide, guideText }
+ *   guide: the guide reviewed (null: none). Without a guide, code sets experience to the structure score and passes
+ *   no_new_facts_in_design, so a plain post is scored the same way as before.
  * @returns {{ gates, areas, total, pass, feedback, fixed_previous, sources_checked, lessons, summary, route_hint, warnings[] }}
  */
-export function decide(answer, { markdown, checkResults = [], allowedUrls = null, urlKey = (u) => u, config }) {
+export function decide(answer, { markdown, checkResults = [], allowedUrls = null, urlKey = (u) => u, config, guide = null, guideText = '' }) {
   const warnings = []
   const { passAreaMin } = config.gates
-  const aiGates = GATE_IDS.map((id) => ({ ...answer.gates.find((g) => g.id === id), source: 'ai' }))
-  const areas = AREA_IDS.map((id) => answer.areas.find((a) => a.id === id))
+  let aiGates = GATE_IDS.map((id) => ({ ...answer.gates.find((g) => g.id === id), source: 'ai' }))
+  let areas = AREA_IDS.map((id) => answer.areas.find((a) => a.id === id))
+  if (!guide) {
+    const structure = areas.find((a) => a.id === 'structure')
+    areas = areas.map((a) => (a.id === 'experience' ? { id: 'experience', score: structure.score, evidence: 'no guide: scored as structure', source: 'code' } : a))
+    aiGates = aiGates.map((g) => (g.id === 'no_new_facts_in_design' ? { id: g.id, passed: true, evidence: 'no guide', source: 'code' } : g))
+  }
+  // Feedback quotes may come from the post or from the text the Experience Designer wrote.
+  const findIn = `${markdown}\n${guideText}`
   // Web use can only be limited by the prompt (viaSocket's web access is always on), so code enforces
   // it afterwards (Phase 5.5 A2): a check of a page outside ALLOWED URLS is dropped, so its verdict can
   // never affect the decision (e.g. the sources_contradicted gate).
@@ -85,7 +95,7 @@ export function decide(answer, { markdown, checkResults = [], allowedUrls = null
   const pass = passRule({ gates, areas, total }, config.gates)
 
   // B6.3: every quote must exist in the post (kept either way, marked).
-  let feedback = (answer.feedback ?? []).map((f) => ({ ...f, claims: f.send_to === 'scout' ? f.claims ?? [] : [], quote_found: quoteFound(markdown, f.quote) }))
+  let feedback = (answer.feedback ?? []).map((f) => ({ ...f, claims: f.send_to === 'scout' ? f.claims ?? [] : [], quote_found: quoteFound(findIn, f.quote) }))
   const notFound = feedback.filter((f) => !f.quote_found)
   if (notFound.length) warnings.push(`${notFound.length} feedback quote(s) not found in the post: ${notFound.map((f) => `"${String(f.quote).slice(0, 60)}"`).join(', ')}`)
 
@@ -105,6 +115,7 @@ export function decide(answer, { markdown, checkResults = [], allowedUrls = null
   const route_hint = pass ? null
     : must.some((f) => f.send_to === 'strategist') ? 'strategist'
     : must.some((f) => f.send_to === 'scout' && f.claims.length) ? 'scout'
+    : must.length && must.every((f) => f.send_to === 'designer') ? 'designer'
     : 'writer'
 
   return {
@@ -119,7 +130,7 @@ export function decide(answer, { markdown, checkResults = [], allowedUrls = null
   }
 }
 
-/** One line for events and Slack: "Score 88.5/100 · pass · gates 10/10 · 3 should-fix items". */
+/** One line for events and Slack: "Score 88.5/100 · pass · gates 11/11 · 3 should-fix items". */
 export function reviewSummaryLine(r) {
   const gatesPassed = r.gates.filter((g) => g.passed).length
   if (r.pass) {

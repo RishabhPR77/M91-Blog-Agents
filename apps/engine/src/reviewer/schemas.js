@@ -2,8 +2,8 @@
 
 import Ajv from 'ajv'
 
-export const GATE_IDS = Object.freeze(['m91_claims_correct', 'claims_to_avoid_respected', 'no_invented_content', 'sources_support_claims', 'story_attribution_correct', 'tutorial_traceable', 'answers_main_question', 'no_legal_advice_framing'])
-export const AREA_IDS = Object.freeze(['answers_question', 'simplicity', 'accuracy', 'seo', 'structure', 'tone', 'originality', 'ai_answer_readiness', 'to_the_point', 'm91_fit_cta'])
+export const GATE_IDS = Object.freeze(['m91_claims_correct', 'claims_to_avoid_respected', 'no_invented_content', 'sources_support_claims', 'story_attribution_correct', 'tutorial_traceable', 'answers_main_question', 'no_legal_advice_framing', 'no_new_facts_in_design'])
+export const AREA_IDS = Object.freeze(['answers_question', 'simplicity', 'accuracy', 'seo', 'structure', 'tone', 'originality', 'ai_answer_readiness', 'to_the_point', 'm91_fit_cta', 'experience'])
 export const VERDICTS = Object.freeze(['supports', 'contradicts', 'unclear', 'could_not_open'])
 
 const obj = (properties) => ({ type: 'object', additionalProperties: false, required: Object.keys(properties), properties })
@@ -22,7 +22,7 @@ export const reviewer_result = {
       problem: str,
       fix: str,
       severity: { type: 'string', enum: ['must', 'should'] },
-      send_to: { type: 'string', enum: ['writer', 'strategist', 'scout'] },
+      send_to: { type: 'string', enum: ['writer', 'strategist', 'scout', 'designer'] },
       claims: arr(str)
     })),
     fixed_previous: arr(obj({ previous_quote: str, fixed: { type: 'boolean' }, note: str })),

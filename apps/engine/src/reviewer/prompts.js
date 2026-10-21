@@ -19,6 +19,7 @@ CHECK RESULTS are measured by code (word count, reading grades, link status, phr
 - tutorial_traceable: for tutorials, every step comes from the brief's tutorial steps, and code appears only as inserted snippets. For other posts, pass if the post has no code beyond snippets.
 - answers_main_question: the post clearly answers the brief's main question near the top.
 - no_legal_advice_framing: the post never presents itself as legal, regulatory or compliance advice.
+- no_new_facts_in_design: the text in GUIDE (written by the Experience Designer) adds no number, price, limit, duration, URL, product feature, claim about M91, customer or quote that is not in POST, BRIEF or M91 FACTS; example scenarios are clearly fictional. If there is no GUIDE, pass.
 
 === AREAS (score 0–10 each; give evidence) ===
 Use these anchors for every area: 10 = exemplary, nothing to improve; 8 = strong, small polish only; {{pass_area_min}} = acceptable minimum for publishing; 5 = clear problems a reader would notice; 3 = major problems; 0 = missing or wrong.
@@ -32,13 +33,14 @@ Use these anchors for every area: 10 = exemplary, nothing to improve; 8 = strong
 - ai_answer_readiness: clear definitions and short, quotable answers an AI assistant could cite correctly.
 - to_the_point: no hooks, no filler, no padding, no catchy openings; every sentence helps the reader. Catchy or padded writing lowers this score.
 - m91_fit_cta: M91 appears only where it genuinely fits, honestly, with one clear call to action.
+- experience: each interactive part in GUIDE helps the reader understand or do something; it is clear, accurate, in a sensible place and not decorative; chapter labels and step titles are plain. If there is no GUIDE, score it like structure.
 
 === FEEDBACK ===
 For every problem, add one item:
 - "quote": copy the exact words from the post (at most 25 words) so the problem can be found. Never paraphrase the quote.
 - "problem" and "fix": specific and doable. Never "make it better".
 - "severity": "must" if it causes a failed gate or an area below {{pass_area_min}}; otherwise "should".
-- "send_to": "writer" for wording, simplicity, structure, SEO, tone and missing links that exist in ALLOWED URLS; "strategist" when the angle, search intent, topic or outline is wrong, or the topic duplicates past coverage; "scout" when a claim needs a source that is not in ALLOWED URLS (list those claims in "claims").
+- "send_to": "designer" when only the GUIDE's own text or choice of components is the problem (quote the GUIDE text); "writer" for wording, simplicity, structure, SEO, tone and missing links that exist in ALLOWED URLS; "strategist" when the angle, search intent, topic or outline is wrong, or the topic duplicates past coverage; "scout" when a claim needs a source that is not in ALLOWED URLS (list those claims in "claims").
 - List at most {{max_feedback_items}} items, "must" items first.
 
 === PREVIOUS REVIEW ===
