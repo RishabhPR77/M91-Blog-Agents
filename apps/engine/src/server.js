@@ -23,6 +23,8 @@ import { reviewOfDraft, hardChecksPassed } from './approval.js'
 import { lessonText } from './lessons.js'
 import { isInteractive, latestGuideDoc } from './experience/index.js'
 import { buildPreview, readPreview, previewDir, PREVIEW_ROOT, PreviewError } from './publisher/preview.js'
+import { previewExport, latestExport, ExportError } from './export/index.js'
+import { createDocstar } from './publisher/docstar.js'
 import { withMem0Count, mem0Requests } from './util/mem0count.js'
 import { createEngineIndex } from './engineindex.js'
 import { usageStatus, stopMessage } from './util/mem0usage.js'
@@ -93,7 +95,12 @@ export function publicSettings(config) {
       noindex_first_n_posts: config.blog.noindexFirstNPosts, deploy_token_set: Boolean(config.blog.embarkoDeployToken)
     },
     // Interactive guides (Phase 10): the Experience Designer's limits, whether new posts get a guide, the promo pack.
+    // Phase 11: where approved posts go, and whether Docstar is set up (yes/no, never a value).
+    publish: config.publish && {
+      target: config.publish.target, docstar_configured: createDocstar({ config }).configured, auto_publish: config.runtime.autoPublish
+    },
     designer: config.designer && {
+      enabled: config.designer.enabled !== false,
       max_components: config.designer.maxComponents, max_repairs: config.designer.maxRepairs, interactive_default: config.designer.interactiveDefault,
       max_designer_revisions: config.limits?.maxDesignerRevisions ?? null, promo_enabled: Boolean(config.promo?.enabled)
     },
@@ -230,6 +237,22 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     res.end(JSON.stringify(mask(body)))
   }
   const fail = (res, status, code, message) => send(res, status, { error: { code, message } })
+  /** A Markdown file, as a download or inline (Phase 11). The text is masked like every other answer. */
+  const sendMarkdown = (res, markdown, filename, download) => {
+    res.writeHead(200, {
+      'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+      ...(download && { 'content-disposition': `attachment; filename="${filename.replace(/[^\w.-]/g, '_')}"` })
+    })
+    res.end(mask(markdown))
+  }
+  const exportSummary = (r) => {
+    const p = r.payload ?? {}
+    return {
+      record_id: r.id, brief_id: p.brief_id ?? r.briefId, version: p.version ?? null, brief_version: p.brief_version ?? null, slug: p.slug, filename: p.filename, title: p.title,
+      exported_at: p.exported_at ?? null, chars: String(p.markdown ?? '').length, review_score: p.front_matter?.review_score ?? null, status: r.status ?? null,
+      docstar_page_id: p.docstar_page_id ?? null, docstar_url: p.docstar_url ?? null
+    }
+  }
   const isRunning = () => (manager ? manager.isRunning() : Boolean(legacyRunning))
 
   /**
@@ -338,7 +361,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     if (run.payload?.brief_id) ids.add(run.payload.brief_id)
     if (!ids.size) return []
     // One filtered (and cached) read per type, in parallel.
-    const types = ['m91_facts', 'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'source_pack', 'draft', 'review', 'block_doc', 'guide_doc']
+    const types = ['m91_facts', 'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'source_pack', 'draft', 'review', 'block_doc', 'guide_doc', 'markdown_export']
     const lists = await Promise.all(types.map((type) => store.getRecords({ type })))
     return lists.flat().filter((r) => ids.has(r.id) || ids.has(KEY_ID_OF(r.payload))).map(trimRecord)
   }
@@ -424,11 +447,42 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       return
     }
 
+    // Phase 11: the Markdown export of a brief's reviewed draft, built now (nothing saved, 0 AI calls).
+    // ?version=n picks a version; ?format=md answers the file itself (&download=1 as an attachment).
+    if (seg[1] === 'approvals' && seg[2] && seg[3] === 'markdown' && seg.length === 4 && method === 'GET') {
+      const briefId = seg[2]
+      if (!BRIEF_ID_RE.test(briefId)) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')
+      const v = url.searchParams.get('version')
+      try {
+        const out = await previewExport({ store, config, briefId, version: v ? Number(v) : undefined, now })
+        if (url.searchParams.get('format') === 'md') return sendMarkdown(res, out.markdown, out.filename, url.searchParams.get('download') === '1')
+        return send(res, 200, { brief_id: briefId, version: out.version, brief_version: out.brief_version, draft_status: out.draft_status, slug: out.slug, filename: out.filename, front_matter: out.front_matter, markdown: out.markdown, warnings: out.warnings })
+      } catch (error) {
+        if (error instanceof ExportError) throw new ApiError(error.status, error.code, error.message)
+        throw error
+      }
+    }
+    // Phase 11: the final exports (one per brief, saved on Approve).
+    if (path === '/api/exports' && method === 'GET') {
+      const recs = (await store.getRecords({ type: 'markdown_export' })).sort((a, b) => String(b.payload?.exported_at ?? '').localeCompare(String(a.payload?.exported_at ?? '')))
+      return send(res, 200, { exports: recs.map(exportSummary) })
+    }
+    if (seg[1] === 'exports' && seg[2] && (seg.length === 3 || (seg.length === 4 && seg[3] === 'download')) && method === 'GET') {
+      const briefId = seg[2]
+      if (!BRIEF_ID_RE.test(briefId)) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')
+      const rec = await latestExport(store, briefId)
+      if (!rec) return fail(res, 404, 'not_found', `no final Markdown export of ${briefId} yet: approve it first`)
+      if (seg[3] === 'download') return sendMarkdown(res, rec.payload.markdown, rec.payload.filename, true)
+      return send(res, 200, { export: { ...exportSummary(rec), markdown: rec.payload.markdown, front_matter: rec.payload.front_matter, warnings: rec.payload.warnings ?? [] } })
+    }
+
     // Phase 10 D1: the page preview of a brief's newest draft. POST builds it (no AI, nothing saved or deployed);
     // GET returns what was built. It is served at /preview/<brief_id>/.
     if (seg[1] === 'approvals' && seg[2] && seg[3] === 'preview' && seg.length === 4) {
       const briefId = seg[2]
       if (!BRIEF_ID_RE.test(briefId)) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')
+      // Phase 11: the page preview is the blog's; with another publish target there is no page to preview.
+      if (method === 'POST' && (config?.publish?.target ?? 'embarko') !== 'embarko') throw new ApiError(409, 'preview_off', `there is no page preview with PUBLISH_TARGET=${config.publish.target}: use the Markdown preview`)
       if (method === 'GET') {
         const m = readPreview(briefId, previewRoot)
         return m ? send(res, 200, m) : fail(res, 404, 'not_found', `no preview of ${briefId} yet`)

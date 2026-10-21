@@ -26,6 +26,8 @@
 // npm run pin -- --topic "<text>" --date YYYY-MM-DD [--priority high] [--notes "<text>"] | --list | --cancel <pinned_id>
 
 import { readFile, writeFile } from 'node:fs/promises'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { runWriter } from './writer/index.js'
 import { draftsOf, draftVersion, draftBriefVersion } from './writer/save.js'
 import { loadBrief, allowedUrlSet, tutorialSourceText, citedDocsSourceText } from './writer/inputs.js'
@@ -40,7 +42,7 @@ import { extractSnippets } from './writer/snippets.js'
 import { lessonText } from './lessons.js'
 import { setAwaitingForTest } from './testcommands.js'
 import { exportPublished } from './publisher/export.js'
-import { WEIGHTS } from './reviewer/decide.js'
+import { weightsFor } from './reviewer/decide.js'
 import { createNotifier } from './notify.js'
 import { createRunManager } from './runs.js'
 import { runScout } from './scout/index.js'
@@ -48,6 +50,7 @@ import { runStrategist } from './strategist/index.js'
 import { listPins, addPin, cancelPin, DATE_RE } from './pins.js'
 import { engineUrl, runViaEngine, engineApi } from './enginecall.js'
 import { usageStatus, setUsage } from './util/mem0usage.js'
+import { previewExport, exportDir } from './export/index.js'
 
 /** --key=value, --key value, or a bare --flag (true). Anything else is positional. */
 export function parseArgs(argv) {
@@ -132,7 +135,7 @@ export function printReview(r, print = console.log) {
   print('GATES')
   for (const g of r.gates) print(`  ${g.passed ? 'pass' : 'FAIL'}  ${g.id} (${g.source}): ${g.evidence}`)
   print('AREAS')
-  for (const a of r.areas) print(`  ${String(a.score).padStart(2)}/10 ×${WEIGHTS[a.id]}  ${a.id}: ${a.evidence}`)
+  for (const a of r.areas) print(`  ${String(a.score).padStart(2)}/10 ×${weightsFor(r.areas.some((x) => x.id === 'experience'))[a.id]}  ${a.id}: ${a.evidence}`)
   print(`TOTAL ${r.total}/100 · ${r.pass ? 'PASS' : 'FAIL'}${r.route_hint ? ` → ${r.route_hint}` : ''}`)
   print(`FEEDBACK (${r.feedback.length})`)
   for (const f of r.feedback) print(`  [${f.severity} → ${f.send_to}] ${f.area} · quote_found ${f.quote_found}\n    quote: "${f.quote}"\n    problem: ${f.problem}\n    fix: ${f.fix}${f.claims?.length ? `\n    claims: ${f.claims.join(' | ')}` : ''}`)
@@ -350,6 +353,29 @@ async function main() {
   if (args._[0] === 'test-await') {
     const r = await setAwaitingForTest(createStore({ config, dryRun: false }), config, { briefId: args['brief-id'], version: args.version ? Number(args.version) : undefined })
     console.log(`TEST: ${r.brief_id} v${r.version} (brief v${r.brief_version}) ${r.previous_status} → awaiting_human · score ${r.total ?? 'none'} · draft and brief marked test data`)
+    return
+  }
+
+  // Phase 11: the Markdown export of a reviewed draft (0 AI calls). Without --save: the file only (exports folder,
+  // or --out), nothing saved in Mem0. With --save: the final export (the brief's markdown_export record + the file).
+  if (args._[0] === 'export') {
+    if (typeof args['brief-id'] !== 'string') throw new Error('usage: npm run export -- --brief-id=<id> [--version=<n>] [--save] [--out=<folder>]')
+    const version = args.version ? Number(args.version) : undefined
+    if (args.save) {
+      const result = await startAndWait(config, { mode: 'export', params: { brief_id: args['brief-id'], save: true, ...(version && { version }) } })
+      console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
+      for (const w of result.run?.warnings ?? []) console.log(`WARNING: ${w}`)
+      process.exitCode = result.status === 'succeeded' ? 0 : 1
+      return
+    }
+    const engine = await engineUrl(config)
+    const out = engine ? await engineApi.markdown(engine, args['brief-id'], version) : await previewExport({ store, config, briefId: args['brief-id'], version })
+    const dir = typeof args.out === 'string' ? resolve(args.out) : exportDir(config)
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, out.filename)
+    writeFileSync(file, out.markdown, 'utf8')
+    console.log(`Wrote ${file} (v${out.version}, ${out.markdown.length.toLocaleString('en-US')} characters${engine ? ', read through the engine' : ''}). Not saved in Mem0: add --save for the final export.`)
+    for (const w of out.warnings ?? []) console.log(`WARNING: ${w}`)
     return
   }
 

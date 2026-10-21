@@ -14,6 +14,8 @@ import { draftVersion, draftBriefVersion, draftsOf } from './writer/save.js'
 import { runPromo } from './promo/index.js'
 import { latestGuideDoc } from './experience/index.js'
 import { guideText } from './experience/review.js'
+import { saveFinalExport, latestExport } from './export/index.js'
+import { createDocstar, publishToDocstar } from './publisher/docstar.js'
 import { createPublisher } from './publisher/index.js'
 import { setLeadStatus } from './strategist/save.js'
 
@@ -93,6 +95,7 @@ export async function checkDecision(mode, params, { store, config }) {
       throw new ApprovalError('bad_params', 'quotes must be a list of exact sentences from the draft')
     }
     if (params.target !== undefined && !REVISE_TARGETS.includes(params.target)) throw new ApprovalError('bad_params', `target must be ${REVISE_TARGETS.join(' or ')}`)
+    if (params.target === 'design' && config.designer?.enabled === false) throw new ApprovalError('experience_off', 'the Experience Designer is off (EXPERIENCE_ENABLED=false): choose "Change the writing"', 409)
   }
   if (mode === 'reject_topic' && params.reason !== undefined && (typeof params.reason !== 'string' || params.reason.length > FEEDBACK_MAX_CHARS)) {
     throw new ApprovalError('bad_params', `reason must be text of at most ${FEEDBACK_MAX_CHARS.toLocaleString('en-US')} characters`)
@@ -182,9 +185,32 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
   emit('approval.approved', { agent: 'human', message: `approved by you (v${version}${unreviewed ? ', unreviewed' : ''})`, data: { brief_id: briefId, version, total, approved_unreviewed: unreviewed } })
   const scoreText = unreviewed ? ', not reviewed' : total === null ? '' : `, score ${total}`
 
-  // Phase 7 C2: AUTO_PUBLISH=true publishes straight away; false (the kill switch) stops at approved.
+  // Phase 11: the final Markdown export (0 AI calls): the markdown_export record of the brief and the file in the
+  // exports folder. It never undoes the approval: a failure is a warning, and npm run export -- --save retries it.
+  let exported = null
+  try {
+    exported = await runStep('export', async () => {
+      const out = await saveFinalExport({ store, config, briefId, version, now })
+      return { ...out, summary: `Markdown export saved: ${out.filename} (${out.markdown.length.toLocaleString('en-US')} characters)` }
+    })
+    warnings.push(...(exported?.warnings ?? []))
+  } catch (error) {
+    if (isCancel(error)) throw error
+    warnings.push(`Markdown export failed (the approval stands; run npm run export -- --brief-id=${briefId} --save): ${error.message}`)
+  }
+
+  // Where the approved post goes (PUBLISH_TARGET): none (the export is the output), the blog (embarko) or Docstar.
+  const target = config.publish?.target ?? 'embarko'
   let published = null
-  if (config.runtime.autoPublish) {
+  if (target === 'none') {
+    await runStep('publisher', async () => ({ placeholder: true, message: 'Publishing is off (PUBLISH_TARGET=none): the Markdown export is the output' }))
+  } else if (target === 'docstar') {
+    published = await runStep('publisher', async () => {
+      if (!config.runtime.autoPublish) return { placeholder: true, message: 'Not sent to Docstar: AUTO_PUBLISH=false. Use Publish in the dashboard (or npm run publish)' }
+      return publishToDocstar({ store, docstar: createDocstar({ config }), exportRecord: await latestExport(store, briefId) })
+    })
+    if (published?.warnings?.length) warnings.push(...published.warnings)
+  } else if (config.runtime.autoPublish) {
     try {
       published = await runStep('publisher', async () => (publisher ?? createPublisher({ config, store, notifier })).publish({ briefId }))
       warnings.push(...(published?.warnings ?? []))
@@ -200,7 +226,8 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
     })
   }
   const pubText = published?.url ? `; published → ${published.url}` : ''
-  return { status: 'succeeded', brief_id: briefId, summary: `approved by you (v${version}${scoreText})${pubText}`, warnings, run_fields: { approved_unreviewed: unreviewed } }
+  const expText = exported?.filename ? `; Markdown export: ${exported.filename}` : ''
+  return { status: 'succeeded', brief_id: briefId, summary: `approved by you (v${version}${scoreText})${expText}${pubText}`, warnings, run_fields: { approved_unreviewed: unreviewed } }
 }
 
 /**

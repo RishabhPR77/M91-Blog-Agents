@@ -322,7 +322,7 @@ test('approval API: list, detail, approve / revise / reject (202), and the 400 /
     assert.equal(ok.status, 202)
     const done = await manager.wait(ok.json.run_id)
     assert.equal(done.status, 'succeeded')
-    assert.equal(done.run.result_summary, 'approved by you (v2, score 91)')
+    assert.equal(done.run.result_summary, 'approved by you (v2, score 91); Markdown export: t.md')
     // No longer awaiting_human → 409 for approve and reject; a counter prompt reopens the approved draft (202).
     for (const [action, body] of [['approve', {}], ['reject', { reason: 'x' }]]) {
       const r = await call('POST', `/api/approvals/${B}/${action}`, body)
@@ -366,7 +366,7 @@ test('approval API: approve refuses an unreviewed version (409), force_unreviewe
     await manager.wait(forced.json.run_id)
     const run = (await call('GET', `/api/runs/${forced.json.run_id}`)).json.run
     assert.equal(run.approved_unreviewed, true)
-    assert.equal(run.result_summary, 'approved by you (v1, not reviewed)')
+    assert.equal(run.result_summary, 'approved by you (v1, not reviewed); Markdown export: t.md')
 
     // Hard checks failed: never approvable, not even with force_unreviewed.
     const hard = await call('POST', `/api/approvals/${H}/approve`, { force_unreviewed: true })
@@ -465,7 +465,7 @@ test('interactive guide API: the switch on the newest draft, the Experience Desi
     assert.equal((await call('GET', '/api/posts')).json.posts[0].blocks, 2)
 
     const s = (await call('GET', '/api/settings')).json
-    assert.deepEqual(s.designer, { max_components: 10, max_repairs: 1, interactive_default: true, max_designer_revisions: 2, promo_enabled: false })
+    assert.deepEqual(s.designer, { enabled: true, max_components: 10, max_repairs: 1, interactive_default: true, max_designer_revisions: 2, promo_enabled: false })
     assert.ok(s.models.designer)
   })
 })

@@ -129,6 +129,7 @@ export function summariseOutput(agent, out) {
       }
     }
   }
+  if (agent === 'export' && out.summary) return { message: out.summary, data: { filename: out.filename ?? null, record_id: out.record_id ?? null, version: out.version ?? null } }
   if (agent === 'publisher' && out.summary) return { message: out.summary, data: { url: out.url ?? null, dist: out.dist ?? null } }
   if (agent === 'promo' && out.pack) {
     return {
@@ -280,6 +281,12 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   // The Experience Designer on the current draft, if the post is interactive. It never fails the run: an error
   // means no guide (the post is reviewed and published as written).
   async function design() {
+    // Phase 11: EXPERIENCE_ENABLED=false: no guide, no step; the Reviewer reviews the post as written.
+    if (config.designer?.enabled === false) {
+      guideDoc = null
+      designFeedback = []
+      return
+    }
     const latest = draft?.record_id ? (await store.getRecords({ type: 'draft', brief_id: briefId })).find((d) => d.id === draft.record_id) : null
     if (!isInteractive(latest ?? { metadata: {} }, config)) {
       guideDoc = null

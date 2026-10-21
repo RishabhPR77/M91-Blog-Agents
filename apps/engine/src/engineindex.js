@@ -8,7 +8,7 @@ import { onStoreWrite, readWriteMarker } from './storeevents.js'
 import { log } from './util/log.js'
 
 /** Loaded at engine start: everything the dashboard's list pages show. */
-export const PRELOAD_TYPES = Object.freeze(['run', 'draft', 'brief', 'review', 'published_post', 'pinned_topic', 'lesson'])
+export const PRELOAD_TYPES = Object.freeze(['run', 'draft', 'brief', 'review', 'published_post', 'pinned_topic', 'lesson', 'markdown_export'])
 /** Never indexed: per-call logs and the old lock records. */
 const SKIP = new Set(['run_log', 'lock'])
 

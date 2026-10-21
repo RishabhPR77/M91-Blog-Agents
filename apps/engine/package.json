@@ -51,7 +51,8 @@
     "set-index": "node --env-file=../../.env src/cli.js set-index",
     "rebuild-blog": "node --env-file=../../.env src/cli.js rebuild-blog",
     "blog:sync": "node --env-file=../../.env src/cli.js blog-sync",
-    "mem0:usage": "node --env-file=../../.env src/cli.js mem0-usage"
+    "mem0:usage": "node --env-file=../../.env src/cli.js mem0-usage",
+    "export": "node --env-file=../../.env src/cli.js export"
   },
   "dependencies": {
     "@m91/content": "0.1.0",

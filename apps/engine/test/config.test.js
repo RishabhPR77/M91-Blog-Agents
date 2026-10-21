@@ -91,9 +91,24 @@ test('empty optional keys are accepted (webhooks, MEM0 org/project, Embarko toke
   assert.equal(c.mem0.orgId, undefined)
 })
 
-test('old PUBLISH_* keys in .env are ignored (removed in Phase 3.5)', () => {
-  const c = loadConfig(fakeEnv({ PUBLISH_TARGET: 'x', PUBLISH_API_URL: 'not even a url', PUBLISH_API_KEY: 'k' }))
-  assert.equal(c.publish, undefined)
+test('old PUBLISH_API_* keys in .env are ignored (removed in Phase 3.5); PUBLISH_TARGET is the Phase 11 target', () => {
+  const c = loadConfig(fakeEnv({ PUBLISH_TARGET: 'none', PUBLISH_API_URL: 'not even a url', PUBLISH_API_KEY: 'k' }))
+  assert.deepEqual(c.publish, { target: 'none', exportDir: c.publish.exportDir })
+  assert.match(problemsFor(fakeEnv({ PUBLISH_TARGET: 'x' })).join(), /PUBLISH_TARGET: must be one of none | embarko | docstar/)
+})
+
+test('Phase 11 keys: designer off and no publishing by default; Docstar empty until set; the Docstar key is a secret', async () => {
+  const env = fakeEnv()
+  delete env.EXPERIENCE_ENABLED
+  delete env.PUBLISH_TARGET
+  const c = loadConfig(env)
+  assert.equal(c.designer.enabled, false)
+  assert.equal(c.publish.target, 'none')
+  assert.deepEqual(c.docstar, { apiUrl: undefined, apiKey: '', collectionId: '' })
+  const d = loadConfig(fakeEnv({ DOCSTAR_API_URL: 'https://api.docstar.example/', DOCSTAR_API_KEY: 'hm_secret', DOCSTAR_COLLECTION_ID: 'col1' }))
+  assert.equal(d.docstar.apiUrl, 'https://api.docstar.example')
+  const { SECRET_KEYS } = await import('../src/config.js')
+  assert.ok(SECRET_KEYS.includes('DOCSTAR_API_KEY'))
 })
 
 test('TARGET_WORDS_MIN must not exceed TARGET_WORDS_MAX', () => {

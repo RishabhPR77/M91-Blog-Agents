@@ -122,7 +122,11 @@ test('prompt: exact B5 text with the limits filled in', () => {
   assert.match(p, /List at most 8 items, "must" items first\./)
   assert.match(p, /Add up to 3 general lessons/)
   assert.ok(!/\{\{/.test(p))
-  assert.equal(REVIEWER_PROMPT.split('\n').length, p.split('\n').length)
+  // The Phase 10 design gate and area are two more lines; with EXPERIENCE_ENABLED=false the text is the pre-Phase-10 one.
+  assert.equal(p.split('\n').length, REVIEWER_PROMPT.split('\n').length + 2)
+  const legacy = buildReviewerPrompt(config({ EXPERIENCE_ENABLED: 'false' }))
+  assert.equal(legacy.split('\n').length, REVIEWER_PROMPT.split('\n').length)
+  assert.ok(!/no_new_facts_in_design|- experience:|"designer"|GUIDE/.test(legacy))
 })
 
 async function setup({ answers, draftOver = {}, env = {}, seedReview } = {}) {
@@ -266,9 +270,34 @@ test('C4 decide: feedback may quote the guide text; design-only "must" items giv
 
 test('C4 prompt and schema: the new gate, the experience area and send_to "designer"', () => {
   assert.ok(GATE_IDS.includes('no_new_facts_in_design') && AREA_IDS.includes('experience'))
-  assert.match(REVIEWER_PROMPT, /- no_new_facts_in_design: the text in GUIDE/)
-  assert.match(REVIEWER_PROMPT, /- experience: each interactive part in GUIDE helps the reader/)
-  assert.match(REVIEWER_PROMPT, /"send_to": "designer" when only the GUIDE's own text/)
+  const p = buildReviewerPrompt(cfg)
+  assert.match(p, /- no_new_facts_in_design: the text in GUIDE/)
+  assert.match(p, /- experience: each interactive part in GUIDE helps the reader/)
+  assert.match(p, /"send_to": "designer" when only the GUIDE's own text/)
+})
+
+test('Phase 11: EXPERIENCE_ENABLED=false reviews with the pre-Phase-10 gates, areas, weights and routes', async () => {
+  const { reviewerIds, reviewerResultSchema, reviewSchemaErrors } = await import('../../src/reviewer/schemas.js')
+  const { weightsFor, LEGACY_WEIGHTS, decide } = await import('../../src/reviewer/decide.js')
+  const legacy = reviewerIds(false)
+  assert.ok(!legacy.gates.includes('no_new_facts_in_design') && !legacy.areas.includes('experience') && !legacy.sendTo.includes('designer'))
+  assert.deepEqual(weightsFor(false), LEGACY_WEIGHTS)
+  assert.equal(Object.values(LEGACY_WEIGHTS).reduce((a, b) => a + b, 0), 100)
+  assert.equal(Object.values(weightsFor(true)).reduce((a, b) => a + b, 0), 100)
+  assert.ok(!JSON.stringify(reviewerResultSchema(false)).includes('designer'))
+  // An answer with the legacy ids is valid in legacy mode only; a Phase 10 answer is not valid in legacy mode.
+  const answer = (design) => ({
+    gates: reviewerIds(design).gates.map((id) => ({ id, passed: true, evidence: 'ok' })),
+    areas: reviewerIds(design).areas.map((id) => ({ id, score: 8, evidence: 'ok' })),
+    feedback: [], fixed_previous: [], sources_checked: [], lessons: [], summary: 'Good.'
+  })
+  assert.deepEqual(reviewSchemaErrors(answer(false), false), [])
+  assert.ok(reviewSchemaErrors(answer(false), true).length > 0)
+  assert.ok(reviewSchemaErrors(answer(true), false).length > 0)
+  const off = config({ EXPERIENCE_ENABLED: 'false' })
+  const d = decide(answer(false), { markdown: 'x', config: off })
+  assert.equal(d.total, 80)
+  assert.ok(!d.areas.some((a) => a.id === 'experience') && !d.gates.some((g) => g.id === 'no_new_facts_in_design'))
 })
 
 test('C4 runReviewer: a guide adds a GUIDE section after POST (designer text only, Writer text pointed to); guide_reviewed is saved', async () => {

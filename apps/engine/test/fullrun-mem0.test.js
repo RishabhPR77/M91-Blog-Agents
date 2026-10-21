@@ -25,6 +25,7 @@ test('full run: 30 Mem0 requests (28 before Phase 10, 160 before Phase 9): no se
   t.diagnostic(JSON.stringify(Object.fromEntries(Object.entries(m.decisions).map(([k, v]) => [k, v.total]))))
   for (const [mode, d] of Object.entries(m.decisions)) assert.equal(d.status, 'succeeded', `${mode}: ${d.summary}`)
   const req = (mode) => m.decisions[mode].total.reads + m.decisions[mode].total.searches + m.decisions[mode].total.writes
-  assert.deepEqual(Object.fromEntries(Object.keys(m.decisions).map((k) => [k, req(k)])), { human_revise: 18, approve: 9, designer: 7, publish: 12, unpublish: 10 })
+  // Phase 11: approve also saves the final Markdown export (its record, and the reads that build it).
+  assert.deepEqual(Object.fromEntries(Object.keys(m.decisions).map((k) => [k, req(k)])), { human_revise: 18, approve: 12, designer: 7, publish: 12, unpublish: 10 })
   for (const mode of Object.keys(m.decisions)) assert.equal(m.decisions[mode].total.searches, 0, mode)
 })

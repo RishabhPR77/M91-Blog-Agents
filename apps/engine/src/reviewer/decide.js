@@ -2,9 +2,17 @@
 // adds the code gates, checks the quotes, computes the total and decides pass or fail.
 
 import { hardProblems } from '../checks/content.js'
-import { GATE_IDS, AREA_IDS } from './schemas.js'
+import { reviewerIds } from './schemas.js'
 
 // Phase 10: experience (10) is new; structure and originality give 5 each (the guide now carries structure).
+// Before Phase 10, and whenever EXPERIENCE_ENABLED=false.
+export const LEGACY_WEIGHTS = Object.freeze({
+  answers_question: 15, simplicity: 15, accuracy: 15, seo: 10, structure: 10,
+  tone: 10, originality: 10, ai_answer_readiness: 5, to_the_point: 5, m91_fit_cta: 5
+})
+/** The area weights for a mode (design: is the Experience Designer on?). */
+export const weightsFor = (design = true) => (design ? WEIGHTS : LEGACY_WEIGHTS)
+
 export const WEIGHTS = Object.freeze({
   answers_question: 15, simplicity: 15, accuracy: 15, seo: 10, structure: 5,
   tone: 10, originality: 5, ai_answer_readiness: 5, to_the_point: 5, m91_fit_cta: 5, experience: 10
@@ -38,8 +46,8 @@ export function missingQuotes(markdown, feedback) {
 }
 
 /** Σ(score/10 × weight), rounded to 1 decimal. */
-export function computeTotal(areas) {
-  const sum = areas.reduce((acc, a) => acc + (Number(a.score) / 10) * (WEIGHTS[a.id] ?? 0), 0)
+export function computeTotal(areas, weights = WEIGHTS) {
+  const sum = areas.reduce((acc, a) => acc + (Number(a.score) / 10) * (weights[a.id] ?? 0), 0)
   return Math.round(sum * 10) / 10
 }
 
@@ -69,9 +77,12 @@ export function codeGates({ checkResults = [], sourcesChecked = [] }) {
 export function decide(answer, { markdown, checkResults = [], allowedUrls = null, urlKey = (u) => u, config, guide = null, guideText = '' }) {
   const warnings = []
   const { passAreaMin } = config.gates
-  let aiGates = GATE_IDS.map((id) => ({ ...answer.gates.find((g) => g.id === id), source: 'ai' }))
-  let areas = AREA_IDS.map((id) => answer.areas.find((a) => a.id === id))
-  if (!guide) {
+  // EXPERIENCE_ENABLED=false: the pre-Phase-10 gates, areas and weights.
+  const design = config.designer?.enabled !== false
+  const ids = reviewerIds(design)
+  let aiGates = ids.gates.map((id) => ({ ...answer.gates.find((g) => g.id === id), source: 'ai' }))
+  let areas = ids.areas.map((id) => answer.areas.find((a) => a.id === id))
+  if (design && !guide) {
     const structure = areas.find((a) => a.id === 'structure')
     areas = areas.map((a) => (a.id === 'experience' ? { id: 'experience', score: structure.score, evidence: 'no guide: scored as structure', source: 'code' } : a))
     aiGates = aiGates.map((g) => (g.id === 'no_new_facts_in_design' ? { id: g.id, passed: true, evidence: 'no guide', source: 'code' } : g))
@@ -89,7 +100,7 @@ export function decide(answer, { markdown, checkResults = [], allowedUrls = null
   if (checked.length > max) warnings.push(`Reviewer checked ${checked.length} sources; REVIEWER_MAX_SOURCE_CHECKS is ${max}`)
 
   const gates = [...aiGates, ...codeGates({ checkResults, sourcesChecked: sources })]
-  const total = computeTotal(areas)
+  const total = computeTotal(areas, weightsFor(design))
   const failedGates = gates.filter((g) => !g.passed)
   const lowAreas = areas.filter((a) => a.score < passAreaMin)
   const pass = passRule({ gates, areas, total }, config.gates)

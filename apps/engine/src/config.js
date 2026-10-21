@@ -22,8 +22,13 @@ export const SECRET_KEYS = Object.freeze([
   'DASHBOARD_PASSWORD',
   'EMBARKO_DEPLOY_TOKEN',
   'SLACK_POST_WEBHOOK_URL',
-  'M91_ALERT_WEBHOOK_URL'
+  'M91_ALERT_WEBHOOK_URL',
+  'DOCSTAR_API_KEY'
 ])
+
+// Phase 11: where an approved post goes. none: nowhere (the Markdown export is the output); embarko: the
+// Phase 7 blog; docstar: Docstar (the adapter answers "not configured" until the DOCSTAR_* keys are set).
+export const PUBLISH_TARGETS = Object.freeze(['none', 'embarko', 'docstar'])
 
 const DEFAULTS = {
   VIASOCKET_API_BASE: 'https://flow-api.viasocket.com/',
@@ -77,6 +82,10 @@ const DEFAULTS = {
   EXPERIENCE_AI_SERVICE: 'anthropic', EXPERIENCE_AI_MODEL: 'claude-sonnet-4-6', EXPERIENCE_DELIVERY: 'rtlayer',
   EXPERIENCE_MAX_REPAIRS: '1', EXPERIENCE_MAX_COMPONENTS: '10', MAX_DESIGNER_REVISIONS: '2', INTERACTIVE_DEFAULT: 'true',
   PROMO_ENABLED: 'false',
+  // Phase 11 (fallback plan): the Experience Designer is off and nothing is published; the reviewed draft becomes a
+  // Markdown file (apps/engine/exports unless EXPORT_DIR is set). Docstar is filled in once its keys exist.
+  EXPERIENCE_ENABLED: 'false', PUBLISH_TARGET: 'none', EXPORT_DIR: '',
+  DOCSTAR_API_URL: '', DOCSTAR_API_KEY: '', DOCSTAR_COLLECTION_ID: '',
   BLOG_APP_NAME: 'm91-blog', BLOG_BASE_URL: 'https://m91-blog.embarko.app', NOINDEX_FIRST_N_POSTS: '10',
   // Phase 3: Strategist
   STRATEGIST_MAX_REPAIRS: '1', RECENT_BRIEFS_WINDOW: '10', TITLE_MAX_CHARS: '70', KEYWORD_MAX_WORDS: '6', OUTLINE_MIN_SECTIONS: '4',
@@ -164,7 +173,8 @@ export function loadConfig(env = process.env) {
   const list = (key) => (str(key) ?? '').split(',').map((s) => s.trim()).filter(Boolean)
   const url = (key, { required = false } = {}) => {
     const value = str(key, { required })
-    if (value === undefined) return undefined
+    // An empty default (Phase 11: DOCSTAR_API_URL until Docstar is set up) means "not set".
+    if (value === undefined || value === '') return undefined
     try {
       const parsed = new URL(value)
       if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('protocol')
@@ -362,10 +372,22 @@ export function loadConfig(env = process.env) {
     // Phase 10: the Experience Designer turns each draft into an interactive guide (it writes short interface
     // text only; the post's own text and code are placed by code). It runs before the Reviewer.
     designer: {
+      // Phase 11: false skips the Experience Designer everywhere (pipeline, counter prompts, the Reviewer's design rules)
+      enabled: bool('EXPERIENCE_ENABLED'),
       ...agent('experience'),
       maxRepairs: int('EXPERIENCE_MAX_REPAIRS', { max: 3 }),
       maxComponents: int('EXPERIENCE_MAX_COMPONENTS', { min: 1, max: 30 }),
       interactiveDefault: bool('INTERACTIVE_DEFAULT')
+    },
+    // Phase 11: the publish target, the Markdown export and Docstar (the API key is a secret; empty until known)
+    publish: {
+      target: oneOf('PUBLISH_TARGET', PUBLISH_TARGETS),
+      exportDir: str('EXPORT_DIR')
+    },
+    docstar: {
+      apiUrl: url('DOCSTAR_API_URL')?.replace(/\/+$/, ''),
+      apiKey: str('DOCSTAR_API_KEY'),
+      collectionId: str('DOCSTAR_COLLECTION_ID')
     },
     // Blog + Embarko, used from Phase 7. The deploy token is optional until then.
     blog: {

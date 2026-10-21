@@ -13,6 +13,8 @@ apps/engine/dashboard/dist/
 apps/engine/data/
 # Exported drafts for reading (npm run draft -- --export …)
 drafts/
+# Phase 11: the final Markdown exports (npm run export, and every approval)
+apps/engine/exports/
 # The blog: build output, Astro's cache, and the post files the Publisher writes (build input only; Mem0 is the source of truth)
 apps/blog/dist/
 apps/blog/.astro/

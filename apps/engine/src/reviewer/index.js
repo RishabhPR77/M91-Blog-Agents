@@ -10,7 +10,7 @@ import { throwIfCancelled, CancelledError } from '../events.js'
 import { urlKey } from '../checks/content.js'
 import { loadBrief } from '../writer/inputs.js'
 import { draftVersion, draftBriefVersion } from '../writer/save.js'
-import { reviewer_result, reviewSchemaErrors } from './schemas.js'
+import { reviewerResultSchema, reviewSchemaErrors } from './schemas.js'
 import { buildReviewerPrompt, reviewRepairTail, quotesProblem } from './prompts.js'
 import { loadDraft, loadFacts, loadPreviousReview, buildReviewerSections, buildReviewerMessage } from './inputs.js'
 import { decide, missingQuotes, reviewSummaryLine } from './decide.js'
@@ -65,7 +65,9 @@ export async function runReviewer(params = {}, deps = {}) {
   const story = brief.story?.use ? (await store.getRecords({ type: 'story_lead' })).find((r) => r.payload?.story_id === brief.story.story_id)?.payload ?? null : null
   const current = { version, metadata: { brief_version: briefVersion } }
   const previousReview = version > 1 || briefVersion > 1 ? params.previousReview ?? (await loadPreviousReview(store, params.briefId, current)) : null
-  let guide = params.guideDoc
+  // EXPERIENCE_ENABLED=false: no guide, and the pre-Phase-10 gates, areas and weights.
+  const design = config.designer?.enabled !== false
+  let guide = design ? params.guideDoc : null
   if (guide === undefined) {
     const doc = await latestGuideDoc(store, params.briefId, version, briefVersion)
     guide = doc?.status === 'ok' ? doc.payload?.guide ?? null : null
@@ -94,8 +96,8 @@ export async function runReviewer(params = {}, deps = {}) {
     if (trimmed.length) warnings.push(`message trimmed to fit 50,000 characters: ${trimmed.join(', ')}`)
     const t0 = now()
     try {
-      const r = await aiSend({ agent: 'reviewer', call, prompt, message, jsonSchema: reviewer_result, threadId: reviewerThreadId(params.briefId, version), retries: config.viasocket.maxRetries })
-      const problems = reviewSchemaErrors(r.content)
+      const r = await aiSend({ agent: 'reviewer', call, prompt, message, jsonSchema: reviewerResultSchema(design), threadId: reviewerThreadId(params.briefId, version), retries: config.viasocket.maxRetries })
+      const problems = reviewSchemaErrors(r.content, design)
       await runLog({ call, model: r.model ?? rc.model, delivery: r.delivery ?? rc.delivery, ms: r.ms ?? now() - t0, result: problems.length ? 'schema_invalid' : 'ok', problems, error: null })
       return { answer: r.content, problems, model: r.model ?? rc.model }
     } catch (error) {

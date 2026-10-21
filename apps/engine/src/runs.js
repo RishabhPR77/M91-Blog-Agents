@@ -25,6 +25,8 @@ import { runReviewer } from './reviewer/index.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { runPromo, approvedDraft } from './promo/index.js'
 import { runExperience, designableDraft } from './experience/index.js'
+import { saveFinalExport, previewExport, exportableDraft, latestExport, ExportError } from './export/index.js'
+import { createDocstar, publishToDocstar } from './publisher/docstar.js'
 import { createPublisher, publishPreflight, PublishError } from './publisher/index.js'
 import { draftsOf } from './writer/save.js'
 import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopic, runApprovalReview } from './approval.js'
@@ -34,14 +36,16 @@ import { runWriter } from './writer/index.js'
 import { loadBrief } from './writer/inputs.js'
 import { addToTimeline } from './timeline.js'
 
-export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog'])
-export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog'])
+export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export'])
+export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export'])
 // The Publisher's modes (Phase 7): code only, no AI calls.
 export const PUBLISH_MODES = Object.freeze(['publish', 'unpublish', 'set_index', 'rebuild_blog'])
+// Which publish modes each PUBLISH_TARGET supports (Phase 11). none: no publishing at all (the export is the output).
+export const TARGET_MODES = Object.freeze({ none: [], embarko: ['publish', 'unpublish', 'set_index', 'rebuild_blog'], docstar: ['publish', 'unpublish'] })
 // The human's decisions on a draft that waits at awaiting_human (Phase 5.5).
 export const DECISION_MODES = Object.freeze(['approve', 'human_revise', 'reject_topic', 'approval_review'])
 export const TRIGGERS = Object.freeze(['manual', 'cron', 'api', 'cli'])
-const TOP_STEPS = ['scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer', 'promo', 'publisher']
+const TOP_STEPS = ['scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer', 'promo', 'export', 'publisher']
 
 export class RunError extends Error {
   constructor(code, message, status = 400) {
@@ -136,6 +140,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (mode === 'reviewer') await checkReviewerParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'promo') await checkPromoParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'designer') await checkDesignerParams(params, configForRun(config, { dryRun, params }))
+    if (mode === 'export') await checkExportParams(params, configForRun(config, { dryRun, params }))
     if (PUBLISH_MODES.includes(mode)) await checkPublishParams(mode, params, configForRun(config, { dryRun, params }))
     if (DECISION_MODES.includes(mode)) {
       const runConfig0 = configForRun(config, { dryRun, params })
@@ -292,6 +297,17 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
         }
       }
       const publisher = (publisherFactory ?? ((cfg, d) => createPublisher({ config: cfg, ...d })))(runConfig, { store, notifier })
+      if (PUBLISH_MODES.includes(mode) && runConfig.publish?.target === 'docstar') {
+        // Phase 11: Docstar (answers "not configured" until the DOCSTAR_* keys are set; nothing is sent).
+        const docstar = createDocstar({ config: runConfig })
+        const out = await runStep('publisher', async () => {
+          const rec = await latestExport(store, params.brief_id ?? '')
+          if (mode === 'publish') return publishToDocstar({ store, docstar, exportRecord: rec })
+          const r = await docstar.unpublishPage({ page_id: rec?.payload?.docstar_page_id ?? null, slug: params.slug })
+          return { status: r.status, summary: r.ok ? `Docstar page unpublished: ${params.slug}` : `Docstar: ${r.message ?? r.error ?? r.status}`, warnings: r.ok ? [] : [r.message ?? r.status] }
+        })
+        return { status: 'succeeded', brief_id: params.brief_id ?? null, summary: out.summary, warnings: out.warnings }
+      }
       if (PUBLISH_MODES.includes(mode)) {
         const out = await runStep('publisher', () =>
           mode === 'publish' ? publisher.publish({ briefId: params.brief_id })
@@ -353,6 +369,22 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       const r = await runPipeline({ config: runConfig, store, notifier, agents: fullAgents, now, runId, briefId: params.brief_id, lock: false, signal, resume: { version: params.version, briefVersion: params.brief_version } })
       const status = r.state === 'awaiting_human' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
       return { status, brief_id: params.brief_id, summary: r.error ?? r.summary ?? `review loop ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
+    }
+    if (mode === 'export') {
+      // Phase 11: the Markdown export of a reviewed draft (0 AI calls). save: also the final export (record + file).
+      emit('step.started', { agent: 'export', step: 'export' })
+      try {
+        const out = params.save
+          ? await saveFinalExport({ store, config: runConfig, briefId: params.brief_id, version: params.version, now })
+          : await previewExport({ store, config: runConfig, briefId: params.brief_id, version: params.version, now })
+        const summary = params.save ? `Markdown export saved: ${out.path}` : `Markdown export built (not saved): ${out.filename}`
+        emit('step.finished', { agent: 'export', step: 'export' })
+        emit('step.output', { agent: 'export', step: 'export', message: summary, data: { filename: out.filename, version: out.version, chars: out.markdown.length, saved: Boolean(params.save) } })
+        return { status: 'succeeded', brief_id: params.brief_id, summary, warnings: out.warnings, output: { filename: out.filename, path: out.path ?? null, markdown: out.markdown } }
+      } catch (error) {
+        stepEnded('export', error, signal)
+        throw error
+      }
     }
     if (mode === 'designer') {
       // Phase 10: re-run the Experience Designer alone on a brief's newest waiting, approved or published draft
@@ -442,13 +474,34 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
 
   /** designer mode: params.brief_id of a brief with a waiting, approved or published draft (params.version optional). */
   async function checkDesignerParams(params, runConfig) {
+    if (runConfig.designer?.enabled === false) throw new RunError('experience_off', 'the Experience Designer is off (EXPERIENCE_ENABLED=false)', 409)
     checkDraftParams(params, 'designer')
     const draft = await designableDraft(readStore(runConfig), params.brief_id, { version: params.version })
     if (!draft) throw new RunError('no_draft', `brief ${params.brief_id} has no waiting, approved or published draft${params.version ? ` v${params.version}` : ''}`, 409)
   }
 
+  /** export mode: params.brief_id of a brief with a reviewed draft (params.version optional, params.save boolean). */
+  async function checkExportParams(params, runConfig) {
+    if (typeof params.brief_id !== 'string' || !params.brief_id.trim()) throw new RunError('bad_params', 'export needs params.brief_id')
+    if (params.save !== undefined && typeof params.save !== 'boolean') throw new RunError('bad_params', 'save must be true or false')
+    try {
+      await exportableDraft(readStore(runConfig), params.brief_id, { version: params.version })
+    } catch (error) {
+      if (error instanceof ExportError) throw new RunError(error.code, error.message, error.status)
+      throw error
+    }
+  }
+
   /** The Publisher's modes: preflight (token, site URL) and params, before the run starts. */
   async function checkPublishParams(mode, params, runConfig) {
+    // Phase 11: PUBLISH_TARGET decides which publish modes exist at all.
+    const target = runConfig.publish?.target ?? 'embarko'
+    if (target === 'none') throw new RunError('publishing_off', 'publishing is off (PUBLISH_TARGET=none): the Markdown export is the output', 409)
+    if (!TARGET_MODES[target].includes(mode)) throw new RunError('not_supported', `${mode} is not available with PUBLISH_TARGET=${target}`, 409)
+    if (target === 'docstar') {
+      if (mode === 'publish' && !(await latestExport(readStore(runConfig), params.brief_id))) throw new RunError('no_export', `brief ${params.brief_id} has no final Markdown export: approve it first`, 409)
+      return
+    }
     // (reads below go through the index when the engine has one)
     try {
       publishPreflight(runConfig)

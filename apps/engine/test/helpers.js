@@ -31,6 +31,11 @@ export function fakeEnv(overrides = {}) {
     // The read cache is shared per process: off in unit tests unless a test turns it on.
     STORE_CACHE_TTL_MS: '0',
     ENGINE_DATA_DIR: TEST_DATA_DIR,
+    // Phase 11: Markdown exports from tests go to the test folder, never apps/engine/exports.
+    EXPORT_DIR: join(TEST_DATA_DIR, 'exports'),
+    // Phase 10 behaviour in the existing tests (the defaults are the Phase 11 fallback: designer off, no publish).
+    EXPERIENCE_ENABLED: 'true',
+    PUBLISH_TARGET: 'embarko',
     ...overrides
   }
 }
