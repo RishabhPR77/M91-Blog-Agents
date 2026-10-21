@@ -21,7 +21,7 @@ CHECK RESULTS are measured by code (word count, reading grades, link status, phr
 - no_legal_advice_framing: the post never presents itself as legal, regulatory or compliance advice.
 
 === AREAS (score 0–10 each; give evidence) ===
-Use these anchors for every area: 10 = exemplary, nothing to improve; 8 = strong, small polish only; 7 = acceptable minimum for publishing; 5 = clear problems a reader would notice; 3 = major problems; 0 = missing or wrong.
+Use these anchors for every area: 10 = exemplary, nothing to improve; 8 = strong, small polish only; {{pass_area_min}} = acceptable minimum for publishing; 5 = clear problems a reader would notice; 3 = major problems; 0 = missing or wrong.
 - answers_question: the reader's question is fully answered, starting in the first lines and under each heading.
 - simplicity: a 10-year-old could follow the main idea; short sentences; every technical word explained. Use the reading grades in CHECK RESULTS: above the targets lowers this score.
 - accuracy: every claim is precise and supported; nothing overstated.
@@ -37,7 +37,7 @@ Use these anchors for every area: 10 = exemplary, nothing to improve; 8 = strong
 For every problem, add one item:
 - "quote": copy the exact words from the post (at most 25 words) so the problem can be found. Never paraphrase the quote.
 - "problem" and "fix": specific and doable. Never "make it better".
-- "severity": "must" if it causes a failed gate or an area below 7; otherwise "should".
+- "severity": "must" if it causes a failed gate or an area below {{pass_area_min}}; otherwise "should".
 - "send_to": "writer" for wording, simplicity, structure, SEO, tone and missing links that exist in ALLOWED URLS; "strategist" when the angle, search intent, topic or outline is wrong, or the topic duplicates past coverage; "scout" when a claim needs a source that is not in ALLOWED URLS (list those claims in "claims").
 - List at most {{max_feedback_items}} items, "must" items first.
 
@@ -54,7 +54,9 @@ export function buildReviewerPrompt(config) {
   return fill(REVIEWER_PROMPT, {
     max_source_checks: config.reviewer.maxSourceChecks,
     max_feedback_items: config.reviewer.feedbackMaxItems,
-    max_lessons: config.reviewer.lessonsPerReviewMax
+    max_lessons: config.reviewer.lessonsPerReviewMax,
+    // The area minimum (PASS_AREA_MIN): the same number the pass rule uses.
+    pass_area_min: config.gates.passAreaMin
   })
 }
 

@@ -236,3 +236,4 @@ with `npm run mem0:usage -- --set=<n>`; `npm run mem0:usage` shows it.
 | `SCOUT_STORIES_TIMEOUT_MS` | `480000` | How long the Scout's stories call waits for its answer. |
 | `PASS_SCORE_MIN` | `80` (was 85) | The Reviewer's pass mark. |
 | `MAX_WRITER_REVISIONS` | `2` | Unchanged. |
+| `PASS_AREA_MIN` | `6` (was 7) | Every Reviewer area must score at least this. Lowered on 2026-10-21: the run R-261021-0841-JR5C scored 82, 80.5 and 83.5 overall but failed on simplicity 6. The Reviewer prompt now uses the same number for "acceptable minimum" and for "must" items. |

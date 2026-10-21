@@ -32,7 +32,11 @@ test('pass rule edges: 79.9 fails, 80.0 passes (PASS_SCORE_MIN=80, Phase 9); 84.
   const g85 = { ...g, passScoreMin: 85 }
   assert.equal(passRule({ gates, areas: areasAll(9), total: 84.9 }, g85), false)
   assert.equal(passRule({ gates, areas: areasAll(9), total: 85.0 }, g85), true)
-  assert.equal(passRule({ gates, areas: [...areasAll(10).slice(1), { id: 'answers_question', score: 6 }], total: 94 }, g), false)
+  // PASS_AREA_MIN=6 (the default since 2026-10-21): an area at 6 passes, at 5 fails; with 7, an area at 6 fails.
+  assert.equal(g.passAreaMin, 6)
+  assert.equal(passRule({ gates, areas: [...areasAll(10).slice(1), { id: 'answers_question', score: 6 }], total: 94 }, g), true)
+  assert.equal(passRule({ gates, areas: [...areasAll(10).slice(1), { id: 'answers_question', score: 5 }], total: 94 }, g), false)
+  assert.equal(passRule({ gates, areas: [...areasAll(10).slice(1), { id: 'answers_question', score: 6 }], total: 94 }, { ...g, passAreaMin: 7 }), false)
 
   const failedGate = decide(reviewAnswer({ scores: {}, gates: { no_invented_content: false } }), ctx())
   assert.equal(failedGate.pass, false)
@@ -215,4 +219,13 @@ test('message guard: the source pack is trimmed first to stay under 50,000 chara
   const { message, trimmed } = buildReviewerMessage({ post: 'p', brief: '{}', checks: '[]', facts: '{}', allowedUrls: '- x', sourcePack: 'y'.repeat(60000), tone: 't' })
   assert.ok(message.length <= 50000)
   assert.deepEqual(trimmed, ['source pack'])
+})
+
+test('the Reviewer prompt uses PASS_AREA_MIN for the publishing minimum and for "must" items', () => {
+  const p6 = buildReviewerPrompt(cfg)
+  assert.ok(p6.includes('6 = acceptable minimum for publishing;'))
+  assert.ok(p6.includes('if it causes a failed gate or an area below 6;'))
+  const p7 = buildReviewerPrompt(config({ PASS_AREA_MIN: '7' }))
+  assert.ok(p7.includes('7 = acceptable minimum for publishing;') && p7.includes('an area below 7;'))
+  assert.ok(!p6.includes('{{'), 'every placeholder filled')
 })
