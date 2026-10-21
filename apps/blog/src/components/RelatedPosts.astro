@@ -6,9 +6,9 @@ const { posts } = Astro.props
 ---
 {posts.length > 0 && (
   <section aria-labelledby="related-title">
-    <h2 id="related-title" class="text-xl font-bold">Related posts</h2>
-    <div class="mt-4 grid gap-4 md:grid-cols-3">
-      {posts.map((p) => <PostCard post={p} />)}
+    <h2 id="related-title" class="text-2xl font-extrabold tracking-[-0.03em]">Related posts</h2>
+    <div class="bl-grid mt-6">
+      {posts.map((p) => <PostCard post={p} headingLevel={3} />)}
     </div>
   </section>
 )}

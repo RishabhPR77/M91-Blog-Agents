@@ -1,21 +1,19 @@
 ---
+// One post as the M91 site's lime card: topic label, title (the whole card is the link), description, and
+// the reading time and date. data-search holds the text the home page's search matches.
 import type { Post } from '../lib/posts'
 import { topicOf, formatDate, url } from '../lib/posts'
-interface Props { post: Post; featured?: boolean; headingLevel?: 2 | 3 }
-const { post, featured = false, headingLevel = 3 } = Astro.props
+interface Props { post: Post; headingLevel?: 2 | 3 }
+const { post, headingLevel = 2 } = Astro.props
 const topic = topicOf(post)
-const headingClass = `mt-3 font-bold tracking-tight ${featured ? 'text-3xl md:text-4xl' : 'text-xl'}`
 const link = url(`/posts/${post.slug}/`)
+const search = [post.title, post.description, topic.name, ...post.tags].join(' ').toLowerCase()
 ---
-<article class={`group relative rounded-2xl border border-line bg-bg p-6 transition hover:border-line-2 ${featured ? 'md:p-10 bg-bg-warm' : ''}`}>
-  <div class="flex flex-wrap items-center gap-3 text-sm text-fg-2">
-    <a href={url(`/topics/${topic.slug}/`)} class="chip relative z-10">{topic.short}</a>
-    <time datetime={post.published_at}>{formatDate(post.published_at)}</time>
-    <span aria-hidden="true">·</span>
-    <span>{post.reading_time_min} min read</span>
-  </div>
+<article class="bl-card" data-search={search}>
+  <span class="bl-k">{topic.short}</span>
   {headingLevel === 2
-    ? <h2 class={headingClass}><a href={link} class="after:absolute after:inset-0 group-hover:underline">{post.title}</a></h2>
-    : <h3 class={headingClass}><a href={link} class="after:absolute after:inset-0 group-hover:underline">{post.title}</a></h3>}
-  <p class={`mt-3 text-fg-2 ${featured ? 'text-lg' : ''}`}>{post.description}</p>
+    ? <h2 class="bl-t"><a href={link}>{post.title}</a></h2>
+    : <h3 class="bl-t"><a href={link}>{post.title}</a></h3>}
+  <p class="bl-p">{post.description}</p>
+  <p class="bl-m"><span>{post.reading_time_min} min read</span><span aria-hidden="true">·</span><time datetime={post.published_at}>{formatDate(post.published_at)}</time></p>
 </article>

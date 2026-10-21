@@ -1,6 +1,6 @@
 // JSON-LD for posts (BlogPosting + BreadcrumbList) and the home page (Blog).
 import type { Post } from './posts'
-import { topicOf, url } from './posts'
+import { url } from './posts'
 import { SITE, SITE_URL, M91_URL } from '../config/site'
 
 const abs = (path: string) => new URL(url(path), SITE_URL).href
@@ -25,14 +25,12 @@ export function blogPostingLd(post: Post) {
 }
 
 export function breadcrumbLd(post: Post) {
-  const topic = topicOf(post)
   return {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Blog', item: abs('/') },
-      { '@type': 'ListItem', position: 2, name: topic.name, item: abs(`/topics/${topic.slug}/`) },
-      { '@type': 'ListItem', position: 3, name: post.title, item: post.canonical_url }
+      { '@type': 'ListItem', position: 2, name: post.title, item: post.canonical_url }
     ]
   }
 }

@@ -48,12 +48,11 @@ test('the fixture build succeeds; every post page exists with title, canonical, 
   assert.ok(existsSync(join(dist, 'og', 'default.png')) && existsSync(join(dist, '404.html')))
 })
 
-test('the noindex post has the robots meta and is absent from home, topics, RSS, sitemap and llms.txt', () => {
+test('the noindex post has the robots meta and is absent from home, RSS, sitemap and llms.txt', () => {
   assert.match(read(dist, 'posts/fixture-hidden-post/index.html'), /<meta name="robots" content="noindex, nofollow">/)
   assert.doesNotMatch(read(dist, 'posts/fixture-indexed-post/index.html'), /name="robots"/)
   const lists = {
     home: read(dist, 'index.html'),
-    topic: read(dist, 'topics/human-approval-for-ai-agents/index.html'),
     rss: read(dist, 'rss.xml'),
     sitemap: readdirSync(dist).filter((f) => /^sitemap-\d+\.xml$/.test(f)).map((f) => read(dist, f)).join('\n'),
     llms: read(dist, 'llms.txt')
@@ -118,7 +117,7 @@ test('a production build never includes samples/ (an empty content folder builds
   const all = files(out).filter((f) => /\.(html|xml|txt)$/.test(f)).map((f) => readFileSync(f, 'utf8')).join('\n')
   assert.ok(!all.includes('sample-'), 'no sample post anywhere')
   assert.ok(!all.includes('data-sample-badge'), 'no sample badge')
-  assert.match(read(out, 'index.html'), /No posts here yet\./)
+  assert.match(read(out, 'index.html'), /No posts yet\./)
 })
 
 // ---------- Phase 8: interactive blocks ----------
@@ -172,7 +171,8 @@ test('every built block renders complete HTML without JavaScript, in order; JS-o
 
 test('block scripts: one bundled file per block type from self, only on pages that use it; the CSP meta is unchanged', () => {
   const html = read(dist, EVERY)
-  const srcs = [...html.matchAll(/<script type="module" src="([^"]+)"/g)].map((m) => m[1])
+  // Every page also loads the footer's script (Copy setup prompt); the block scripts are the rest.
+  const srcs = [...html.matchAll(/<script type="module" src="([^"]+)"/g)].map((m) => m[1]).filter((s) => !s.includes('/Footer.astro'))
   assert.equal(srcs.length, 8, 'checklist, phone, tabs, timeline, terminal, choices, faq, troubleshooting')
   for (const src of srcs) {
     assert.match(src, /^\/_astro\/[A-Za-z]+\.astro_astro_type_script_index_0_lang\.[\w-]+\.js$/)
@@ -180,7 +180,8 @@ test('block scripts: one bundled file per block type from self, only on pages th
   }
   assert.ok(!/<script type="module">/.test(html), 'no inline module scripts')
   assert.ok(!/ on[a-z]+="/.test(html.replace(/<script[\s\S]*?<\/script>/g, '')), 'no inline event handlers')
-  assert.ok(!read(dist, 'posts/fixture-indexed-post/index.html').includes('<script type="module" src='), 'a post without blocks loads no block script')
+  const plain = [...read(dist, 'posts/fixture-indexed-post/index.html').matchAll(/<script type="module" src="([^"]+)"/g)].map((m) => m[1])
+  assert.ok(plain.every((s) => s.includes('/Footer.astro')), 'a post without blocks loads no block script')
   for (const p of [EVERY, 'posts/fixture-indexed-post/index.html', 'index.html']) assert.ok(read(dist, p).includes(`content="${CSP}"`), p)
 })
 
@@ -229,4 +230,25 @@ test('the every-block sample is a valid post that builds with all 21 blocks', as
   assert.equal(r.code, 0, r.output.slice(-800))
   assert.ok(!/\[blocks\]/.test(r.output), 'no block warnings')
   assert.match(read(out, 'posts/sample-every-block/index.html'), /data-blocks="21"/)
+})
+
+test('the home page looks like the M91 site: ruled paper, heading, search, lime cards; no topic pages or filters', () => {
+  const home = read(dist, 'index.html')
+  assert.match(home, /<section class="ruled/)
+  assert.match(home, /<p class="eyebrow">Blog<\/p>/)
+  assert.match(home, /<h1 class="h-display[^"]*">Notes on waking people up\.<\/h1>/)
+  assert.match(home, /<input id="post-search" type="search"/)
+  assert.match(home, /<article class="bl-card" data-search="[^"]*fixture/)
+  assert.ok(!home.includes('Plain guides on human approval'), 'no subtitle line')
+  assert.ok(!existsSync(join(dist, 'topics')), 'no topic pages')
+  assert.ok(!home.includes('href="/topics/'), 'no topic links')
+  // The header is the M91 site's: its sections, Blog marked as this page, Docs and the download menu.
+  assert.match(home, /href="https:\/\/m91\.msg91\.com\/#how" class="nav-link nav-extra"/)
+  assert.match(home, /href="\/" class="nav-link" aria-current="page">Blog</)
+  assert.match(home, /<details class="dl">/)
+  // The footer: the setup prompt button and the site's columns and legal links.
+  assert.match(home, /data-copy-prompt="Set up M91 alerting in this project/)
+  for (const href of ['https://m91-api.msg91.com/llms.txt', 'https://github.com/MSG91/m91-skill', 'mailto:support@msg91.com', 'https://msg91.com/terms', 'https://apps.apple.com/app/id6759090472']) {
+    assert.ok(home.includes(`href="${href}"`), href)
+  }
 })

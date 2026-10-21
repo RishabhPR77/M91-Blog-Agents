@@ -10,8 +10,8 @@ export const BASE_PATH = '/'
 export const SITE = {
   name: 'M91 Blog',
   title: 'M91 Blog: getting a human decision when software needs one',
-  description:
-    'Plain guides on human approval for AI agents, on-call alerting and urgent decisions: how to make sure a real person answers when your software needs one.',
+  // Meta description only (search results, RSS, llms.txt); the home page shows no subtitle.
+  description: 'Notes on getting a real person to answer when software or an AI agent needs a decision: approvals, on-call alerts and escalation.',
   author: 'The M91 team',
   publisher: 'M91',
   locale: 'en'
@@ -25,7 +25,42 @@ export const CTA = {
   body: 'M91 rings a person’s phone through silent mode until someone answers, then sends the decision back to your software.'
 } as const
 
-// The five topic groups of the engine (topic_group 1–5), each with its page slug.
+// The home page's heading, as on the M91 site's blog section.
+export const HOME = { eyebrow: 'Blog', title: 'Notes on waking people up.' } as const
+
+// Links of the M91 site's header and footer (m91.msg91.com), so the blog reads as part of it.
+const m91 = (path: string) => new URL(path, M91_URL).href
+export const M91_LINKS = {
+  how: m91('#how'),
+  cases: m91('#cases'),
+  features: m91('#features'),
+  integrations: m91('#integrations'),
+  pricing: m91('#pricing'),
+  docs: m91('docs.html?doc=overview.md'),
+  llms: 'https://m91-api.msg91.com/llms.txt',
+  skill: 'https://github.com/MSG91/m91-skill',
+  contact: 'mailto:support@msg91.com',
+  msg91: 'https://msg91.com',
+  abuse: 'mailto:abuse@msg91.com',
+  terms: 'https://msg91.com/terms',
+  privacy: 'https://msg91.com/privacy',
+  antiSpam: 'https://msg91.com/no-spam',
+  appStore: 'https://apps.apple.com/app/id6759090472',
+  googlePlay: 'https://play.google.com/store/apps/details?id=com.msg91.m91'
+} as const
+
+// The M91 site's "Copy setup prompt" text (its closing call to action), word for word.
+export const SETUP_PROMPT = `Set up M91 alerting in this project, so a real person gets woken when something breaks.
+
+Read https://m91-api.msg91.com/llms.txt and follow it. Nothing to install.
+Start with quickstart.md, then playbook.md, before writing any code.
+
+My send link — ask me for it. It is a live credential, so store it the way this project already stores its secrets, never in source.
+
+Faster, if your tools let you install one:
+npx skills add MSG91/m91-skill --skill m91-alerting -g`
+
+// The five topic groups of the engine (topic_group 1–5): each card's label. There are no topic pages: readers search.
 export const TOPICS = [
   { group: 1, slug: 'human-approval-for-ai-agents', name: 'Human approval for AI agents', short: 'AI agents', description: 'Pausing an AI agent until a person approves the risky step.' },
   { group: 2, slug: 'fintech-and-payments', name: 'Fintech and payments', short: 'Fintech', description: 'Alerts and approvals for payments, refunds and money movement.' },
@@ -33,5 +68,3 @@ export const TOPICS = [
   { group: 4, slug: 'alerting-best-practices', name: 'Alerting best practices', short: 'Best practices', description: 'What is worth waking someone for, and how to say it.' },
   { group: 5, slug: 'comparisons', name: 'Comparisons', short: 'Comparisons', description: 'M91 next to PagerDuty, Pushover, Slack groups and building it yourself.' }
 ] as const
-
-export const POSTS_PER_PAGE = 12

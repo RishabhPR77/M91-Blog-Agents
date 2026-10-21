@@ -1,6 +1,7 @@
 /* The M91 blog's look, taken from the M91 site (m91.msg91.com): its colours, its system font stack,
    pill buttons and the corner-bracket logo. All brand tokens live here, once. */
 @import "tailwindcss";
+@import "./site.css";
 
 /* The M91 site's own tokens. Light only, like the site. */
 :root {

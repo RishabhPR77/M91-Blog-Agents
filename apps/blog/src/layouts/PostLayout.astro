@@ -1,12 +1,11 @@
 ---
-// One post: breadcrumbs, title, meta line, TL;DR, contents, body (blocks or Markdown), CTA, sources,
-// related posts and share links.
+// One post: breadcrumb, title, meta line, TL;DR, contents, body (blocks or Markdown), sources, share links and
+// related posts. The call to action is the footer's (on every page).
 import BaseLayout from './BaseLayout.astro'
 import TLDR from '../components/TLDR.astro'
 import TableOfContents from '../components/TableOfContents.astro'
 import BlockRenderer from '../components/BlockRenderer.astro'
 import CodeCopy from '../components/CodeCopy.astro'
-import CtaPanel from '../components/CtaPanel.astro'
 import SourcesList from '../components/SourcesList.astro'
 import RelatedPosts from '../components/RelatedPosts.astro'
 import ShareLinks from '../components/ShareLinks.astro'
@@ -32,24 +31,22 @@ const updated = post.updated_at.slice(0, 10) !== post.published_at.slice(0, 10)
   noindex={post.noindex}
   jsonLd={[blogPostingLd(post), breadcrumbLd(post)]}
 >
-  <article class="shell py-10">
+  <article class="wide py-10 md:py-14">
     <nav aria-label="Breadcrumb" class="text-sm text-fg-2">
       <ol class="flex flex-wrap items-center gap-2">
         <li><a href={url('/')} class="hover:underline">Blog</a></li>
-        <li aria-hidden="true">›</li>
-        <li><a href={url(`/topics/${topic.slug}/`)} class="hover:underline">{topic.name}</a></li>
         <li aria-hidden="true">›</li>
         <li aria-current="page" class="truncate text-fg">{post.title}</li>
       </ol>
     </nav>
     <header class="mt-6 max-w-3xl">
-      <h1 class="text-4xl font-bold leading-tight tracking-tight md:text-5xl">{post.title}</h1>
+      <span class="bl-k">{topic.short}</span>
+      <h1 class="mt-5 text-4xl font-extrabold leading-[1.1] tracking-[-0.035em] md:text-[3.25rem]">{post.title}</h1>
       <p class="mt-4 text-xl text-fg-2">{post.description}</p>
       <p class="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg-2">
         <span>Published <time datetime={post.published_at}>{formatDate(post.published_at)}</time></span>
         {updated && <span>· Updated <time datetime={post.updated_at}>{formatDate(post.updated_at)}</time></span>}
         <span>· {post.reading_time_min} min read</span>
-        <a href={url(`/topics/${topic.slug}/`)} class="chip">{topic.short}</a>
         <span>· {SITE.author}</span>
       </p>
     </header>
@@ -64,7 +61,6 @@ const updated = post.updated_at.slice(0, 10) !== post.published_at.slice(0, 10)
       <CodeCopy />
     </div>
     <div class="mt-14 max-w-[44rem] space-y-12">
-      <CtaPanel />
       <SourcesList sources={post.sources} />
       <ShareLinks url={post.canonical_url} title={post.title} />
     </div>
