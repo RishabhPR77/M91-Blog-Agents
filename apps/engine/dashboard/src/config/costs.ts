@@ -1,6 +1,7 @@
 // Expected AI calls per action, shown next to every button and in every confirm dialog. Static estimates:
 // adjust them here. "lowCost" applies when the low-cost switch is on (see low-cost.json).
-// mem0 (Phase 9): expected Mem0 requests, from the measured runs in apps/engine/docs/PHASE9_NOTES.md (A6).
+// mem0 (Phase 9): expected Mem0 requests, from the measured runs in apps/engine/docs/PHASE9_NOTES.md (A6);
+// Phase 10 numbers from test/fullrun-mem0.test.js (approve 9, designer 7, human_revise 18).
 // They are "cold" numbers; a run started from the dashboard reads less, since the engine's index serves the
 // data it already holds. The full run's range covers 1–2 Writer revisions (MAX_WRITER_REVISIONS=2).
 export type Estimate = { normal: string; lowCost: string; mem0: string; mem0LowCost?: string; note?: string }
@@ -14,13 +15,16 @@ export const COSTS = {
   reviewer_route: { normal: '2–10', lowCost: '2–5', mem0: '≈10–25', note: 'Reviewer, then revision rounds until a pass or a limit' },
   promo: { normal: '1–2', lowCost: '1–2', mem0: '≈3–5' },
   // Approval actions (Task 5): the low-cost switch does not apply to them.
-  approve: { normal: '1–2', lowCost: '1–2', mem0: '≈11', note: 'promo pack (1, +1 if it needs a repair)' },
-  // Phase 8: with interactive blocks on, approving also runs the Designer.
-  approve_interactive: { normal: '2–4', lowCost: '2–4', mem0: '≈11–14', note: 'promo pack (1–2) + Designer (1–2)' },
-  designer: { normal: '1–2', lowCost: '1–2', mem0: '≈6', note: 'Designer plan (1, +1 if it needs a repair)' },
+  // Phase 10: the guide is built before the review, and the promo pack is off (PROMO_ENABLED=false): no AI.
+  approve: { normal: '0', lowCost: '0', mem0: '≈9', note: 'no AI: the guide was built before the review; the promo pack is off' },
+  approve_promo: { normal: '1–2', lowCost: '1–2', mem0: '≈11–14', note: 'promo pack (1, +1 if it needs a repair): PROMO_ENABLED=true' },
+  designer: { normal: '1–2', lowCost: '1–2', mem0: '≈7', note: 'Experience Designer (1, +1 if it needs a repair)' },
   approval_review: { normal: '1–2', lowCost: '1–2', mem0: '≈5–8' },
-  human_revise_rereview: { normal: '2–4', lowCost: '2–4', mem0: '≈17', note: 'Writer revision, then the Reviewer' },
-  human_revise_no_rereview: { normal: '1–2', lowCost: '1–2', mem0: '≈10', note: 'Writer revision only' },
+  // C5: "Change the writing" (Writer, then the Experience Designer) or "Change the design" (Experience Designer only).
+  human_revise_rereview: { normal: '3–6', lowCost: '3–6', mem0: '≈18', note: 'Writer revision, the Experience Designer, then the Reviewer' },
+  human_revise_no_rereview: { normal: '2–4', lowCost: '2–4', mem0: '≈10–14', note: 'Writer revision and the Experience Designer' },
+  human_design_rereview: { normal: '2–4', lowCost: '2–4', mem0: '≈10–14', note: 'the Experience Designer, then the Reviewer' },
+  human_design_no_rereview: { normal: '1–2', lowCost: '1–2', mem0: '≈7', note: 'the Experience Designer only' },
   reject_topic: { normal: '0', lowCost: '0', mem0: '≈4–6' },
   // Phase 7: the Publisher is code, not AI.
   publish: { normal: '0', lowCost: '0', mem0: '≈13', note: 'no AI: build, deploy and check' },

@@ -99,7 +99,7 @@ test('GET /api/runs and /api/runs/:run_id (with produced records); 404 for an un
     assert.equal(list.status, 200)
     assert.equal(list.json.runs[0].run_id, json.run_id)
     assert.equal(list.json.runs[0].status, 'succeeded')
-    assert.deepEqual(list.json.runs[0].steps.map((s) => s.name), ['scout', 'strategist', 'writer', 'reviewer'])
+    assert.deepEqual(list.json.runs[0].steps.map((s) => s.name), ['scout', 'strategist', 'writer', 'designer', 'reviewer'])
     const one = await call('GET', `/api/runs/${json.run_id}`)
     assert.equal(one.status, 200)
     assert.equal(one.json.run.run_id, json.run_id)
@@ -434,12 +434,13 @@ test('Phase 7: settings show the blog settings and deploy_token_set (never the t
   })
 })
 
-test('interactive blocks API: the switch on the newest draft, the Designer result on the approval, blocks on posts, Designer settings', async () => {
+test('interactive guide API: the switch on the newest draft, the Experience Designer result on the approval, revisions_used, blocks on posts, settings', async () => {
   const B = '261020-0900-QBLK'
   await withApi({ env: { INTERACTIVE_DEFAULT: 'true' } }, async ({ call, store }) => {
     await store.createRecord({ type: 'draft', briefId: B, payload: { title: 'T', version: 1, brief_version: 1, post_markdown: '# T' }, status: 'approved', version: 1, meta: { brief_version: 1 } })
     let d = (await call('GET', `/api/approvals/${B}`)).json
-    assert.deepEqual(d.interactive, { on: true, default: true, set: false, block_doc: null })
+    assert.deepEqual(d.interactive, { on: true, default: true, set: false, guide_doc: null })
+    assert.equal(d.revisions_used, 0)
 
     assert.equal((await call('POST', `/api/drafts/${B}/interactive`, { on: 'no' })).json.error.code, 'bad_params')
     assert.equal((await call('POST', '/api/drafts/bad/interactive', { on: true })).status, 400)
@@ -451,18 +452,20 @@ test('interactive blocks API: the switch on the newest draft, the Designer resul
     assert.equal(d.interactive.on, false)
     assert.equal(d.interactive.set, true)
 
-    await store.createRecord({ type: 'block_doc', briefId: B, version: 1, status: 'ok', payload: { brief_id: B, version: 1, blocks: [{}, {}, {}], dropped_segments: [{}], integrity: { passed: true }, summary: '2 blocks: steps_checklist, phone_ring_sim · 1 dropped · integrity passed', created_at: '2026-10-20T09:00:00+05:30' } })
+    const guide = { chapters: [{ components: [{ type: 'prose' }, { type: 'approve_demo' }] }, { components: [{ type: 'prose' }, { type: 'faq' }, { type: 'steps_checklist' }] }] }
+    await store.createRecord({ type: 'guide_doc', briefId: B, version: 1, status: 'ok', payload: { brief_id: B, version: 1, brief_version: 1, guide, dropped: [{}], coverage: { passed: true }, summary: '2 chapters · 3 components · 1 dropped · checks passed', created_at: '2026-10-21T09:00:00+05:30' }, meta: { brief_version: 1 } })
     d = (await call('GET', `/api/approvals/${B}`)).json
-    assert.equal(d.interactive.block_doc.blocks, 3)
-    assert.equal(d.interactive.block_doc.dropped, 1)
-    assert.equal(d.interactive.block_doc.integrity_passed, true)
-    assert.match(d.interactive.block_doc.summary, /^2 blocks/)
+    assert.equal(d.interactive.guide_doc.chapters, 2)
+    assert.equal(d.interactive.guide_doc.components, 3)
+    assert.equal(d.interactive.guide_doc.dropped, 1)
+    assert.equal(d.interactive.guide_doc.coverage_passed, true)
+    assert.match(d.interactive.guide_doc.summary, /^2 chapters/)
 
     await store.createRecord({ type: 'published_post', briefId: B, status: 'published', payload: { slug: 't', title: 'T', brief_id: B, version: 1, post: { slug: 't', blocks: [{}, {}] } } })
     assert.equal((await call('GET', '/api/posts')).json.posts[0].blocks, 2)
 
     const s = (await call('GET', '/api/settings')).json
-    assert.deepEqual(s.designer, { max_interactive_blocks: 6, max_repairs: 1, interactive_default: true })
+    assert.deepEqual(s.designer, { max_components: 10, max_repairs: 1, interactive_default: true, max_designer_revisions: 2, promo_enabled: false })
     assert.ok(s.models.designer)
   })
 })

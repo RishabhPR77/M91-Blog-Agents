@@ -21,7 +21,7 @@ import { draftsOf, draftVersion, draftBriefVersion } from './writer/save.js'
 import { BRIEF_ID_RE } from './util/ids.js'
 import { reviewOfDraft, hardChecksPassed } from './approval.js'
 import { lessonText } from './lessons.js'
-import { isInteractive, latestBlockDoc } from './designer/index.js'
+import { isInteractive, latestGuideDoc } from './experience/index.js'
 import { withMem0Count, mem0Requests } from './util/mem0count.js'
 import { createEngineIndex } from './engineindex.js'
 import { usageStatus, stopMessage } from './util/mem0usage.js'
@@ -91,9 +91,10 @@ export function publicSettings(config) {
       auto_publish: config.runtime.autoPublish, app_name: config.blog.appName, base_url: config.blog.baseUrl,
       noindex_first_n_posts: config.blog.noindexFirstNPosts, deploy_token_set: Boolean(config.blog.embarkoDeployToken)
     },
-    // Interactive blocks (Phase 8): the Designer's limits and whether new posts get blocks.
+    // Interactive guides (Phase 10): the Experience Designer's limits, whether new posts get a guide, the promo pack.
     designer: config.designer && {
-      max_interactive_blocks: config.designer.maxInteractiveBlocks, max_repairs: config.designer.maxRepairs, interactive_default: config.designer.interactiveDefault
+      max_components: config.designer.maxComponents, max_repairs: config.designer.maxRepairs, interactive_default: config.designer.interactiveDefault,
+      max_designer_revisions: config.limits?.maxDesignerRevisions ?? null, promo_enabled: Boolean(config.promo?.enabled)
     },
     built_modes: [...BUILT_MODES],
     decision_modes: [...DECISION_MODES],
@@ -236,8 +237,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     const review = reviewOf(d)
     // reviewed: the newest review of this version is a pass (the approve rule, Phase 5.5).
     const reviewed = (await reviewOfDraft(store, d))?.payload?.pass === true
-    // Interactive blocks (Phase 8): the switch and the newest Designer result for this version (one block_doc read).
-    const doc = config?.designer ? await latestBlockDoc(store, briefId, draftVersion(d)) : null
+    // Interactive guide (Phase 10): the switch and the newest Experience Designer result for this version (one guide_doc read).
+    const doc = config?.designer ? await latestGuideDoc(store, briefId, draftVersion(d), draftBriefVersion(d)) : null
     const dp = doc?.payload ?? {}
     return {
       brief_id: briefId,
@@ -249,11 +250,14 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       },
       review: review && { total: review.total, pass: review.pass, gates: review.gates, areas: review.areas, feedback: review.feedback, summary: review.summary, sources_checked: review.sources_checked },
       checks: p.checks?.results ?? [],
+      // Counter prompts used for this brief: writing changes (human_feedback) and design changes (C5).
+      revisions_used: drafts.filter((x) => x.payload?.human_feedback).length + drafts.reduce((n, x) => n + (x.payload?.design_feedback?.length ?? 0), 0),
       interactive: config?.designer ? {
         on: isInteractive(d, config), default: config.designer.interactiveDefault, set: typeof d.metadata?.interactive === 'boolean',
-        block_doc: doc && {
-          record_id: doc.id, status: doc.status ?? dp.status ?? null, summary: dp.summary ?? '', blocks: dp.blocks?.length ?? 0,
-          dropped: dp.dropped_segments?.length ?? 0, integrity_passed: dp.integrity?.passed ?? null, created_at: dp.created_at ?? null
+        guide_doc: doc && {
+          record_id: doc.id, status: doc.status ?? null, summary: dp.summary ?? '', chapters: dp.guide?.chapters?.length ?? 0,
+          components: (dp.guide?.chapters ?? []).flatMap((c) => c.components).filter((x) => x.type !== 'prose').length,
+          dropped: dp.dropped?.length ?? 0, coverage_passed: dp.coverage?.passed ?? null, created_at: dp.created_at ?? null
         }
       } : null,
       earlier: earlier.map((e) => ({
@@ -321,7 +325,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     if (run.payload?.brief_id) ids.add(run.payload.brief_id)
     if (!ids.size) return []
     // One filtered (and cached) read per type, in parallel.
-    const types = ['m91_facts', 'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'source_pack', 'draft', 'review', 'block_doc']
+    const types = ['m91_facts', 'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'source_pack', 'draft', 'review', 'block_doc', 'guide_doc']
     const lists = await Promise.all(types.map((type) => store.getRecords({ type })))
     return lists.flat().filter((r) => ids.has(r.id) || ids.has(KEY_ID_OF(r.payload))).map(trimRecord)
   }
@@ -431,7 +435,9 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         delete params.quotes
         delete params.reason
         delete params.force_unreviewed
-        if (action === 'human_revise') Object.assign(params, { feedback: body.feedback, ...(body.quotes !== undefined && { quotes: body.quotes }) })
+        delete params.target
+        // C5: target "writing" (default: Writer, then the Experience Designer) or "design" (the Experience Designer only).
+        if (action === 'human_revise') Object.assign(params, { feedback: body.feedback, ...(body.quotes !== undefined && { quotes: body.quotes }), ...(body.target !== undefined && { target: body.target }) })
         if (action === 'reject_topic' && body.reason !== undefined) params.reason = body.reason
         if (action === 'approve' && body.force_unreviewed !== undefined) params.force_unreviewed = body.force_unreviewed
         const { run_id } = await manager.startRun({ mode: action, trigger: 'manual', params })
@@ -439,8 +445,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       }
     }
 
-    // Interactive blocks on or off for a brief's newest draft (Phase 8): stored on the draft as metadata.interactive.
-    // It takes effect at the next Designer run or publish; it never starts a run itself.
+    // The interactive guide on or off for a brief's newest draft: stored on the draft as metadata.interactive.
+    // It takes effect at the next Experience Designer run or publish; it never starts a run itself.
     if (seg[1] === 'drafts' && seg[2] && seg[3] === 'interactive' && seg.length === 4 && method === 'POST') {
       const briefId = seg[2]
       if (!BRIEF_ID_RE.test(briefId)) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')

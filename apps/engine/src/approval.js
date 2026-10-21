@@ -1,6 +1,8 @@
 // The human approval gate (Phase 5.5, Part B). The Reviewer is the automatic gate; a draft it passes
 // waits at awaiting_human. These run modes carry out the human's decision: approve, request changes
-// (a counter prompt), or reject the topic. Only an approval leads to the promo pack and publishing.
+// (a counter prompt: change the writing, or only the design), or reject the topic. Only an approval leads to
+// publishing. Phase 10: the guide is built before the review, so approving makes no AI call (the promo pack is off
+// unless PROMO_ENABLED=true).
 
 import { log } from './util/log.js'
 import { istIso } from './util/time.js'
@@ -10,7 +12,8 @@ import { loadDraft } from './reviewer/inputs.js'
 import { quoteFound } from './reviewer/decide.js'
 import { draftVersion, draftBriefVersion, draftsOf } from './writer/save.js'
 import { runPromo } from './promo/index.js'
-import { runDesigner, isInteractive } from './designer/index.js'
+import { latestGuideDoc } from './experience/index.js'
+import { guideText } from './experience/review.js'
 import { createPublisher } from './publisher/index.js'
 import { setLeadStatus } from './strategist/save.js'
 
@@ -55,10 +58,14 @@ export const hardChecksPassed = (d) => d?.payload?.checks?.hard_passed === true
 
 export const NOT_REVIEWED_MESSAGE = 'This version was not checked by the Reviewer. Review it first, or approve with force_unreviewed.'
 
-/** Counter prompts already used for a brief: drafts that carry human_feedback. */
+/** Counter prompts already used for a brief: drafts that carry human_feedback, plus every design request. */
 export async function humanRevisionsUsed(store, briefId) {
-  return (await draftsOf(store, briefId)).filter((d) => d.payload?.human_feedback).length
+  const drafts = await draftsOf(store, briefId)
+  return drafts.filter((d) => d.payload?.human_feedback).length + drafts.reduce((n, d) => n + (d.payload?.design_feedback?.length ?? 0), 0)
 }
+
+/** C5: what a counter prompt changes. */
+export const REVISE_TARGETS = Object.freeze(['writing', 'design'])
 
 /** The human's counter prompt as Writer feedback items (B5): one per quote, or one without a quote. */
 export function humanFeedbackItems(text, quotes = []) {
@@ -85,13 +92,19 @@ export async function checkDecision(mode, params, { store, config }) {
     if (params.quotes !== undefined && !(Array.isArray(params.quotes) && params.quotes.every((q) => typeof q === 'string' && q.trim()))) {
       throw new ApprovalError('bad_params', 'quotes must be a list of exact sentences from the draft')
     }
+    if (params.target !== undefined && !REVISE_TARGETS.includes(params.target)) throw new ApprovalError('bad_params', `target must be ${REVISE_TARGETS.join(' or ')}`)
   }
   if (mode === 'reject_topic' && params.reason !== undefined && (typeof params.reason !== 'string' || params.reason.length > FEEDBACK_MAX_CHARS)) {
     throw new ApprovalError('bad_params', `reason must be text of at most ${FEEDBACK_MAX_CHARS.toLocaleString('en-US')} characters`)
   }
   const d = await requireAwaiting(store, params.brief_id, { allowApproved: mode === 'human_revise' })
   if (mode === 'human_revise') {
-    const missing = (params.quotes ?? []).filter((q) => !quoteFound(d.payload?.post_markdown, q))
+    // "Change the design" may quote the guide's own text too.
+    const doc = params.target === 'design' ? await latestGuideDoc(store, params.brief_id, draftVersion(d), draftBriefVersion(d)) : null
+    if (params.target === 'design' && doc?.status !== 'ok') throw new ApprovalError('no_guide', `v${draftVersion(d)} of ${params.brief_id} has no guide to change: choose "Change the writing"`, 409)
+    const text = `${d.payload?.post_markdown ?? ''}
+${guideText(doc?.payload?.guide)}`
+    const missing = (params.quotes ?? []).filter((q) => !quoteFound(text, q))
     if (missing.length) throw new ApprovalError('quote_not_found', `quote(s) not found in the draft: ${missing.map((q) => `"${q.slice(0, 80)}"`).join(', ')}`)
     const used = await humanRevisionsUsed(store, params.brief_id)
     if (used >= config.approval.maxHumanRevisions) {
@@ -151,7 +164,9 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
   const total = d.metadata?.review_total ?? null
 
   let promo = null
-  try {
+  if (!config.promo.enabled) {
+    await runStep('promo', async () => ({ placeholder: true, message: 'Promo pack is off (PROMO_ENABLED=false)' }))
+  } else try {
     const inMemory = config.runtime.dryRun ? { ...d.payload, version, brief_version: briefVersion } : null
     promo = await runStep('promo', async () => (agents?.promo
       ? (await agents.promo({ runId, briefId, briefVersion, draft: { version, brief_version: briefVersion, draft: inMemory }, brief: briefRec?.payload, config })).output
@@ -161,27 +176,6 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
     if (isCancel(error)) throw error
     warnings.push(`promo pack failed (approval stands): ${error.message}`)
   }
-  // Phase 8: the Designer chooses interactive blocks for the approved post. It never blocks the approval:
-  // a failure saves a "fallback" block_doc (or is a warning) and the post goes out as plain Markdown.
-  if (!isInteractive(d, config)) {
-    await runStep('designer', async () => {
-      const message = 'Interactive blocks are off for this post: the Designer did not run'
-      log.info(message, { briefId, version })
-      return { placeholder: true, message }
-    })
-  } else {
-    try {
-      const inMemory = config.runtime.dryRun ? { ...d.payload, version, brief_version: briefVersion } : null
-      const designed = await runStep('designer', async () => (agents?.designer
-        ? (await agents.designer({ runId, briefId, briefVersion, draft: { version, brief_version: briefVersion, draft: inMemory }, brief: briefRec?.payload, config })).output
-        : runDesigner({ briefId, runId, version, draft: inMemory, brief: briefRec?.payload }, { config, store })))
-      warnings.push(...(designed?.warnings ?? []))
-    } catch (error) {
-      if (isCancel(error)) throw error
-      warnings.push(`Designer failed (the post stays plain Markdown): ${error.message}`)
-    }
-  }
-
   const title = d.payload?.title ?? briefRec?.payload?.titles?.[0] ?? briefId
   await notifySafe(notifier, warnings, 'slack', `✅ Approved by you: *${title}* · v${version}`)
   if (promo?.pack) await notifySafe(notifier, warnings, 'slack', `Promo pack preview (${promo.status}):\n\nLinkedIn:\n${promo.pack.linkedin_post}\n\nNewsletter:\n${promo.pack.newsletter_blurb}`)
@@ -200,7 +194,7 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
     }
   } else {
     await runStep('publisher', async () => {
-      const message = 'Publishing is off (AUTO_PUBLISH=false): use Publish in the dashboard'
+      const message = 'Not published: AUTO_PUBLISH=false. Use Publish in the dashboard (or npm run publish)'
       log.info(message, { briefId, version })
       return { placeholder: true, message }
     })
@@ -234,6 +228,8 @@ export async function runApprovalReview({ briefId, runId, config, store, agents,
 /**
  * B3: the human sends a counter prompt. The waiting draft → changes_requested with human_feedback, then the
  * pipeline resumes with a Writer revision (and the Reviewer and routing loop unless REREVIEW_AFTER_HUMAN=false).
+ * Phase 10 C5: target "design" changes only the guide: the Experience Designer runs again on the same version
+ * with the feedback (1–2 AI calls instead of a revision), then the Reviewer.
  * ctx: { briefId, runId, params, config, store, notifier, agents, runPipeline, signal, now }
  */
 export async function runHumanRevise({ briefId, runId, params, config, store, notifier, agents, runPipeline, signal, now = Date.now }) {
@@ -247,15 +243,19 @@ export async function runHumanRevise({ briefId, runId, params, config, store, no
   // brief waits for the human again until the new version is approved. Who and when are kept on both records.
   const reopened = d.status === 'approved'
   const reopen = reopened ? { reopened_by: 'human', reopened_at: at, reopened_from: 'approved' } : {}
-  await store.updateRecord(d.id, { ...d.payload, human_feedback: { text: params.feedback, quotes, at } }, { status: 'changes_requested', human_feedback_at: at, ...reopen })
+  const design = params.target === 'design'
+  const payload = design
+    ? { ...d.payload, design_feedback: [...(d.payload?.design_feedback ?? []), { text: params.feedback, quotes, at }] }
+    : { ...d.payload, human_feedback: { text: params.feedback, quotes, at } }
+  await store.updateRecord(d.id, payload, { status: 'changes_requested', human_feedback_at: at, ...reopen })
   if (reopened) {
     const briefRec = await loadBrief(store, briefId, briefVersion)
     if (briefRec?.id) await store.updateRecord(briefRec.id, undefined, { status: 'awaiting_human', ...reopen })
   }
-  emit('approval.changes_requested', { agent: 'human', message: `changes requested on v${version}${reopened ? ' (reopened from approved)' : ''}`, data: { brief_id: briefId, version, human_revisions_used: used + 1, max: config.approval.maxHumanRevisions, reopened } })
+  emit('approval.changes_requested', { agent: 'human', message: `${design ? 'design changes' : 'changes'} requested on v${version}${reopened ? ' (reopened from approved)' : ''}`, data: { brief_id: briefId, version, target: design ? 'design' : 'writing', human_revisions_used: used + 1, max: config.approval.maxHumanRevisions, reopened } })
   const r = await runPipeline({
     config, store, notifier, agents, now, runId, briefId, lock: false, signal,
-    resume: { version, briefVersion, startAt: 'writer', feedback: humanFeedbackItems(params.feedback, quotes), skipReview: !config.approval.rereviewAfterHuman }
+    resume: { version, briefVersion, startAt: design ? 'designer' : 'writer', feedback: humanFeedbackItems(params.feedback, quotes), skipReview: !config.approval.rereviewAfterHuman }
   })
   const status = r.state === 'awaiting_human' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
   return { status, brief_id: briefId, summary: r.error ?? r.summary ?? `human revision ${r.state}`, error: r.error, warnings: r.warnings }

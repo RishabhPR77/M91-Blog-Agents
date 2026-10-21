@@ -1,5 +1,5 @@
 // /posts — the blog's posts (Phase 7): status, search visibility, live link, and the Publisher actions
-// (Republish, Unpublish, Hide / Show in search) and Re-run Designer (Phase 8). Every action asks first; only the
+// (Republish, Unpublish, Hide / Show in search) and Re-run Experience Designer (Phase 10). Every action asks first; only the
 // Designer uses AI (1–2 calls).
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -44,7 +44,7 @@ export default function Posts() {
     <>
       <PageHeader
         title="Posts"
-        subtitle={<>Posts on the blog{blog ? <> at <a className="text-sky-700 hover:underline dark:text-sky-300" href={blog.base_url} target="_blank" rel="noreferrer">{blog.base_url.replace(/^https:\/\//, '')}</a></> : ''}. Publishing uses no AI calls; the Designer uses {COSTS.designer.normal}.</>}
+        subtitle={<>Posts on the blog{blog ? <> at <a className="text-sky-700 hover:underline dark:text-sky-300" href={blog.base_url} target="_blank" rel="noreferrer">{blog.base_url.replace(/^https:\/\//, '')}</a></> : ''}. Publishing uses no AI calls; the Experience Designer uses {COSTS.designer.normal}.</>}
         actions={
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={dryRun ?? true} onChange={(e) => setDryRun(e.target.checked)} />
@@ -92,8 +92,8 @@ export default function Posts() {
                           )}
                           {p.brief_id && p.status !== 'publishing' && built.has('designer') && (
                             <button type="button" className="btn-secondary px-2 py-1 text-xs" disabled={pub.busy}
-                              onClick={() => ask({ mode: 'designer', post: p, params: { brief_id: p.brief_id }, calls: COSTS.designer.normal, title: `Re-run the Designer for “${p.title}”?`, text: 'The Designer picks the parts of the post that become interactive blocks; code builds them from the exact text and checks nothing changed. The live post changes only after Republish.' })}>
-                              Re-run Designer
+                              onClick={() => ask({ mode: 'designer', post: p, params: { brief_id: p.brief_id }, calls: COSTS.designer.normal, title: `Re-run the Experience Designer for “${p.title}”?`, text: 'The Experience Designer turns the post into a guide; code places the Writer’s exact text and checks that the design adds no new facts. The live post changes only after Republish.' })}>
+                              Re-run Experience Designer
                             </button>
                           )}
                           {live && (

@@ -43,15 +43,17 @@ export default function Settings() {
             </dl>
           ) : <p className="text-sm text-slate-500">No blog settings from this engine (it predates Phase 7: restart it).</p>}
         </Card>
-        <Card title="Interactive blocks">
+        <Card title="Interactive guides">
           {d.designer ? (
             <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
-              <dt className="text-slate-500">New posts are interactive</dt><dd data-testid="setting-interactive-default">{yes(d.designer.interactive_default)} (INTERACTIVE_DEFAULT)</dd>
-              <dt className="text-slate-500">Designer model</dt><dd className="font-mono text-xs" data-testid="setting-designer-model">{d.models.designer ? `${d.models.designer.service} · ${d.models.designer.model} · ${d.models.designer.delivery}` : 'not reported'}</dd>
-              <dt className="text-slate-500">Max blocks per post</dt><dd>{d.designer.max_interactive_blocks}</dd>
+              <dt className="text-slate-500">New posts get a guide</dt><dd data-testid="setting-interactive-default">{yes(d.designer.interactive_default)} (INTERACTIVE_DEFAULT)</dd>
+              <dt className="text-slate-500">Experience Designer model</dt><dd className="font-mono text-xs" data-testid="setting-designer-model">{d.models.designer ? `${d.models.designer.service} · ${d.models.designer.model} · ${d.models.designer.delivery}` : 'not reported'}</dd>
+              <dt className="text-slate-500">Max components per guide</dt><dd>{d.designer.max_components ?? 'not reported'}</dd>
               <dt className="text-slate-500">Max repairs</dt><dd>{d.designer.max_repairs}</dd>
+              <dt className="text-slate-500">Design-only re-runs</dt><dd>{d.designer.max_designer_revisions ?? 'not reported'} per post (MAX_DESIGNER_REVISIONS)</dd>
+              <dt className="text-slate-500">Promo pack</dt><dd data-testid="setting-promo">{d.designer.promo_enabled ? 'on' : 'off'} (PROMO_ENABLED)</dd>
             </dl>
-          ) : <p className="text-sm text-slate-500">Not reported by this engine (it predates Phase 8: restart it).</p>}
+          ) : <p className="text-sm text-slate-500">Not reported by this engine (it predates Phase 10: restart it).</p>}
         </Card>
         <Card title="Models per agent" className="lg:col-span-2">
           <div className="overflow-x-auto">

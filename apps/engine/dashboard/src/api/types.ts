@@ -27,7 +27,7 @@ export type Settings = {
   blog?: { auto_publish: boolean; app_name: string; base_url: string; noindex_first_n_posts: number; deploy_token_set: boolean }
   publish_modes?: string[]
   /** Phase 8: interactive blocks. */
-  designer?: { max_interactive_blocks: number; max_repairs: number; interactive_default: boolean }
+  designer?: { max_components?: number; max_repairs: number; interactive_default: boolean; max_designer_revisions?: number | null; promo_enabled?: boolean }
 }
 
 /** GET /api/posts: one row per published_post record (Phase 7). */

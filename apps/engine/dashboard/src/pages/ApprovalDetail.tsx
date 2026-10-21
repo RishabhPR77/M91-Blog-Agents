@@ -35,8 +35,10 @@ export type ApprovalDetailData = {
   }
   review: Review | null
   checks: CheckResult[]
-  /** Phase 8: interactive blocks (null or missing from older engines). */
+  /** Phase 10: the interactive guide (null or missing from older engines). */
   interactive?: InteractiveInfo | null
+  /** Counter prompts used for this brief (writing and design); older engines: counted from earlier versions. */
+  revisions_used?: number
   earlier: { version: number; brief_version: number; status: string; title: string; score: number | null; total?: number | null; human_feedback: HumanFeedback; record_id?: string }[]
 }
 
@@ -77,6 +79,7 @@ export default function ApprovalDetail() {
   const [quotes, setQuotes] = useState<string[]>([])
   const [quoteMsg, setQuoteMsg] = useState<string | null>(null)
   const [rereview, setRereview] = useState<boolean | null>(null)
+  const [target, setTarget] = useState<'writing' | 'design'>('writing')
   const [reason, setReason] = useState('')
   const [compare, setCompare] = useState<{ a: number; b: number } | null>(null)
 
@@ -103,10 +106,16 @@ export default function ApprovalDetail() {
 
   const { reviewed, hardPassed, failedHard } = approvalFlags(d)
   const waiting = d.draft.status === 'awaiting_human'
-  // Approving also runs the Designer when interactive blocks are on (Phase 8).
-  const approveCalls = d.interactive?.on ? COSTS.approve_interactive.normal : COSTS.approve.normal
+  // Phase 10: approving makes no AI call (the guide is built before the review), unless the promo pack is on.
+  const promoOn = settings.data?.designer?.promo_enabled === true
+  const approveCost = promoOn ? COSTS.approve_promo : COSTS.approve
+  const approveCalls = approveCost.normal
+  // C5: a counter prompt changes the writing (Writer, then the Experience Designer) or only the design.
+  const hasGuide = d.interactive?.guide_doc?.status === 'ok'
+  const design = target === 'design' && hasGuide
+  const reviseCost = design ? (rereviewOn ? COSTS.human_design_rereview : COSTS.human_design_no_rereview) : (rereviewOn ? COSTS.human_revise_rereview : COSTS.human_revise_no_rereview)
   const needsReview = !reviewed && rereviewDefault
-  const usedRevisions = d.earlier.filter((e) => e.human_feedback).length
+  const usedRevisions = d.revisions_used ?? d.earlier.filter((e) => e.human_feedback).length
   const revisionsLeft = maxRevisions == null ? null : maxRevisions - usedRevisions
   const fbLen = feedback.trim().length
   const fbValid = fbLen >= FEEDBACK_MIN && feedback.length <= FEEDBACK_MAX
@@ -222,7 +231,12 @@ export default function ApprovalDetail() {
 
               <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
                 <h3 className="mb-1 text-sm font-semibold">Request changes</h3>
-                <p className="mb-2 text-xs text-slate-500">A counter prompt for the Writer.{revisionsLeft != null ? ` ${Math.max(0, revisionsLeft)} of ${maxRevisions} left for this brief.` : ''}</p>
+                <p className="mb-2 text-xs text-slate-500">A counter prompt.{revisionsLeft != null ? ` ${Math.max(0, revisionsLeft)} of ${maxRevisions} left for this brief.` : ''}</p>
+                <fieldset className="mb-2 space-y-1 text-sm" disabled={!waiting}>
+                  <legend className="sr-only">What to change</legend>
+                  <label className="flex items-start gap-2"><input type="radio" name="revise-target" className="mt-1" checked={!design} onChange={() => setTarget('writing')} /> <span><strong>Change the writing</strong> <span className="block text-xs text-slate-500">The Writer revises the post, then the Experience Designer builds its guide again.</span></span></label>
+                  <label className="flex items-start gap-2"><input type="radio" name="revise-target" className="mt-1" checked={design} disabled={!hasGuide} onChange={() => setTarget('design')} /> <span><strong>Change the design</strong> <span className="block text-xs text-slate-500">{hasGuide ? 'Only the Experience Designer runs again (cheaper). The post’s text stays as it is.' : 'This version has no guide to change.'}</span></span></label>
+                </fieldset>
                 <label className="label" htmlFor="feedback">Your feedback</label>
                 <textarea id="feedback" className="input min-h-28" maxLength={FEEDBACK_MAX + 200} value={feedback} onChange={(e) => setFeedback(e.target.value)} disabled={!waiting} placeholder="e.g. Make the first paragraph shorter and explain 'webhook' in plain words." />
                 <div className={`mt-0.5 text-right text-xs ${fbValid || fbLen === 0 ? 'text-slate-500' : 'text-red-600 dark:text-red-400'}`} data-testid="feedback-counter">
@@ -245,13 +259,13 @@ export default function ApprovalDetail() {
                 <label className="mt-3 flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={rereviewOn} onChange={(e) => setRereview(e.target.checked)} disabled={!waiting} /> Re-review after the change
                 </label>
-                <p className="text-xs text-slate-500">Expected AI calls: {rereviewOn ? COSTS.human_revise_rereview.normal : COSTS.human_revise_no_rereview.normal}</p>
+                <p className="text-xs text-slate-500" data-testid="revise-cost">Expected AI calls: {reviseCost.normal} ({reviseCost.note})</p>
                 <button type="button" className="btn-secondary mt-2 w-full" disabled={!waiting || !fbValid || revisionsLeft === 0}
                   onClick={() => setConfirm({
-                    action: { kind: 'revise', path: `${base}/revise`, body: { feedback, ...(quotes.length && { quotes }), params: { rereview_after_human: rereviewOn } }, label: 'Counter prompt' },
-                    calls: rereviewOn ? COSTS.human_revise_rereview.normal : COSTS.human_revise_no_rereview.normal,
-                    title: 'Send this counter prompt?',
-                    text: `The Writer revises v${d.draft.version} with your feedback${quotes.length ? ` and ${quotes.length} quote${quotes.length === 1 ? '' : 's'}` : ''}${rereviewOn ? ', then the Reviewer checks it' : '; the Reviewer is skipped'}.`
+                    action: { kind: 'revise', path: `${base}/revise`, body: { feedback, ...(quotes.length && { quotes }), target: design ? 'design' : 'writing', params: { rereview_after_human: rereviewOn } }, label: design ? 'Design change' : 'Counter prompt' },
+                    calls: reviseCost.normal,
+                    title: design ? 'Change the design?' : 'Send this counter prompt?',
+                    text: `${design ? `The Experience Designer builds the guide of v${d.draft.version} again` : `The Writer revises v${d.draft.version}, then the Experience Designer builds its guide`} with your feedback${quotes.length ? ` and ${quotes.length} quote${quotes.length === 1 ? '' : 's'}` : ''}${rereviewOn ? ', then the Reviewer checks it' : '; the Reviewer is skipped'}.`
                   })}>
                   Send counter prompt
                 </button>
@@ -320,12 +334,12 @@ export default function ApprovalDetail() {
           </div>
         </div>
       ) : (
-        <ConfirmDialog open title={`Approve v${d.draft.version}?`} expectedCalls={approveCalls} expectedMem0={d.interactive?.on ? COSTS.approve_interactive.mem0 : COSTS.approve.mem0} confirmLabel="Approve" busy={busy} onConfirm={() => run(approveAction)} onCancel={() => setApproveOpen(false)}>
-          <p>The promo pack is created, then the Designer step ({d.interactive?.on ? 'interactive blocks are on: it picks the parts that become blocks' : 'interactive blocks are off: it is skipped'}) and the Publisher step ({settings.data?.blog?.auto_publish ? 'AUTO_PUBLISH is on: the post is published to the blog, no AI calls' : 'AUTO_PUBLISH is off: publish it afterwards with Publish'}).{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>
+        <ConfirmDialog open title={`Approve v${d.draft.version}?`} expectedCalls={approveCalls} expectedMem0={approveCost.mem0} confirmLabel="Approve" busy={busy} onConfirm={() => run(approveAction)} onCancel={() => setApproveOpen(false)}>
+          <p>{promoOn ? 'The promo pack is created, then the Publisher step' : 'No AI call: the guide was already built and reviewed. Then the Publisher step'} ({settings.data?.blog?.auto_publish ? 'AUTO_PUBLISH is on: the post is published to the blog, no AI calls' : 'AUTO_PUBLISH is off: publish it afterwards with Publish'}).{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>
         </ConfirmDialog>
       ))}
 
-      <ConfirmDialog open={Boolean(confirm)} title={confirm?.title ?? ''} expectedCalls={confirm?.calls ?? ''} expectedMem0={confirm ? { review: COSTS.approval_review.mem0, revise: rereviewOn ? COSTS.human_revise_rereview.mem0 : COSTS.human_revise_no_rereview.mem0, reject: COSTS.reject_topic.mem0, approve: COSTS.approve.mem0, force: COSTS.approve.mem0 }[confirm.action.kind] : undefined} confirmLabel={confirm?.action.kind === 'reject' ? 'Reject the topic' : 'Start'} danger={confirm?.danger} busy={busy} onConfirm={() => (confirm ? run(confirm.action) : undefined)} onCancel={() => setConfirm(null)}>
+      <ConfirmDialog open={Boolean(confirm)} title={confirm?.title ?? ''} expectedCalls={confirm?.calls ?? ''} expectedMem0={confirm ? { review: COSTS.approval_review.mem0, revise: reviseCost.mem0, reject: COSTS.reject_topic.mem0, approve: COSTS.approve.mem0, force: COSTS.approve.mem0 }[confirm.action.kind] : undefined} confirmLabel={confirm?.action.kind === 'reject' ? 'Reject the topic' : 'Start'} danger={confirm?.danger} busy={busy} onConfirm={() => (confirm ? run(confirm.action) : undefined)} onCancel={() => setConfirm(null)}>
         <p>{confirm?.text}</p>
       </ConfirmDialog>
     </>

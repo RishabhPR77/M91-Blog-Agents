@@ -44,27 +44,38 @@ async function setup({ env = {}, reviewer = mockReviewer(), writerAnswers = {}, 
   return { cfg, store, ai, manager, notifier, draft, run }
 }
 
-test('approve: statuses approved (by human, with time), promo pack, placeholder Designer and Publisher steps, Slack, approval.approved', async () => {
+test('approve: statuses approved (by human, with time), promo off by default, no Designer (Phase 10), placeholder Publisher, Slack, approval.approved', async () => {
   const restore = quiet()
-  const s = await setup()
+  let designed = 0
+  const s = await setup({ designer: async () => { designed++; return stubAgents.designer() } })
   const r = await s.run('approve')
   restore()
   assert.equal(r.status, 'succeeded')
   assert.equal(r.run.result_summary, 'approved by you (v1, score 88)')
   assert.deepEqual(r.run.steps.map((x) => [x.name, x.status, x.summary]), [
-    ['promo', 'succeeded', 'Promo pack ok: LinkedIn 65 chars · X thread 3 posts · 3 video scenes · 0 issue(s)'],
-    ['designer', 'succeeded', 'no interactive blocks · integrity passed'],
-    ['publisher', 'succeeded', 'Publishing is off (AUTO_PUBLISH=false): use Publish in the dashboard']
+    ['promo', 'succeeded', 'Promo pack is off (PROMO_ENABLED=false)'],
+    ['publisher', 'succeeded', 'Not published: AUTO_PUBLISH=false. Use Publish in the dashboard (or npm run publish)']
   ])
+  assert.equal(designed, 0, 'the guide was built before the review: approving runs no Experience Designer')
+  assert.equal(recordsOf(s.store, 'promo_pack').length, 0)
   const d = s.store.records.get(s.draft.id)
   assert.equal(d.status, 'approved')
   assert.equal(d.metadata.approved_by, 'human')
   assert.ok(d.metadata.approved_at)
   assert.equal(recordsOf(s.store, 'brief')[0].status, 'approved')
   assert.equal(s.notifier.sent.slack[0], '✅ Approved by you: *How agent approval works with a phone call* · v1')
-  assert.match(s.notifier.sent.slack[1], /^Promo pack preview \(ok\):\n\nLinkedIn:\n/)
+  assert.equal(s.notifier.sent.slack.length, 1, 'no promo preview while the promo pack is off')
   assert.deepEqual(replay(r.run_id).find((e) => e.type === 'approval.approved').data, { brief_id: BRIEF_ID, version: 1, total: 88, approved_unreviewed: false })
   assert.ok(!JSON.stringify(replay(r.run_id)).includes('A pause keeps a person in charge'), 'no post text in events')
+})
+
+test('approve with PROMO_ENABLED=true: the promo pack runs as before (code kept), and its preview goes to Slack', async () => {
+  const restore = quiet()
+  const s = await setup({ env: { PROMO_ENABLED: 'true' } })
+  const r = await s.run('approve')
+  restore()
+  assert.deepEqual(r.run.steps.map((x) => [x.name, x.summary]).slice(0, 1), [['promo', 'Promo pack ok: LinkedIn 65 chars · X thread 3 posts · 3 video scenes · 0 issue(s)']])
+  assert.match(s.notifier.sent.slack[1], /^Promo pack preview \(ok\):\n\nLinkedIn:\n/)
 })
 
 test('approve with the real notifier: skipped in DRY_RUN, and "pending flows" with empty webhook URLs — nothing sent', async () => {
@@ -101,7 +112,7 @@ test('human_revise: draft → changes_requested with human_feedback; Writer revi
   assert.equal(v2.status, 'awaiting_human')
   assert.deepEqual(v2.payload.revision_notes, [{ feedback_quote: 'A ringing phone gets attention fast.', what_changed: 'shortened the first paragraph' }])
   const ev = replay(r.run_id)
-  assert.deepEqual(ev.find((e) => e.type === 'approval.changes_requested').data, { brief_id: BRIEF_ID, version: 1, human_revisions_used: 1, max: 5, reopened: false })
+  assert.deepEqual(ev.find((e) => e.type === 'approval.changes_requested').data, { brief_id: BRIEF_ID, version: 1, target: 'writing', human_revisions_used: 1, max: 5, reopened: false })
   assert.deepEqual(ev.find((e) => e.type === 'approval.waiting').data, { brief_id: BRIEF_ID, version: 2, total: 90 })
 })
 
@@ -114,7 +125,7 @@ test('human_revise with REREVIEW_AFTER_HUMAN=false: no Reviewer, straight back t
   assert.equal(r.status, 'succeeded')
   assert.equal(r.run.result_summary, 'awaiting human approval (v2, not re-reviewed)')
   assert.equal(reviewer.count(), 0)
-  assert.deepEqual(r.run.steps.map((x) => x.name), ['writer', 'checks'])
+  assert.deepEqual(r.run.steps.map((x) => x.name), ['writer', 'checks', 'designer'], 'the new version gets its guide (Phase 10)')
 })
 
 test('human feedback asking for an invented fact: the prompt says to refuse it, and the refusal is kept as a revision note', async () => {
@@ -310,23 +321,44 @@ test('a counter prompt never reopens a published draft (unpublish first); approv
   restore()
 })
 
-test('approve runs the Designer after the promo pack; interactive off skips it; a Designer crash never blocks the approval', async () => {
+const GUIDE = {
+  version: 1, title_accent: 'phone call', hero: { example: true, agent: 'Refund bot', request: 'Refund order #1182?', person: 'Asha', decision: 'approved', result: 'Refund sent' },
+  status_states: ['waiting', 'ringing', 'approved', 'continuing'],
+  chapters: [{ id: 'c1', number: 1, label: 'The problem', heading: 'Why a phone call', components: [{ type: 'approve_demo', id: 'd1', data: { example: true, request: 'Your agent wants to refund order #1182', approve: { label: 'Approve', outcome_markdown: 'The refund goes out.' }, reject: { label: 'Reject', outcome_markdown: 'Nothing happens.' } } }] }],
+  faq: [], your_turn: { title: 'Try it on one risky step' }
+}
+const seedGuide = (store, status = 'ok') => store.createRecord({ type: 'guide_doc', briefId: BRIEF_ID, payload: { brief_id: BRIEF_ID, version: 1, brief_version: 1, guide: status === 'ok' ? GUIDE : null, created_at: '2026-10-21T10:00:00+05:30' }, status, version: 1, meta: { brief_version: 1 } })
+
+test('C5 "Change the design": only the Experience Designer runs (with the feedback), then the Reviewer; no Writer call; the request counts', async () => {
   const restore = quiet()
+  const reviewer = mockReviewer(['pass'])
   let seen = null
-  const on = await setup({ designer: async (ctx) => { seen = ctx; return stubAgents.designer(ctx) } })
-  const r1 = await on.run('approve')
-  assert.equal(seen.briefId, BRIEF_ID)
-  assert.equal(seen.draft.version, 1)
-  assert.deepEqual(r1.run.steps.map((x) => x.name), ['promo', 'designer', 'publisher'])
-  const off = await setup({ interactive: false, designer: async () => { throw new Error('must not run') } })
-  const r2 = await off.run('approve')
-  assert.equal(r2.status, 'succeeded')
-  assert.equal(r2.run.steps.find((x) => x.name === 'designer').summary, 'Interactive blocks are off for this post: the Designer did not run')
-  const crash = await setup({ designer: async () => { throw new Error('designer exploded') } })
-  const r3 = await crash.run('approve')
+  const s = await setup({ reviewer, designer: async (ctx) => { seen = ctx; return { model: 'stub', output: { status: 'ok', guide: GUIDE, dropped: [], summary_line: '1 chapters · 1 component: approve_demo · checks passed', warnings: [] } } } })
+  await seedGuide(s.store)
+  const quote = 'Your agent wants to refund order #1182'
+  const r = await s.run('human_revise', { feedback: 'Use a clearer demo label.', quotes: [quote], target: 'design' })
   restore()
-  assert.equal(r3.status, 'succeeded')
-  assert.equal(crash.store.records.get(crash.draft.id).status, 'approved')
-  assert.ok(r3.run.warnings.includes('Designer failed (the post stays plain Markdown): designer exploded'))
-  assert.equal(r3.run.steps.find((x) => x.name === 'designer').status, 'failed')
+  assert.equal(r.status, 'succeeded', r.run.result_summary)
+  assert.deepEqual(s.ai.requests, [], 'no Writer call')
+  assert.deepEqual(seen.designFeedback.map((f) => [f.source, f.quote, f.problem]), [['human', quote, 'Use a clearer demo label.']])
+  assert.equal(reviewer.count(), 1)
+  assert.deepEqual(r.run.steps.map((x) => x.name), ['designer', 'reviewer'])
+  const d = s.store.records.get(s.draft.id)
+  assert.equal(d.status, 'awaiting_human', 'the same version waits again, with its new guide')
+  assert.deepEqual(d.payload.design_feedback.map((f) => f.text), ['Use a clearer demo label.'])
+  assert.equal(d.payload.human_feedback, undefined)
+  assert.equal(replay(r.run_id).find((e) => e.type === 'approval.changes_requested').data.target, 'design')
+  const { humanRevisionsUsed } = await import('../src/approval.js')
+  assert.equal(await humanRevisionsUsed(s.store, BRIEF_ID), 1)
+})
+
+test('C5 checks: target must be writing or design (400); design needs a guide (409 no_guide); quotes may come from the guide only for design', async () => {
+  const restore = quiet()
+  const s = await setup()
+  await assert.rejects(s.manager.startRun({ mode: 'human_revise', params: { brief_id: BRIEF_ID, feedback: 'Shorter please.', target: 'layout' } }), (e) => e.status === 400 && /target must be writing or design/.test(e.message))
+  await assert.rejects(s.manager.startRun({ mode: 'human_revise', params: { brief_id: BRIEF_ID, feedback: 'Clearer demo.', target: 'design' } }), (e) => e.status === 409 && e.code === 'no_guide')
+  await seedGuide(s.store)
+  const quote = 'Your agent wants to refund order #1182'
+  await assert.rejects(s.manager.startRun({ mode: 'human_revise', params: { brief_id: BRIEF_ID, feedback: 'Clearer demo.', quotes: [quote] } }), (e) => e.code === 'quote_not_found', 'a writing change quotes the post')
+  restore()
 })
