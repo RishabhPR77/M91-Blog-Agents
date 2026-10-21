@@ -4,7 +4,10 @@ import { readFileSync } from 'node:fs'
 import Ajv from 'ajv'
 import { BLOCK_TYPES, BUILT_BLOCK_TYPES, BLOCK_ID_RE, isBlockType, isBuiltBlockType } from './blocks.js'
 
+import { GUIDE_SCHEMA, GUIDE_COMPONENT_SCHEMAS, HERO_SCENE_SCHEMA, guideRuleErrors } from './guide.js'
+
 export { BLOCK_TYPES, BUILT_BLOCK_TYPES, BLOCK_ID_RE, isBlockType, isBuiltBlockType }
+export * from './guide.js'
 
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'))
 
@@ -35,6 +38,30 @@ export function validateBlock(block, path = '/block') {
   return errors
 }
 
+const guideValidator = ajv.compile(GUIDE_SCHEMA)
+const heroValidator = ajv.compile(HERO_SCENE_SCHEMA)
+const componentValidators = Object.fromEntries(Object.entries(GUIDE_COMPONENT_SCHEMAS).map(([t, s]) => [t, ajv.compile(s)]))
+const ajvErrors = (check, path) => check.errors.map((e) => `${path}${e.instancePath || ''} ${e.message}`)
+
+/**
+ * Checks a guide document (Phase 10): its shape, the hero, every component's data against its type's schema,
+ * then the rules a schema cannot express (see guideRuleErrors). Every error starts with /guide.
+ * @param {object} guide
+ * @param {{ title?: string }} [post] the post's title, for the title_accent check
+ */
+export function validateGuide(guide, post = {}) {
+  if (!guide || typeof guide !== 'object' || Array.isArray(guide)) return ['/guide must be an object']
+  if (!guideValidator(guide)) return ajvErrors(guideValidator, '/guide')
+  const errors = []
+  if (!heroValidator(guide.hero)) errors.push(...ajvErrors(heroValidator, '/guide/hero'))
+  guide.chapters.forEach((c, i) => c.components.forEach((x, k) => {
+    const check = componentValidators[x.type]
+    if (!check(x.data)) errors.push(...ajvErrors(check, `/guide/chapters/${i}/components/${k}/data`).map((e) => `${e} (${x.type})`))
+  }))
+  if (errors.length) return errors
+  return guideRuleErrors(guide, { title: post.title })
+}
+
 /** Validates a post against format v1, including its blocks (types, ids, data schemas). Returns { valid, errors[] }. */
 export function validatePost(post) {
   const errors = []
@@ -51,5 +78,6 @@ export function validatePost(post) {
       }
     })
   }
+  if (post?.guide && typeof post.guide === 'object') errors.push(...validateGuide(post.guide, post))
   return { valid: errors.length === 0, errors }
 }

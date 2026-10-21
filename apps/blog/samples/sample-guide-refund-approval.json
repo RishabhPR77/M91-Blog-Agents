@@ -1,0 +1,373 @@
+{
+  "slug": "sample-guide-refund-approval",
+  "title": "Sample: how to make your AI agent ask before it refunds a customer",
+  "description": "Sample guide for local development: one approval step, a phone that rings, and an answer your agent waits for.",
+  "tldr": [
+    "A refund agent should ask a person before money moves.",
+    "A phone call gets an answer faster than a chat message.",
+    "Your agent reads the answer, then refunds or stops."
+  ],
+  "published_at": "2026-10-21T09:00:00+05:30",
+  "updated_at": "2026-10-21T09:00:00+05:30",
+  "topic_group": 1,
+  "tags": [
+    "ai agent approval",
+    "refunds",
+    "human in the loop"
+  ],
+  "reading_time_min": 6,
+  "markdown": "An AI agent that can refund customers can also refund the wrong customer. One approval step lets a person check a refund before the money moves.\n\n## Why a refund needs a person\n\nRefunds are hard to undo. Once the money leaves, getting it back takes time and trust.\n\nA chat message can sit unread for hours. A ringing phone gets attention in seconds.\n\n| Route | Who sees it | How fast |\n| --- | --- | --- |\n| Slack group | Anyone who looks | When someone looks |\n| Pager | The person on call | Minutes |\n| Phone call | One named person | Seconds |\n\n## What happens when the agent asks\n\nThe agent pauses before the refund and asks one person. The person approves or rejects. The agent reads the answer and carries on.\n\n## Add the approval step\n\nAdd the approval step where your agent decides to refund. Test it with your own phone first.\n\n1. Choose the refund rule that needs a person, for example refunds above a limit you set.\n2. Send the approval request with a stable `customId` for the order.\n3. Wait for the decision, then refund or stop.\n\n## If something goes wrong\n\n### The phone does not ring\n\nLikely cause: the send link is wrong.\nFix: copy the send link again and store it as a secret.\n\n### The agent refunds before the answer\n\nLikely cause: the code does not wait for the decision.\nFix: read the decision first, then call the refund.\n\n## Questions\n\n### What if nobody answers?\n\nDecide a timeout and a safe default, such as \"do not refund\".\n\n### Can two people approve the same refund?\n\nUse one stable `customId` per refund so the first answer wins.\n\nPick one refund rule, add the pause, and try it with a small amount.",
+  "blocks": null,
+  "seo": {
+    "title_tag": "Sample: make your AI agent ask before a refund",
+    "meta_description": "Sample guide: an approval step before an AI agent refunds a customer.",
+    "og_image": "https://m91-blog.embarko.app/og/sample-guide-refund-approval.png"
+  },
+  "sources": [
+    {
+      "url": "https://m91.msg91.com/llms.txt",
+      "title": "The M91 docs"
+    }
+  ],
+  "related_slugs": [],
+  "noindex": false,
+  "canonical_url": "https://m91-blog.embarko.app/posts/sample-guide-refund-approval/",
+  "brief_id": "sample-guide",
+  "version": 1,
+  "guide": {
+    "version": 1,
+    "title_accent": "ask before",
+    "hero": {
+      "example": true,
+      "agent": "Refund agent",
+      "request": "Refund ₹48,000 to order #1182?",
+      "person": "Priya, support lead",
+      "decision": "approved",
+      "result": "Refund sent, approved by Priya"
+    },
+    "status_states": [
+      {
+        "state": "waiting",
+        "chapter": "c1"
+      },
+      {
+        "state": "ringing",
+        "chapter": "c2"
+      },
+      {
+        "state": "approved",
+        "chapter": "c3"
+      },
+      {
+        "state": "continuing",
+        "chapter": "c4"
+      }
+    ],
+    "chapters": [
+      {
+        "id": "c1",
+        "number": 1,
+        "label": "The problem",
+        "heading": "Why a refund needs a person",
+        "components": [
+          {
+            "type": "prose",
+            "id": "g1",
+            "data": {
+              "markdown": "Refunds are hard to undo. Once the money leaves, getting it back takes time and trust.\n\nA chat message can sit unread for hours. A ringing phone gets attention in seconds."
+            }
+          },
+          {
+            "type": "journey_steps",
+            "id": "g2",
+            "data": {
+              "current": 2,
+              "steps": [
+                {
+                  "title": "Agent decides",
+                  "text_markdown": "The agent wants to refund an order."
+                },
+                {
+                  "title": "Agent pauses",
+                  "text_markdown": "It stops before the money moves."
+                },
+                {
+                  "title": "A person decides",
+                  "text_markdown": "One person approves or rejects."
+                },
+                {
+                  "title": "Agent continues",
+                  "text_markdown": "It refunds, or it stops."
+                }
+              ]
+            }
+          },
+          {
+            "type": "comparison_table",
+            "id": "g3",
+            "data": {
+              "caption": "Three ways to reach the person who decides",
+              "markdown": "| Route | Who sees it | How fast |\n| --- | --- | --- |\n| Slack group | Anyone who looks | When someone looks |\n| Pager | The person on call | Minutes |\n| Phone call | One named person | Seconds |"
+            }
+          }
+        ]
+      },
+      {
+        "id": "c2",
+        "number": 2,
+        "label": "How it works",
+        "heading": "What happens when the agent asks",
+        "components": [
+          {
+            "type": "prose",
+            "id": "g4",
+            "data": {
+              "markdown": "The agent pauses before the refund and asks one person. The person approves or rejects. The agent reads the answer and carries on."
+            }
+          },
+          {
+            "type": "phone_ring_sim",
+            "id": "g5",
+            "data": {
+              "moments": [
+                {
+                  "state": "waiting",
+                  "actor": "agent",
+                  "markdown": "Your agent pauses and asks for a decision."
+                },
+                {
+                  "state": "ringing",
+                  "actor": "m91",
+                  "markdown": "M91 calls the person who decides."
+                },
+                {
+                  "state": "approved",
+                  "actor": "human",
+                  "markdown": "The person taps Approve."
+                },
+                {
+                  "state": "continuing",
+                  "actor": "software",
+                  "markdown": "Your agent reads the answer and refunds."
+                }
+              ]
+            }
+          },
+          {
+            "type": "route_compare",
+            "id": "g6",
+            "data": {
+              "caption": "Three routes to the same answer",
+              "routes": [
+                {
+                  "name": "Slack group",
+                  "best_for": "Questions that can wait",
+                  "stops": [
+                    "Post the question",
+                    "Someone notices",
+                    "Someone replies",
+                    "Agent reads the chat"
+                  ]
+                },
+                {
+                  "name": "Pager",
+                  "best_for": "Outages",
+                  "stops": [
+                    "Page on-call",
+                    "They log in",
+                    "Agent waits"
+                  ]
+                },
+                {
+                  "name": "Phone call with M91",
+                  "best_for": "One decision from one person",
+                  "stops": [
+                    "Phone rings",
+                    "Person taps"
+                  ],
+                  "highlight": true
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "c3",
+        "number": 3,
+        "label": "Try it",
+        "heading": "Approve or reject a refund",
+        "components": [
+          {
+            "type": "approve_demo",
+            "id": "g7",
+            "data": {
+              "example": true,
+              "request": "Your agent wants to refund ₹48,000 to order #1182",
+              "context": "Customer says the parcel never arrived.",
+              "approve": {
+                "label": "Approve",
+                "outcome_markdown": "The agent sends the refund and logs who approved it."
+              },
+              "reject": {
+                "label": "Reject",
+                "outcome_markdown": "The agent does not refund and tells the support team why."
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "c4",
+        "number": 4,
+        "label": "Set it up",
+        "heading": "Add the approval step",
+        "components": [
+          {
+            "type": "prose",
+            "id": "g8",
+            "data": {
+              "markdown": "Add the approval step where your agent decides to refund. Test it with your own phone first."
+            }
+          },
+          {
+            "type": "steps_checklist",
+            "id": "g9",
+            "data": {
+              "intro": "Tap a number when you have done it.",
+              "steps": [
+                {
+                  "title": "Pick the rule",
+                  "markdown": "Choose the refund rule that needs a person, for example refunds above a limit you set."
+                },
+                {
+                  "title": "Send the request",
+                  "markdown": "Send the approval request with a stable `customId` for the order.",
+                  "stuck": {
+                    "cause_markdown": "The request has no `customId`.",
+                    "fix_markdown": "Add one stable `customId` per order."
+                  }
+                },
+                {
+                  "title": "Act on the answer",
+                  "markdown": "Wait for the decision, then refund or stop."
+                }
+              ]
+            }
+          },
+          {
+            "type": "tool_picker",
+            "id": "g10",
+            "data": {
+              "question": "Where does your agent run?",
+              "options": [
+                {
+                  "id": "langgraph",
+                  "label": "LangGraph",
+                  "steps": [
+                    {
+                      "markdown": "Add a node before the refund node that sends the request."
+                    },
+                    {
+                      "markdown": "Make the refund node read the decision first."
+                    }
+                  ],
+                  "done_markdown": "You will know it worked when your phone rings before the refund."
+                },
+                {
+                  "id": "http",
+                  "label": "Plain HTTP",
+                  "steps": [
+                    {
+                      "markdown": "Send the request from your server."
+                    },
+                    {
+                      "markdown": "Check the decision before you call the refund."
+                    }
+                  ],
+                  "file": {
+                    "filename": "approval-request.json",
+                    "language": "json",
+                    "what": "The approval request for one refund.",
+                    "code": "{\n  \"customId\": \"refund-1182\",\n  \"message\": \"Refund ₹48,000 to order #1182?\"\n}"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "file_card",
+            "id": "g11",
+            "data": {
+              "filename": "approval-request.json",
+              "language": "json",
+              "what": "Asks one person to approve this refund.",
+              "code": "{\n  \"customId\": \"refund-1182\",\n  \"message\": \"Refund ₹48,000 to order #1182?\"\n}",
+              "preview_lines": 3
+            }
+          }
+        ]
+      },
+      {
+        "id": "c5",
+        "number": 5,
+        "label": "Stuck?",
+        "heading": "If something goes wrong",
+        "components": [
+          {
+            "type": "troubleshooting_picker",
+            "id": "g12",
+            "data": {
+              "items": [
+                {
+                  "problem_markdown": "The phone does not ring",
+                  "cause_markdown": "Likely cause: the send link is wrong.",
+                  "fix_markdown": "Fix: copy the send link again and store it as a secret."
+                },
+                {
+                  "problem_markdown": "The agent refunds before the answer",
+                  "cause_markdown": "Likely cause: the code does not wait for the decision.",
+                  "fix_markdown": "Fix: read the decision first, then call the refund."
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "c6",
+        "number": 6,
+        "label": "Questions",
+        "heading": "Questions",
+        "components": [
+          {
+            "type": "faq",
+            "id": "g13",
+            "data": {
+              "items": [
+                {
+                  "question_markdown": "What if nobody answers?",
+                  "answer_markdown": "Decide a timeout and a safe default, such as \"do not refund\"."
+                },
+                {
+                  "question_markdown": "Can two people approve the same refund?",
+                  "answer_markdown": "Use one stable `customId` per refund so the first answer wins."
+                }
+              ]
+            }
+          },
+          {
+            "type": "prose",
+            "id": "g14",
+            "data": {
+              "markdown": "Pick one refund rule, add the pause, and try it with a small amount."
+            }
+          }
+        ]
+      }
+    ],
+    "your_turn": {
+      "title": "Let your agent ask before it refunds."
+    }
+  }
+}

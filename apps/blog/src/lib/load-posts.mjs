@@ -28,7 +28,13 @@ function readFolder(dir) {
     } catch (error) {
       throw new Error(`Invalid post file ${file}: not valid JSON (${error.message})`)
     }
-    const { valid, errors } = validatePost(post)
+    let { valid, errors } = validatePost(post)
+    // A bad guide never stops the build (Phase 10): the guide is dropped and the post shows its blocks or Markdown.
+    if (!valid && errors.some((e) => e.startsWith('/guide'))) {
+      console.warn(`[guide] ${file}: guide not valid, showing the post without it:\n  - ${errors.filter((e) => e.startsWith('/guide')).slice(0, 5).join('\n  - ')}`)
+      post = { ...post, guide: null }
+      ;({ valid, errors } = validatePost(post))
+    }
     // Bad blocks never stop the build or break a page (Phase 8): the post is shown as its Markdown instead.
     if (!valid && errors.every((e) => e.startsWith('/blocks'))) {
       console.warn(`[blocks] ${file}: blocks not valid, showing the post's Markdown instead:\n  - ${errors.slice(0, 5).join('\n  - ')}`)

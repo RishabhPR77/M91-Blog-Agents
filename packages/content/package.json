@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.js",
     "./post.schema.json": "./src/post.schema.json",
-    "./blocks": "./src/blocks.js"
+    "./blocks": "./src/blocks.js",
+    "./guide": "./src/guide.js"
   },
   "scripts": {
     "test": "node --test"

@@ -61,6 +61,10 @@
     "noindex": { "type": "boolean" },
     "canonical_url": { "type": "string" },
     "brief_id": { "type": "string" },
-    "version": { "type": "integer", "minimum": 1 }
+    "version": { "type": "integer", "minimum": 1 },
+    "guide": {
+      "description": "Phase 10: the interactive guide (optional; validated by validateGuide)",
+      "oneOf": [{ "type": "null" }, { "type": "object" }]
+    }
   }
 }
