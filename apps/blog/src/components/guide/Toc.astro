@@ -1,0 +1,9 @@
+---
+// The numbered contents list (the rail and the chapter bar share it).
+import type { Chapter } from '../../lib/chapters'
+interface Props { chapters: Chapter[] }
+const { chapters } = Astro.props
+---
+<ol class="toc">
+  {chapters.map((c) => <li><a href={`#${c.id}`} data-ch={c.id} data-state={c.state}>{c.text}</a></li>)}
+</ol>

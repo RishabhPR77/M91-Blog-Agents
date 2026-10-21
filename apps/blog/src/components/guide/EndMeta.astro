@@ -1,0 +1,14 @@
+---
+// The end of a guide (Phase 10, A3): written by, published, updated, read time and questions answered.
+import { formatDate } from '../../lib/posts'
+import { SITE } from '../../config/site'
+interface Props { published: string; updated: string; minutes: number; questions: number }
+const { published, updated, minutes, questions } = Astro.props
+---
+<dl class="endmeta rv">
+  <div><dt class="mono-k">Written by</dt><dd class="endmeta-v">{SITE.author}</dd></div>
+  <div><dt class="mono-k">Published</dt><dd class="endmeta-v"><time datetime={published}>{formatDate(published)}</time></dd></div>
+  <div><dt class="mono-k">Updated</dt><dd class="endmeta-v"><time datetime={updated}>{formatDate(updated)}</time></dd></div>
+  <div><dt class="mono-k">Read time</dt><dd class="endmeta-v">{minutes} min</dd></div>
+  <div><dt class="mono-k">Questions answered</dt><dd class="endmeta-v" data-questions>{questions}</dd></div>
+</dl>

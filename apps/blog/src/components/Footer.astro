@@ -4,6 +4,8 @@
 import Logo from './Logo.astro'
 import { M91_URL, M91_LINKS, SETUP_PROMPT } from '../config/site'
 import { url } from '../lib/posts'
+interface Props { cta?: boolean }
+const { cta = true } = Astro.props
 const year = new Date().getFullYear()
 const product = [
   { href: M91_LINKS.how, label: 'How it works' },
@@ -14,7 +16,7 @@ const product = [
 ]
 const ext = { target: '_blank', rel: 'noopener' }
 ---
-<section class="cta-band" aria-labelledby="cta-title">
+{cta && (<section class="cta-band" aria-labelledby="cta-title">
   <div class="wide">
     <h2 id="cta-title" class="cta-h">Give your software a way<br />to get human approval<span class="dot">.</span></h2>
     <p class="cta-sub">Your software sends the alert. M91 finds the human. They answer. Work carries on.</p>
@@ -36,7 +38,7 @@ const ext = { target: '_blank', rel: 'noopener' }
     </div>
     <p class="cta-note">Free forever · Built by MSG91</p>
   </div>
-</section>
+</section>)}
 <footer class="foot">
   <div class="wide">
     <div class="foot-panel">

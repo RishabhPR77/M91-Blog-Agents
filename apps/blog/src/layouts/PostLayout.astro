@@ -1,9 +1,14 @@
 ---
-// One post: breadcrumb, title, meta line, TL;DR, contents, body (blocks or Markdown), sources, share links and
-// related posts. The call to action is the footer's (on every page).
+// One guide (Phase 10, A3): breadcrumb, "Guide" label, title, description, byline and share; the hero scene;
+// takeaways.log; the numbered chapters (blocks or Markdown) with the sticky rail beside them (or the chapter
+// bar on narrow screens); sources; the end strip (written by … questions answered), "Your turn", share and
+// "Keep reading". Old posts render in this same shell.
 import BaseLayout from './BaseLayout.astro'
-import TLDR from '../components/TLDR.astro'
-import TableOfContents from '../components/TableOfContents.astro'
+import StoryScene from '../components/guide/StoryScene.astro'
+import TakeawaysLog from '../components/guide/TakeawaysLog.astro'
+import GuideRail from '../components/guide/GuideRail.astro'
+import EndMeta from '../components/guide/EndMeta.astro'
+import PromptStrip from '../components/PromptStrip.astro'
 import BlockRenderer from '../components/BlockRenderer.astro'
 import CodeCopy from '../components/CodeCopy.astro'
 import SourcesList from '../components/SourcesList.astro'
@@ -12,6 +17,7 @@ import ShareLinks from '../components/ShareLinks.astro'
 import type { Post } from '../lib/posts'
 import { topicOf, relatedPosts, formatDate, url } from '../lib/posts'
 import { renderMarkdown } from '../lib/markdown'
+import { chaptersOf, stuckChapter, questionCount, DEFAULT_STATES } from '../lib/chapters'
 import { blogPostingLd, breadcrumbLd } from '../lib/seo'
 import { SITE } from '../config/site'
 
@@ -19,6 +25,9 @@ interface Props { post: Post }
 const { post } = Astro.props
 const topic = topicOf(post)
 const { html, headings } = await renderMarkdown(post.markdown)
+const states = DEFAULT_STATES
+const chapters = chaptersOf(headings, states)
+const stuck = stuckChapter(chapters)
 const updated = post.updated_at.slice(0, 10) !== post.published_at.slice(0, 10)
 ---
 <BaseLayout
@@ -30,42 +39,46 @@ const updated = post.updated_at.slice(0, 10) !== post.published_at.slice(0, 10)
   ogType="article"
   noindex={post.noindex}
   jsonLd={[blogPostingLd(post), breadcrumbLd(post)]}
+  footerCta={false}
 >
-  <article class="wide py-10 md:py-14">
-    <nav aria-label="Breadcrumb" class="text-sm text-fg-2">
-      <ol class="flex flex-wrap items-center gap-2">
-        <li><a href={url('/')} class="hover:underline">Blog</a></li>
-        <li aria-hidden="true">›</li>
-        <li aria-current="page" class="truncate text-fg">{post.title}</li>
-      </ol>
-    </nav>
-    <header class="mt-6 max-w-3xl">
-      <span class="bl-k">{topic.short}</span>
-      <h1 class="mt-5 text-4xl font-extrabold leading-[1.1] tracking-[-0.035em] md:text-[3.25rem]">{post.title}</h1>
-      <p class="mt-4 text-xl text-fg-2">{post.description}</p>
-      <p class="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg-2">
-        <span>Published <time datetime={post.published_at}>{formatDate(post.published_at)}</time></span>
-        {updated && <span>· Updated <time datetime={post.updated_at}>{formatDate(post.updated_at)}</time></span>}
-        <span>· {post.reading_time_min} min read</span>
-        <span>· {SITE.author}</span>
-      </p>
-    </header>
-    <div class="mt-8 max-w-[44rem] space-y-6">
-      <TLDR items={post.tldr} />
-      <TableOfContents headings={headings} />
+  <div class="g-wrap gp-top">
+    <div class="gp-grid">
+      <article class="gp-main">
+        <nav aria-label="Breadcrumb" class="gp-crumbs">
+          <a href={url('/')}>Guides</a><span aria-hidden="true">/</span>
+          <a href={url(`/?topic=${topic.group}`)}>{topic.short}</a><span aria-hidden="true">/</span>
+          <span aria-current="page" class="sr-only">{post.title}</span>
+        </nav>
+        <header class="gp-hero">
+          <p class="flex flex-wrap items-center gap-2"><span class="tag-lime">Guide</span><span class="mono-k">{topic.short} · {post.reading_time_min} min read</span></p>
+          <h1 class="gp-h1">{post.title}</h1>
+          <p class="gp-desc">{post.description}</p>
+          <div class="gp-by">
+            <span class="gp-by-who"><span class="gc-av" aria-hidden="true">M</span>{SITE.author}</span>
+            <span>{updated ? 'Updated' : 'Published'} <time datetime={updated ? post.updated_at : post.published_at}>{formatDate(updated ? post.updated_at : post.published_at)}</time></span>
+            <button type="button" class="pill js-only" data-copy-link={post.canonical_url}>Share</button>
+          </div>
+        </header>
+        <StoryScene />
+        <TakeawaysLog items={post.tldr} />
+        <GuideRail chapters={chapters} states={states} stuck={stuck} place="bar" />
+        <div class="gp-body">
+          {post.blocks
+            ? <BlockRenderer blocks={post.blocks} slug={post.slug} headingIds={headings.map((h) => h.id)} fallbackHtml={html} />
+            : <div class="prose-m91" set:html={html} />}
+          <CodeCopy />
+        </div>
+        <div class="gp-end">
+          <SourcesList sources={post.sources} />
+          <EndMeta published={post.published_at} updated={post.updated_at} minutes={post.reading_time_min} questions={questionCount(headings)} />
+          <PromptStrip id="your-turn" label="Your turn" title="Let your agent ask before it acts." />
+          <ShareLinks url={post.canonical_url} title={post.title} />
+        </div>
+      </article>
+      <GuideRail chapters={chapters} states={states} stuck={stuck} place="rail" />
     </div>
-    <div class="mt-10">
-      {post.blocks
-        ? <BlockRenderer blocks={post.blocks} slug={post.slug} headingIds={headings.map((h) => h.id)} fallbackHtml={html} />
-        : <div class="prose-m91" set:html={html} />}
-      <CodeCopy />
-    </div>
-    <div class="mt-14 max-w-[44rem] space-y-12">
-      <SourcesList sources={post.sources} />
-      <ShareLinks url={post.canonical_url} title={post.title} />
-    </div>
-    <div class="mt-14">
+    <div class="gp-related">
       <RelatedPosts posts={relatedPosts(post)} />
     </div>
-  </article>
+  </div>
 </BaseLayout>

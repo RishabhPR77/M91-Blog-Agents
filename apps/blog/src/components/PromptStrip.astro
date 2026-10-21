@@ -1,0 +1,25 @@
+---
+// The setup-prompt strip: copy M91's setup prompt → paste it into your agent → your phone rings when it needs
+// you. Used at the end of the home page and as "Your turn" at the end of a guide. The copy button is the
+// footer's (same script); without JavaScript a link to the setup guide shows instead.
+import { M91_LINKS, SETUP_PROMPT } from '../config/site'
+interface Props { label: string; title: string; id: string }
+const { label, title, id } = Astro.props
+---
+<section class="strip rv" aria-labelledby={id}>
+  <div>
+    <p class="mono-k" style="color: var(--lime)">{label}</p>
+    <h2 id={id} class="strip-t mt-2">{title}</h2>
+    <p class="strip-steps"><b>Copy</b> the setup prompt <span class="strip-arrow" aria-hidden="true">→</span> <b>Paste</b> it into your agent <span class="strip-arrow" aria-hidden="true">→</span> your <b>phone rings</b> when it needs you</p>
+  </div>
+  <div>
+    <button type="button" class="cta-card js-only" data-copy-prompt={SETUP_PROMPT}>
+      <span class="cta-chip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12"></rect><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"></path></svg></span>
+      <span><span class="cta-card-t" data-copy-label>Copy setup prompt</span><span class="cta-card-s">Paste it to your agent</span></span>
+    </button>
+    <a class="cta-card no-js-only" href={M91_LINKS.llms} target="_blank" rel="noopener">
+      <span class="cta-chip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></span>
+      <span><span class="cta-card-t">Read the setup guide</span><span class="cta-card-s">llms.txt, for your agent</span></span>
+    </a>
+  </div>
+</section>

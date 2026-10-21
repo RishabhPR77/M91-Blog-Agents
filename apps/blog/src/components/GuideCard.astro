@@ -1,0 +1,27 @@
+---
+// One guide as a numbered card: "01 · AI agents · 8 min", the title (the whole card is the link), the
+// description and the byline. The featured card ("Start here") is lime and shows the M91 story beside it.
+// data-search and data-topic are what the home page's search and chips match.
+import StoryLog from './StoryLog.astro'
+import type { Post } from '../lib/posts'
+import { topicOf, formatDate, url } from '../lib/posts'
+import { SITE } from '../config/site'
+interface Props { post: Post; n?: number; feature?: boolean; headingLevel?: 2 | 3 }
+const { post, n, feature = false, headingLevel = 2 } = Astro.props
+const topic = topicOf(post)
+const link = url(`/posts/${post.slug}/`)
+const search = [post.title, post.description, topic.name, ...post.tags].join(' ').toLowerCase()
+const H = headingLevel === 2 ? 'h2' : 'h3'
+---
+<article class:list={['gc', 'rv', feature && 'is-feature']} data-search={search} data-topic={topic.group}>
+  {feature && <StoryLog />}
+  <div class="gc-body">
+    <p class="gc-k">
+      {n !== undefined && <span class="gc-n">{String(n).padStart(2, '0')}</span>}
+      <span class="mono-k">{topic.short} · {post.reading_time_min} min</span>
+    </p>
+    <H class="gc-t"><a href={link}>{post.title}</a></H>
+    <p class="gc-p">{post.description}</p>
+    <p class="gc-by"><span class="gc-av" aria-hidden="true">M</span><span>{SITE.author}</span><span aria-hidden="true">·</span><time datetime={post.published_at}>{formatDate(post.published_at)}</time></p>
+  </div>
+</article>

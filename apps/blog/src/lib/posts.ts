@@ -36,12 +36,14 @@ export const isSample = (): boolean => getPosts().sample
 
 export const topicOf = (post: Pick<Post, 'topic_group'>) => TOPICS.find((t) => t.group === post.topic_group) ?? TOPICS[0]
 
-/** Related posts: related_slugs that exist, else the newest indexed posts in the same topic. Max 3, never itself. */
+/** "Keep reading": related_slugs that exist, then the newest indexed posts in the same topic, then the newest of
+ *  the others. Max 3, never itself. */
 export function relatedPosts(post: Post): Post[] {
   const all = getPosts().posts
   const listed = post.related_slugs.map((s) => all.find((p) => p.slug === s)).filter((p): p is Post => Boolean(p) && p!.slug !== post.slug)
-  const fill = indexedPosts().filter((p) => p.topic_group === post.topic_group && p.slug !== post.slug && !listed.includes(p))
-  return [...listed, ...fill].slice(0, 3)
+  const others = indexedPosts().filter((p) => p.slug !== post.slug && !listed.includes(p))
+  const same = others.filter((p) => p.topic_group === post.topic_group)
+  return [...listed, ...same, ...others.filter((p) => !same.includes(p))].slice(0, 3)
 }
 
 export const formatDate = (iso: string) =>

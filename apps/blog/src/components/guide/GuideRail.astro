@@ -1,0 +1,81 @@
+---
+// The guide's progress (Phase 10, A3). Desktop: a sticky rail beside the text with the status widget (the
+// guide's states, moving as the reader passes each chapter), the numbered contents and "Stuck?". Narrow
+// screens: a bar under the masthead with the current state and chapter that opens the contents (native
+// <details>, so it works without JavaScript). One script drives both.
+import Toc from './Toc.astro'
+import type { Chapter, State } from '../../lib/chapters'
+interface Props { chapters: Chapter[]; states: State[]; stuck?: Chapter; place: 'rail' | 'bar' }
+const { chapters, states, stuck, place } = Astro.props
+---
+{place === 'rail' ? (
+  <aside class="rail" aria-label="Guide progress">
+    <div class="rail-in">
+      <div class="rail-card">
+        <p class="mono-k">Status</p>
+        <ol class="status" aria-live="off">
+          {states.map((s) => <li class="status-s" data-state={s}><span class="status-dot" aria-hidden="true"></span>{s}</li>)}
+        </ol>
+      </div>
+      {chapters.length > 1 && (
+        <nav class="rail-card" aria-labelledby="toc-title">
+          <p id="toc-title" class="mono-k">Contents</p>
+          <Toc chapters={chapters} />
+        </nav>
+      )}
+      {stuck && <a class="stuck" href={`#${stuck.id}`}>Stuck? <span aria-hidden="true">→</span></a>}
+    </div>
+  </aside>
+) : chapters.length > 1 && (
+  <details class="gbar">
+    <summary>
+      <span class="gbar-state js-only" data-bar-state>{states[0]}</span>
+      <span class="gbar-ch" data-bar-ch>Contents</span>
+      <span class="gbar-n js-only" data-bar-n>01/{String(chapters.length).padStart(2, '0')}</span>
+    </summary>
+    <nav aria-label="Contents"><Toc chapters={chapters} /></nav>
+    {stuck && <a class="stuck mb-2" href={`#${stuck.id}`}>Stuck? <span aria-hidden="true">→</span></a>}
+  </details>
+)}
+
+<script>
+  // The current chapter is the last H2 whose top has passed a line a little below the masthead. Its state is
+  // "now"; the states before it are "done". The bar closes when a contents link is used.
+  const heads = [...document.querySelectorAll<HTMLElement>('.gp-body h2[id]')]
+  const links = [...document.querySelectorAll<HTMLAnchorElement>('.toc a[data-ch]')]
+  const states = [...document.querySelectorAll<HTMLElement>('.status-s')]
+  const order = states.map((s) => s.dataset.state)
+  const barState = document.querySelector<HTMLElement>('[data-bar-state]')
+  const barCh = document.querySelector<HTMLElement>('[data-bar-ch]')
+  const barN = document.querySelector<HTMLElement>('[data-bar-n]')
+  const bar = document.querySelector<HTMLDetailsElement>('.gbar')
+  let current = -2
+  function update() {
+    const line = 140
+    let i = -1
+    for (let k = 0; k < heads.length; k++) if (heads[k].getBoundingClientRect().top <= line) i = k
+    if (i === current) return
+    current = i
+    const id = i >= 0 ? heads[i].id : null
+    const link = links.find((a) => a.dataset.ch === id)
+    for (const a of links) a.classList.toggle('is-now', a.dataset.ch === id)
+    const now = Math.max(0, order.indexOf(link?.dataset.state ?? order[0]))
+    states.forEach((s, k) => {
+      s.classList.toggle('is-done', k < now)
+      s.classList.toggle('is-now', k === now)
+    })
+    if (barState) { barState.textContent = order[now] ?? ''; barState.dataset.state = order[now] ?? '' }
+    if (barCh) barCh.textContent = i >= 0 ? heads[i].textContent?.replace(/#$/, '').trim() ?? '' : 'Contents'
+    if (barN) barN.textContent = `${String(Math.max(1, i + 1)).padStart(2, '0')}/${String(heads.length).padStart(2, '0')}`
+  }
+  if (heads.length) {
+    let queued = false
+    addEventListener('scroll', () => {
+      if (queued) return
+      queued = true
+      requestAnimationFrame(() => { queued = false; update() })
+    }, { passive: true })
+    update()
+  }
+  bar?.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('a')) bar.open = false })
+</script>

@@ -1,0 +1,11 @@
+---
+// The key takeaways as a takeaways.log file card (Phase 10: replaces the TL;DR box).
+interface Props { items: string[] }
+const { items } = Astro.props
+---
+<section class="filecard tk" aria-labelledby="tldr-title">
+  <p class="filecard-tab"><span id="tldr-title">takeaways.log</span><span class="sr-only"> — key takeaways</span></p>
+  <ul class="tk-list">
+    {items.map((item) => <li><span>{item}</span></li>)}
+  </ul>
+</section>

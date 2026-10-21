@@ -25,8 +25,12 @@ export const CTA = {
   body: 'M91 rings a person’s phone through silent mode until someone answers, then sends the decision back to your software.'
 } as const
 
-// The home page's heading, as on the M91 site's blog section.
-export const HOME = { eyebrow: 'Blog', title: 'Notes on waking people up.' } as const
+// The home page's hero (Phase 10): eyebrow, the headline with its italic accent word, one line under it.
+export const HOME = {
+  eyebrow: 'M91 Guides',
+  title: { before: 'When software needs ', accent: 'you', after: '.' },
+  line: 'Step-by-step guides for letting software and AI agents ask a person before they act, and getting the answer back.'
+} as const
 
 // Links of the M91 site's header and footer (m91.msg91.com), so the blog reads as part of it.
 const m91 = (path: string) => new URL(path, M91_URL).href

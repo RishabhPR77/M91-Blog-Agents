@@ -29,7 +29,7 @@ export function breadcrumbLd(post: Post) {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Blog', item: abs('/') },
+      { '@type': 'ListItem', position: 1, name: 'Guides', item: abs('/') },
       { '@type': 'ListItem', position: 2, name: post.title, item: post.canonical_url }
     ]
   }

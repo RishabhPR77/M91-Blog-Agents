@@ -1,0 +1,42 @@
+---
+// The hero scene (Phase 10, A3): M91's story in four moments — software asks, the phone rings, a person
+// decides, software continues — lit one after another when it comes into view. Without JavaScript, and with
+// reduced motion, all four show at once. A guide can later pass its own moments (Part B's hero_scene).
+export type Moment = { key: 'asks' | 'ringing' | 'decides' | 'continuing'; label: string; value: string }
+interface Props { moments?: Moment[] }
+const GENERIC: Moment[] = [
+  { key: 'asks', label: '1 · Software asks', value: 'Needs a decision' },
+  { key: 'ringing', label: '2 · Phone rings', value: 'Calling the person' },
+  { key: 'decides', label: '3 · Person decides', value: 'Approve or reject' },
+  { key: 'continuing', label: '4 · Software continues', value: 'With the answer' }
+]
+const { moments = GENERIC } = Astro.props
+---
+<figure class="scene gp-scene" data-scene aria-label="How M91 works, in four moments">
+  {moments.map((m) => (
+    <div class="scene-m" data-m={m.key}>
+      <span class="scene-k">{m.label}</span>
+      {m.key === 'ringing' && <span class="scene-v"><svg class="scene-bell" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg> {m.value}</span>}
+      {m.key === 'decides' && <><span class="scene-v">{m.value}</span><span class="scene-pills" aria-hidden="true"><span class="yes">Approve</span><span>Reject</span></span></>}
+      {m.key !== 'ringing' && m.key !== 'decides' && <span class="scene-v">{m.value}</span>}
+    </div>
+  ))}
+</figure>
+
+<script>
+  // Light the moments one by one (about 350 ms apart), once, when the scene is on screen.
+  for (const scene of document.querySelectorAll<HTMLElement>('[data-scene]')) {
+    const moments = [...scene.querySelectorAll<HTMLElement>('.scene-m')]
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) {
+      moments.forEach((m) => m.classList.add('is-lit'))
+      continue
+    }
+    scene.classList.add('is-armed')
+    const io = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return
+      io.disconnect()
+      moments.forEach((m, i) => setTimeout(() => m.classList.add('is-lit'), 150 + i * 350))
+    }, { threshold: 0.25 })
+    io.observe(scene)
+  }
+</script>

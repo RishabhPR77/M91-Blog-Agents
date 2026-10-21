@@ -1,0 +1,24 @@
+---
+// Page motion (Phase 10, A1): elements marked .rv rise in once when they scroll into view. The hiding class
+// is set by this script itself, so without scripts (or if it fails) everything stays visible; with reduced
+// motion the CSS shows everything at once.
+---
+<script>
+  const els = [...document.querySelectorAll<HTMLElement>('.rv')]
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (els.length && 'IntersectionObserver' in window && !reduced) {
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue
+        e.target.classList.add('is-in')
+        io.unobserve(e.target)
+      }
+    }, { rootMargin: '0px 0px -8% 0px' })
+    // Anything already on screen stays as it is (no flash); the rest rises in as the reader scrolls.
+    for (const el of els) {
+      if (el.getBoundingClientRect().top < innerHeight) el.classList.add('is-in')
+      else io.observe(el)
+    }
+    document.documentElement.classList.add('rv-on')
+  }
+</script>

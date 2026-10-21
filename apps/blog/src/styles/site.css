@@ -93,6 +93,7 @@
   .cta-card-s { display: block; margin-top: 2px; font-size: 12px; line-height: 1.2; color: rgba(255, 255, 255, 0.6); }
   .cta-note { margin-top: 28px; font: 600 14.5px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: #6c7987; }
   .foot { background: var(--dark-bg); padding: 0 0 28px; }
+  .foot:first-child, :not(.cta-band) + .foot { padding-top: 32px; }
   .foot-panel { background: rgba(255, 255, 255, 0.035); border: 1px solid var(--dark-line); border-radius: 26px; padding: 44px 44px 40px; margin-bottom: 22px; }
   .foot-top { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)); gap: 40px; }
   .foot-brand { display: flex; flex-direction: column; gap: 16px; max-width: 30ch; }

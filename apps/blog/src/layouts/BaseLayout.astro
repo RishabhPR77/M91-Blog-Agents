@@ -4,6 +4,7 @@
 import '../styles/global.css'
 import Header from '../components/Header.astro'
 import Footer from '../components/Footer.astro'
+import Motion from '../components/Motion.astro'
 import { SITE, SITE_URL } from '../config/site'
 import { isSample, url } from '../lib/posts'
 
@@ -16,8 +17,10 @@ interface Props {
   ogType?: 'website' | 'article'
   noindex?: boolean
   jsonLd?: object[]
+  /** The big closing call to action above the footer (pages with their own prompt strip turn it off). */
+  footerCta?: boolean
 }
-const { title, description, path, canonical, ogImage, ogType = 'website', noindex = false, jsonLd = [] } = Astro.props
+const { title, description, path, canonical, ogImage, ogType = 'website', noindex = false, jsonLd = [], footerCta = true } = Astro.props
 // canonical={false}: no canonical link (the 404 page).
 const canonicalUrl = canonical === false ? null : canonical ?? new URL(url(path), SITE_URL).href
 const image = ogImage ?? new URL(url('/og/default.png'), SITE_URL).href
@@ -64,6 +67,7 @@ const csp = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-
     <main id="main" class="flex-1">
       <slot />
     </main>
-    <Footer />
+    <Footer cta={footerCta} />
+    <Motion />
   </body>
 </html>

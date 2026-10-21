@@ -1,0 +1,22 @@
+---
+// M91's story as four log lines: software asks → the phone rings → a person decides → software continues.
+// Without a guide's own scene it shows the generic story (no names, amounts or claims).
+export type StoryLine = { who: string; what: string; state: 'waiting' | 'ringing' | 'approved' | 'rejected' | 'continuing' }
+interface Props { lines?: StoryLine[]; label?: string }
+const GENERIC: StoryLine[] = [
+  { who: 'agent', what: 'needs a decision', state: 'waiting' },
+  { who: 'm91', what: 'calling the person', state: 'ringing' },
+  { who: 'person', what: 'taps Approve', state: 'approved' },
+  { who: 'agent', what: 'carries on', state: 'continuing' }
+]
+const { lines = GENERIC, label } = Astro.props
+---
+<div class="storylog" aria-label={label ?? 'How M91 works: software asks, a phone rings, a person decides, software continues'} role="img">
+  {lines.map((l) => (
+    <div class:list={['storylog-l', l.state]}>
+      <span class="storylog-who">{l.who} ›</span>
+      <span class="storylog-what">{l.what}</span>
+      <span class="storylog-st">{l.state}</span>
+    </div>
+  ))}
+</div>

@@ -1,14 +1,15 @@
 ---
-import PostCard from './PostCard.astro'
+// "Keep reading": up to three related guides as numbered-less cards.
+import GuideCard from './GuideCard.astro'
 import type { Post } from '../lib/posts'
 interface Props { posts: Post[] }
 const { posts } = Astro.props
 ---
 {posts.length > 0 && (
   <section aria-labelledby="related-title">
-    <h2 id="related-title" class="text-2xl font-extrabold tracking-[-0.03em]">Related posts</h2>
-    <div class="bl-grid mt-6">
-      {posts.map((p) => <PostCard post={p} headingLevel={3} />)}
+    <p class="gh-group"><span class="mono-k">Keep reading</span><span id="related-title" class="gh-group-t">More guides like this one</span></p>
+    <div class="gh-grid">
+      {posts.map((p) => <GuideCard post={p} headingLevel={3} />)}
     </div>
   </section>
 )}

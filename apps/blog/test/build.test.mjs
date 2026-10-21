@@ -67,7 +67,7 @@ test('the noindex post has the robots meta and is absent from home, RSS, sitemap
 
 test('raw HTML in Markdown is not rendered; code is highlighted with a copy button; tables scroll', () => {
   const html = read(dist, 'posts/fixture-indexed-post/index.html')
-  const body = html.slice(html.indexOf('class="prose-m91"'), html.indexOf('id="cta-title"'))
+  const body = html.slice(html.indexOf('class="prose-m91"'), html.indexOf('class="gp-end"'))
   // The tags are dropped (their inner text stays as plain, escaped text): nothing is rendered as HTML.
   assert.ok(!/<script[^>]*>[^<]*alert\(1\)/.test(html), 'no script element from the post')
   assert.ok(!body.includes('<b>') && !body.includes('</b>'), 'no <b> from the post')
@@ -117,13 +117,14 @@ test('a production build never includes samples/ (an empty content folder builds
   const all = files(out).filter((f) => /\.(html|xml|txt)$/.test(f)).map((f) => readFileSync(f, 'utf8')).join('\n')
   assert.ok(!all.includes('sample-'), 'no sample post anywhere')
   assert.ok(!all.includes('data-sample-badge'), 'no sample badge')
-  assert.match(read(out, 'index.html'), /No posts yet\./)
+  assert.match(read(out, 'index.html'), /No guides yet\./)
 })
 
 // ---------- Phase 8: interactive blocks ----------
 
 const EVERY = 'posts/fixture-every-block-post/index.html'
 const count = (html, re) => (html.match(re) ?? []).length
+const SHELL = /\/(Footer|Motion|StoryScene|GuideRail)\.astro_/
 const CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'none'"
 
 test('every built block renders complete HTML without JavaScript, in order; JS-only controls are marked js-only', () => {
@@ -171,8 +172,9 @@ test('every built block renders complete HTML without JavaScript, in order; JS-o
 
 test('block scripts: one bundled file per block type from self, only on pages that use it; the CSP meta is unchanged', () => {
   const html = read(dist, EVERY)
-  // Every page also loads the footer's script (Copy setup prompt); the block scripts are the rest.
-  const srcs = [...html.matchAll(/<script type="module" src="([^"]+)"/g)].map((m) => m[1]).filter((s) => !s.includes('/Footer.astro'))
+  // Every page loads the shell's scripts (Copy setup prompt and motion; on posts also the scene and the rail);
+  // the block scripts are the rest.
+  const srcs = [...html.matchAll(/<script type="module" src="([^"]+)"/g)].map((m) => m[1]).filter((s) => !SHELL.test(s))
   assert.equal(srcs.length, 8, 'checklist, phone, tabs, timeline, terminal, choices, faq, troubleshooting')
   for (const src of srcs) {
     assert.match(src, /^\/_astro\/[A-Za-z]+\.astro_astro_type_script_index_0_lang\.[\w-]+\.js$/)
@@ -181,13 +183,13 @@ test('block scripts: one bundled file per block type from self, only on pages th
   assert.ok(!/<script type="module">/.test(html), 'no inline module scripts')
   assert.ok(!/ on[a-z]+="/.test(html.replace(/<script[\s\S]*?<\/script>/g, '')), 'no inline event handlers')
   const plain = [...read(dist, 'posts/fixture-indexed-post/index.html').matchAll(/<script type="module" src="([^"]+)"/g)].map((m) => m[1])
-  assert.ok(plain.every((s) => s.includes('/Footer.astro')), 'a post without blocks loads no block script')
+  assert.ok(plain.every((s) => SHELL.test(s)), 'a post without blocks loads no block script')
   for (const p of [EVERY, 'posts/fixture-indexed-post/index.html', 'index.html']) assert.ok(read(dist, p).includes(`content="${CSP}"`), p)
 })
 
 test('heading anchors still work: contents links resolve, questions and problems keep their heading ids', () => {
   const html = read(dist, EVERY)
-  const toc = html.match(/<nav aria-labelledby="toc-title"[\s\S]*?<\/nav>/)[0]
+  const toc = html.match(/<nav class="rail-card" aria-labelledby="toc-title">[\s\S]*?<\/nav>/)[0]
   const anchors = [...toc.matchAll(/href="#([^"]+)"/g)].map((m) => m[1])
   const ids = new Set([...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]))
   assert.ok(anchors.length >= 10)
@@ -232,14 +234,25 @@ test('the every-block sample is a valid post that builds with all 21 blocks', as
   assert.match(read(out, 'posts/sample-every-block/index.html'), /data-blocks="21"/)
 })
 
-test('the home page looks like the M91 site: ruled paper, heading, search, lime cards; no topic pages or filters', () => {
+test('the guides home: hero with stats, one bar of chips and search, Start here, numbered cards, prompt strip', () => {
   const home = read(dist, 'index.html')
-  assert.match(home, /<section class="ruled/)
-  assert.match(home, /<p class="eyebrow">Blog<\/p>/)
-  assert.match(home, /<h1 class="h-display[^"]*">Notes on waking people up\.<\/h1>/)
-  assert.match(home, /<input id="post-search" type="search"/)
-  assert.match(home, /<article class="bl-card" data-search="[^"]*fixture/)
-  assert.ok(!home.includes('Plain guides on human approval'), 'no subtitle line')
+  assert.match(home, /<section class="ruled">/)
+  assert.match(home, /<p class="eyebrow">M91 Guides<\/p>/)
+  assert.match(home, /<h1 class="gh-h1">When software needs <span class="acc">you<\/span>\.<\/h1>/)
+  assert.match(home, /<dt class="mono-k">Guides<\/dt><dd class="gh-stat-v">\d+<\/dd>/)
+  // One bar only (chips + search), hidden without JS; chips only for topics that have a guide.
+  assert.equal(count(home, /class="gh-bar js-only"/g), 1)
+  assert.equal(count(home, /<input id="post-search" type="search"/g), 1)
+  assert.match(home, /data-chip="all">All <span class="pill-n">\d+<\/span>/)
+  for (const m of home.matchAll(/data-chip="(\d)">[^<]+<span class="pill-n">(\d+)<\/span>/g)) assert.ok(Number(m[2]) > 0, `chip ${m[1]} has guides`)
+  // Start here: the newest guide, featured with the story log; the others numbered from 02.
+  assert.match(home, /Start here[\s\S]*?<article class="gc rv is-feature" data-search="[^"]*" data-topic="\d">\s*<div class="storylog"/)
+  assert.match(home, /<span class="gc-n">01<\/span>/)
+  assert.match(home, /<span class="gc-n">02<\/span>/)
+  // The prompt strip replaces the big closing band on the home page; the llms.txt card links the blog's own.
+  assert.match(home, /<section class="strip rv" aria-labelledby="strip-title">/)
+  assert.ok(!home.includes('id="cta-title"'), 'no second closing band')
+  assert.match(home, /<a class="pill" href="\/llms\.txt">llms\.txt<\/a>/)
   assert.ok(!existsSync(join(dist, 'topics')), 'no topic pages')
   assert.ok(!home.includes('href="/topics/'), 'no topic links')
   // The header is the M91 site's: its sections, Blog marked as this page, Docs and the download menu.
@@ -251,4 +264,36 @@ test('the home page looks like the M91 site: ruled paper, heading, search, lime 
   for (const href of ['https://m91-api.msg91.com/llms.txt', 'https://github.com/MSG91/m91-skill', 'mailto:support@msg91.com', 'https://msg91.com/terms', 'https://apps.apple.com/app/id6759090472']) {
     assert.ok(home.includes(`href="${href}"`), href)
   }
+})
+
+test('the post shell: Guide label, scene, takeaways.log, numbered chapters with rail and bar, end strip, Your turn', () => {
+  const html = read(dist, EVERY)
+  assert.match(html, /<nav aria-label="Breadcrumb" class="gp-crumbs"><a href="\/">Guides<\/a>/)
+  assert.match(html, /<span class="tag-lime">Guide<\/span>/)
+  // The scene: four moments, all visible in the HTML (lit by a script only when it runs).
+  assert.equal(count(html, /<div class="scene-m" data-m="/g), 4)
+  // takeaways.log replaces the TL;DR box.
+  assert.match(html, /<section class="filecard tk" aria-labelledby="tldr-title">/)
+  assert.ok(!html.includes('rounded-2xl border border-line bg-bg-warm'), 'no old TL;DR box')
+  // Chapters: the rail's status (default story states) and contents; the bar for narrow screens works without JS.
+  const rail = html.match(/<aside class="rail"[\s\S]*?<\/aside>/)[0]
+  assert.deepEqual([...rail.matchAll(/class="status-s" data-state="([a-z]+)"/g)].map((m) => m[1]), ['waiting', 'ringing', 'approved', 'continuing'])
+  const states = [...rail.matchAll(/data-ch="[^"]+" data-state="([a-z]+)"/g)].map((m) => m[1])
+  assert.ok(states.length >= 4 && states[0] === 'waiting' && states.at(-1) === 'continuing', states.join())
+  assert.match(html, /<details class="gbar">[\s\S]*?<ol class="toc">/)
+  assert.match(html, /<a class="stuck" href="#[^"]+">Stuck\?/)
+  assert.match(html, /<div class="gp-body">/)
+  // The end: meta strip with the questions count, Your turn (no second closing band), share.
+  assert.match(html, /<dt class="mono-k">Questions answered<\/dt><dd class="endmeta-v" data-questions>\d+<\/dd>/)
+  assert.match(html, /<section class="strip rv" aria-labelledby="your-turn">/)
+  assert.ok(!html.includes('id="cta-title"'))
+  // A post with very few H2s still renders (no contents card, no bar).
+  assert.match(read(dist, 'posts/fixture-indexed-post/index.html'), /<aside class="rail"/)
+})
+
+test('motion is progressive: content is never hidden in the HTML, and reduced motion turns it off', () => {
+  const css = files(join(dist, '_astro')).filter((f) => f.endsWith('.css')).map((f) => readFileSync(f, 'utf8')).join('\n')
+  assert.match(css, /\.rv-on \.rv:not\(\.is-in\)\{opacity:0/)
+  assert.match(css, /prefers-reduced-motion:\s?reduce\)\{[^@]*\.rv-on \.rv:not\(\.is-in\)\{opacity:1/)
+  for (const p of [EVERY, 'index.html']) assert.ok(!read(dist, p).includes('rv-on'), `${p}: the hiding class is only added by the script`)
 })

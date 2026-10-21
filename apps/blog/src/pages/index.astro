@@ -1,68 +1,120 @@
 ---
-// The blog home: the M91 site's blog section, on ruled paper. Eyebrow, heading and search on top, then every
-// indexed post as a lime card. Search filters the cards in the page (no request, no topic pages); without
-// JavaScript every post is listed and the search box is hidden.
+// The guides home (Phase 10, A2): a compact hero with stats on ruled paper, one bar with the topic chips and
+// the search, the newest guide as "Start here", every other guide as a numbered card, the setup-prompt strip
+// and the llms.txt card. Chips and search filter the cards in the page; without JavaScript every guide is
+// listed and the bar is hidden.
 import BaseLayout from '../layouts/BaseLayout.astro'
-import PostCard from '../components/PostCard.astro'
-import { indexedPosts } from '../lib/posts'
+import GuideCard from '../components/GuideCard.astro'
+import PromptStrip from '../components/PromptStrip.astro'
+import { indexedPosts, url } from '../lib/posts'
 import { blogLd } from '../lib/seo'
-import { SITE, HOME } from '../config/site'
+import { SITE, HOME, TOPICS } from '../config/site'
 
 const posts = indexedPosts()
+const [first, ...rest] = posts
+const avg = posts.length ? Math.round(posts.reduce((n, p) => n + p.reading_time_min, 0) / posts.length) : 0
+// Only topics that have a guide get a chip (no chip that empties the page).
+const chips = TOPICS.map((t) => ({ ...t, count: posts.filter((p) => p.topic_group === t.group).length })).filter((t) => t.count > 0)
 ---
-<BaseLayout title={SITE.title} description={SITE.description} path="/" jsonLd={[blogLd(posts)]}>
-  <section class="ruled pb-20 pt-14 md:pb-24 md:pt-20">
-    <div class="wide">
-      <div class="flex flex-wrap items-end justify-between gap-6">
-        <div>
-          <p class="eyebrow">{HOME.eyebrow}</p>
-          <h1 class="h-display mt-6">{HOME.title}</h1>
+<BaseLayout title={SITE.title} description={SITE.description} path="/" jsonLd={[blogLd(posts)]} footerCta={false}>
+  <section class="ruled">
+    <div class="g-wrap gh-hero">
+      <p class="eyebrow">{HOME.eyebrow}</p>
+      <h1 class="gh-h1">{HOME.title.before}<span class="acc">{HOME.title.accent}</span>{HOME.title.after}</h1>
+      <p class="gh-line">{HOME.line}</p>
+      {posts.length > 0 && (
+        <dl class="gh-stats">
+          <div><dt class="mono-k">Guides</dt><dd class="gh-stat-v">{posts.length}</dd></div>
+          <div><dt class="mono-k">Average read</dt><dd class="gh-stat-v">{avg} min</dd></div>
+        </dl>
+      )}
+    </div>
+  </section>
+
+  {posts.length > 0 && (
+    <div class="gh-bar js-only">
+      <div class="g-wrap gh-bar-in">
+        <div class="gh-chips" role="group" aria-label="Filter by topic">
+          <button type="button" class="pill" aria-pressed="true" data-chip="all">All <span class="pill-n">{posts.length}</span></button>
+          {chips.map((t) => <button type="button" class="pill" aria-pressed="false" data-chip={t.group}>{t.short} <span class="pill-n">{t.count}</span></button>)}
         </div>
-        <label class="search js-only" for="post-search">
-          <span class="sr-only">Search the blog</span>
+        <label class="search" for="post-search">
+          <span class="sr-only">Search the guides</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
-          <input id="post-search" type="search" placeholder="Search posts" autocomplete="off" spellcheck="false" aria-controls="post-grid" />
+          <input id="post-search" type="search" placeholder="Search guides" autocomplete="off" spellcheck="false" aria-controls="post-grid" />
         </label>
       </div>
-      {posts.length === 0 ? (
-        <p class="bl-empty mt-10">No posts yet.</p>
-      ) : (
-        <>
-          <div id="post-grid" class="bl-grid mt-10">
-            {posts.map((p) => <PostCard post={p} />)}
+    </div>
+  )}
+
+  <section class="g-wrap gh-list">
+    {posts.length === 0 ? (
+      <p class="bl-empty">No guides yet.</p>
+    ) : (
+      <div id="post-grid">
+        <div data-group>
+          <p class="gh-group"><span class="mono-k red">Start here</span><span class="gh-group-t">The newest guide</span></p>
+          <GuideCard post={first} n={1} feature />
+        </div>
+        {rest.length > 0 && (
+          <div class="gh-more" data-group>
+            <p class="gh-group"><span class="mono-k">All guides</span><span class="gh-group-t">Pick up where your problem is</span></p>
+            <div class="gh-grid">
+              {rest.map((p, i) => <GuideCard post={p} n={i + 2} />)}
+            </div>
           </div>
-          <p class="bl-empty mt-10" data-no-results hidden>No posts match “<span data-query></span>”.</p>
-          <p class="sr-only" role="status" aria-live="polite" data-search-status></p>
-        </>
-      )}
+        )}
+        <p class="bl-empty" data-no-results hidden>No guides match “<span data-query></span>”.</p>
+        <p class="sr-only" role="status" aria-live="polite" data-search-status></p>
+      </div>
+    )}
+    <div class="mt-14">
+      <PromptStrip id="strip-title" label="Got an agent ready? Skip the reading." title="Give your agent a way to ask you first." />
+      <p class="agents-card">
+        <span><span class="mono-k">For agents</span><br />A plain-text index of every guide, for AI agents reading this site.</span>
+        <a class="pill" href={url('/llms.txt')}>llms.txt</a>
+      </p>
     </div>
   </section>
 </BaseLayout>
 
 <script>
-  // Filters the cards by every word typed (title, description, topic and tags). ?q= in the URL fills the box.
+  // Chips and search together: a card shows when it is in the chosen topic and matches every word typed
+  // (title, description, topic and tags). ?q= fills the box; ?topic=<group> picks a chip.
   const input = document.querySelector<HTMLInputElement>('#post-search')
-  const cards = [...document.querySelectorAll<HTMLElement>('#post-grid > [data-search]')]
+  const chips = [...document.querySelectorAll<HTMLButtonElement>('[data-chip]')]
+  const cards = [...document.querySelectorAll<HTMLElement>('#post-grid [data-search]')]
+  const groups = [...document.querySelectorAll<HTMLElement>('#post-grid [data-group]')]
   const empty = document.querySelector<HTMLElement>('[data-no-results]')
   const query = document.querySelector<HTMLElement>('[data-query]')
   const status = document.querySelector<HTMLElement>('[data-search-status]')
+  let topic = 'all'
   function apply() {
-    if (!input) return
-    const words = input.value.toLowerCase().split(/\s+/).filter(Boolean)
+    const words = (input?.value ?? '').toLowerCase().split(/\s+/).filter(Boolean)
     let shown = 0
     for (const card of cards) {
-      const hit = words.every((w) => (card.dataset.search ?? '').includes(w))
+      const hit = (topic === 'all' || card.dataset.topic === topic) && words.every((w) => (card.dataset.search ?? '').includes(w))
       card.hidden = !hit
       if (hit) shown++
     }
+    for (const g of groups) g.hidden = !g.querySelector('[data-search]:not([hidden])')
     if (empty) empty.hidden = shown > 0 || cards.length === 0
-    if (query) query.textContent = input.value.trim()
-    if (status) status.textContent = words.length ? `${shown} post${shown === 1 ? '' : 's'} found` : ''
+    if (query) query.textContent = input?.value.trim() || chips.find((c) => c.dataset.chip === topic)?.firstChild?.textContent?.trim() || ''
+    if (status) status.textContent = words.length || topic !== 'all' ? `${shown} guide${shown === 1 ? '' : 's'} found` : ''
   }
+  for (const chip of chips) {
+    chip.addEventListener('click', () => {
+      topic = chip.dataset.chip ?? 'all'
+      for (const c of chips) c.setAttribute('aria-pressed', String(c === chip))
+      apply()
+    })
+  }
+  const params = new URLSearchParams(location.search)
   if (input) {
-    const q = new URLSearchParams(location.search).get('q')
-    if (q) input.value = q
+    input.value = params.get('q') ?? ''
     input.addEventListener('input', apply)
-    apply()
   }
+  const wanted = chips.find((c) => c.dataset.chip === params.get('topic'))
+  if (wanted) wanted.click()
+  else apply()
 </script>
