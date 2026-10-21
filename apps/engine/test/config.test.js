@@ -73,7 +73,9 @@ test('service, delivery, number, boolean and range validation', () => {
 
 test('model must be in the ai.md list for its service', () => {
   const problems = problemsFor(fakeEnv({ STRATEGIST_AI_MODEL: 'gpt-9-ultra' }))
-  assert.match(problems.join('\n'), /STRATEGIST_AI_MODEL: not in ai.md/)
+  assert.match(problems.join('\n'), /STRATEGIST_AI_MODEL: got "gpt-9-ultra", which is not in ai.md/)
+  // The value is shown JSON-quoted, so smart quotes copied from a document are visible.
+  assert.match(problemsFor(fakeEnv({ STRATEGIST_AI_MODEL: '“gpt-5.5”' })).join('\n'), /got "“gpt-5\.5”"/)
   // A real model under the wrong service is also rejected.
   assert.match(problemsFor(fakeEnv({ WRITER_AI_SERVICE: 'openai' })).join('\n'), /WRITER_AI_MODEL/)
 })

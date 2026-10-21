@@ -190,7 +190,8 @@ export function loadConfig(env = process.env) {
     const service = oneOf(`${prefix}_AI_SERVICE`, SERVICES)
     const model = str(`${prefix}_AI_MODEL`, { required: true })
     if (service && model && !MODELS[service].includes(model)) {
-      problems.push(`${prefix}_AI_MODEL: not in ai.md's "Choosing the model" list for service ${service} (allowed: ${MODELS[service].join(', ')})`)
+      // A model name is not a secret: show what was read (JSON-quoted, so stray quotes or hidden characters show).
+      problems.push(`${prefix}_AI_MODEL: got ${JSON.stringify(model.slice(0, 60))}, which is not in ai.md's "Choosing the model" list for service ${service} (allowed: ${MODELS[service].join(', ')})`)
     }
     const delivery = oneOf(`${prefix}_DELIVERY`, DELIVERIES)
     return { service, model, delivery }
