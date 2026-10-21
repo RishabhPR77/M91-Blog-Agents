@@ -7,7 +7,7 @@ import { newBriefId, newRecordId, newScoutThreadId } from '../util/ids.js'
 import { createViaSocketClient, AiError, TruncatedError } from '../viasocket.js'
 import { SCOUT_BASE, FACTS, QUESTIONS, STORIES, TUTORIALS, CLUSTERS, STYLE, SOURCES, SCHEMA_RETRY_NOTE, TOPIC_GROUPS, MESSAGE_MAX, buildPrompt, fitMessage } from './prompts.js'
 import { SCHEMAS, scout_m91_facts_inline } from './schemas.js'
-import { validateAgainst, createUrlChecker, normaliseUrl, isKeptStatus, protectFields, removeLongQuotes, storyDateRule, freshnessFromDates } from './checks.js'
+import { limiter, validateAgainst, createUrlChecker, normaliseUrl, isKeptStatus, protectFields, removeLongQuotes, storyDateRule, freshnessFromDates } from './checks.js'
 import { buildDocsBundle, fetchSkillReadme, DocsError } from './docs.js'
 import { classifyCluster, mergeClusterPayload, storedStoryUrls, isDuplicateTutorial } from './dedupe.js'
 import { rankClusters } from './rank.js'
@@ -184,19 +184,52 @@ export async function runScout(params = {}, deps = {}) {
     const factsSummary = summariseFacts(facts)
     const reuse = await shouldReuse(factsResult)
 
+    // The question groups, stories and tutorials need only the facts, not each other: their AI calls run at
+    // the same time (at most SCOUT_CONCURRENCY), and their answers are processed below in the usual order,
+    // so the saved records come out the same. Each call keeps its own timeout, budget and retry rules.
+    const gate = limiter(sc.concurrency ?? 7)
+    const started = (fn) => {
+      const p = gate(fn)
+      p.catch(() => {}) // handled where it is awaited; this only avoids an unhandled rejection meanwhile
+      return p
+    }
+    const alreadyCovered = reuse.reuse ? null : await alreadyCoveredList()
+    const questionCalls = reuse.reuse ? [] : sc.questionGroups.map((group) => [group, started(() => tryCall(`questions-${group}`, {
+      task: QUESTIONS,
+      values: { topic_group_number: group, topic_group_text: TOPIC_GROUPS[group], competitors: sc.competitors.join(', '), questions_per_group: sc.questionsPerGroup },
+      sections: { facts: factsSummary, alreadyCovered, competitors: sc.competitors.join(', ') },
+      schema: SCHEMAS.scout_questions,
+      delivery: sc.researchDelivery,
+      fewer: { values: { questions_per_group: Math.max(1, Math.floor(sc.questionsPerGroup / 2)) }, note: `Your last answer was cut off. Return at most ${Math.max(1, Math.floor(sc.questionsPerGroup / 2))} questions.` },
+      timeoutMs: sc.questionsTimeoutMs
+    }))])
+    const storiesCall = started(() => tryCall('stories', {
+      task: STORIES,
+      values: { story_lookback_days: sc.storyLookbackDays, rapid_response_days: sc.rapidResponseDays, stories_max: STORIES_MAX },
+      sections: { facts: factsSummary },
+      schema: SCHEMAS.scout_stories,
+      delivery: sc.researchDelivery,
+      // Its own timeout (SCOUT_STORIES_TIMEOUT_MS): a web search for stories can take longer than the others.
+      // A timeout stays a warning: the run goes on without new stories.
+      timeoutMs: sc.storiesTimeoutMs
+    }))
+    const tutorialsCall = reuse.reuse ? null : started(async () => {
+      const readme = await fetchSkillReadme({ repoUrl: config.m91.skillRepoUrl, fetch: fetchImpl })
+      const res = await tryCall('tutorials', {
+        task: TUTORIALS,
+        sections: { facts: summariseFacts(facts, { only: ['can', 'integrations'] }), skillRepo: readme.text ?? `(README not available) ${config.m91.skillRepoUrl}` },
+        schema: SCHEMAS.scout_tutorials,
+        delivery: sc.delivery,
+        fewer: { values: {}, note: 'Your last answer was cut off. Return at most 3 tutorial ideas.' }
+      })
+      return { readme, res }
+    })
+
     // Questions
     const questions = []
     if (!reuse.reuse) {
-      const alreadyCovered = await alreadyCoveredList()
-      for (const group of sc.questionGroups) {
-        const res = await tryCall(`questions-${group}`, {
-          task: QUESTIONS,
-          values: { topic_group_number: group, topic_group_text: TOPIC_GROUPS[group], competitors: sc.competitors.join(', '), questions_per_group: sc.questionsPerGroup },
-          sections: { facts: factsSummary, alreadyCovered, competitors: sc.competitors.join(', ') },
-          schema: SCHEMAS.scout_questions,
-          delivery: sc.researchDelivery,
-          fewer: { values: { questions_per_group: Math.max(1, Math.floor(sc.questionsPerGroup / 2)) }, note: `Your last answer was cut off. Return at most ${Math.max(1, Math.floor(sc.questionsPerGroup / 2))} questions.` }
-        })
+      for (const [group, call] of questionCalls) {
+        const res = await call
         if (!res) continue
         const returned = res.value.questions
         const kept = []
@@ -217,16 +250,7 @@ export async function runScout(params = {}, deps = {}) {
     const rapidIds = []
     const newStories = []
     {
-      const res = await tryCall('stories', {
-        task: STORIES,
-        values: { story_lookback_days: sc.storyLookbackDays, rapid_response_days: sc.rapidResponseDays, stories_max: STORIES_MAX },
-        sections: { facts: factsSummary },
-        schema: SCHEMAS.scout_stories,
-        delivery: sc.researchDelivery,
-        // Its own timeout (SCOUT_STORIES_TIMEOUT_MS): a web search for stories can take longer than the others.
-        // A timeout stays a warning: the run goes on without new stories.
-        timeoutMs: sc.storiesTimeoutMs
-      })
+      const res = await storiesCall
       if (res) {
         const known = await storedStoryUrls(store)
         const returned = res.value.stories.slice(0, STORIES_MAX)
@@ -254,7 +278,7 @@ export async function runScout(params = {}, deps = {}) {
     const tutorialIds = []
     const newTutorials = []
     if (!reuse.reuse) {
-      const readme = await fetchSkillReadme({ repoUrl: config.m91.skillRepoUrl, fetch: fetchImpl })
+      const { readme, res } = await tutorialsCall
       if (readme.warning) warnings.push(readme.warning)
       const repoPrefix = urlKey(readme.url ?? config.m91.skillRepoUrl)
       const allowed = new Set((facts.sources ?? []).map(urlKey))
@@ -266,13 +290,6 @@ export async function runScout(params = {}, deps = {}) {
       const bundleByPath = new Map((facts.sources ?? []).map((u) => [pathOf(u), u]))
       const toAllowed = (u) => (isAllowed(u) ? u : sc.docsHosts.includes(hostOf(u)) ? bundleByPath.get(pathOf(u)) ?? null : null)
       const droppedTutorials = []
-      const res = await tryCall('tutorials', {
-        task: TUTORIALS,
-        sections: { facts: summariseFacts(facts, { only: ['can', 'integrations'] }), skillRepo: readme.text ?? `(README not available) ${config.m91.skillRepoUrl}` },
-        schema: SCHEMAS.scout_tutorials,
-        delivery: sc.delivery,
-        fewer: { values: {}, note: 'Your last answer was cut off. Return at most 3 tutorial ideas.' }
-      })
       if (res) {
         const returned = res.value.tutorials
         for (const t of returned) {

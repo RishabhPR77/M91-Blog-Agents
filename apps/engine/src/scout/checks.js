@@ -70,7 +70,8 @@ export function classifyStatus(status) {
 const keep = (s) => s === 'ok' || s === 'blocked'
 export { keep as isKeptStatus }
 
-function limiter(max) {
+/** Runs at most max of the given async functions at a time (the URL checker; the Scout's parallel calls). */
+export function limiter(max) {
   let active = 0
   const queue = []
   const next = () => {

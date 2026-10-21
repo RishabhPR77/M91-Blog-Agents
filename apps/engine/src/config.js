@@ -48,6 +48,9 @@ const DEFAULTS = {
   // Phase 2: Scout
   SCOUT_RESEARCH_DELIVERY: 'rtlayer', SCOUT_MAX_CALLS: '14', SCOUT_REUSE_HOURS: '24', SCOUT_MIN_OPEN_CLUSTERS: '5',
   SCOUT_STORIES_TIMEOUT_MS: '480000',
+  // The Scout's independent calls (question groups, stories, tutorials) run at the same time, at most this many;
+  // the question groups' web searches get their own answer timeout
+  SCOUT_CONCURRENCY: '7', SCOUT_QUESTIONS_TIMEOUT_MS: '420000',
   SCOUT_QUESTIONS_PER_GROUP: '8', SCOUT_QUESTION_GROUPS: '1,2,3,4,5', STORY_LOOKBACK_DAYS: '30', RAPID_RESPONSE_DAYS: '7', STYLE_REUSE_DAYS: '14',
   // viaSocket refuses a `message` over 50,000 characters; the docs bundle must leave room for the rest.
   DOCS_MAX_PAGES: '15', DOCS_MAX_CHARS: '45000', M91_DOCS_HOSTS: 'm91-api.msg91.com,m91.msg91.com', DEDUPE_SIMILARITY: '0.85',
@@ -233,6 +236,8 @@ export function loadConfig(env = process.env) {
       storyLookbackDays: int('STORY_LOOKBACK_DAYS', { min: 1 }),
       // Phase 9 B3: the stories call's own answer timeout (rtlayer); other calls use AI_RTLAYER_TIMEOUT_MS
       storiesTimeoutMs: int('SCOUT_STORIES_TIMEOUT_MS', { min: 1000 }),
+      concurrency: int('SCOUT_CONCURRENCY', { min: 1, max: 10 }),
+      questionsTimeoutMs: int('SCOUT_QUESTIONS_TIMEOUT_MS', { min: 1000 }),
       rapidResponseDays: int('RAPID_RESPONSE_DAYS', { min: 0 }),
       styleReuseDays: int('STYLE_REUSE_DAYS'),
       docsMaxPages: int('DOCS_MAX_PAGES', { min: 1 }),

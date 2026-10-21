@@ -222,6 +222,26 @@ with `npm run mem0:usage -- --set=<n>`; `npm run mem0:usage` shows it.
   quota banner, and stopping everything.
 - **C2 and C4** (the Slack and M91 test messages, and the first normal end-to-end run) wait for your ok.
 
+## The Scout runs its independent calls at the same time (2026-10-21)
+
+Run R-261021-0841-JR5C spent 34 of its 41 minutes in the Scout:
+- its calls ran one after another: facts 1m56s, five question groups of about 4.5–5 minutes each, stories
+  3m19s, tutorials 1m43s, clusters 2m03s;
+- three question groups hit the 300 s answer limit and returned nothing.
+
+Now, after the facts, **the five question groups, the stories call and the tutorials call run at the same
+time** (`SCOUT_CONCURRENCY`, default 7, which is all of them). Their answers are processed afterwards in the
+usual order, so the saved records are the same as one after another (a test checks this).
+- Clusters and style notes still come after them, since they need the questions.
+- Each call keeps its own budget, retries and timeout. The question groups get their own,
+  `SCOUT_QUESTIONS_TIMEOUT_MS` (420 s): with the calls running together, a longer limit costs at most two more
+  minutes of waiting and saves groups that would have timed out.
+- A fatal error (token, billing, config) in any call still fails the run.
+
+Expected Scout time: about 2 min (facts) + about 5–7 min (the parallel calls) + about 2–4 min (clusters, style)
+≈ **10–13 minutes instead of about 34**. The AI calls and credits are the same. `SCOUT_CONCURRENCY=1` brings back
+the old order.
+
 ## New settings
 
 | Key | Default | Meaning |
@@ -234,6 +254,8 @@ with `npm run mem0:usage -- --set=<n>`; `npm run mem0:usage` shows it.
 | `MEM0_WARN_PCT` | `80` | Show a warning from this percent. |
 | `MEM0_STOP_PCT` | `95` | Refuse new runs and refreshes from this percent. |
 | `SCOUT_STORIES_TIMEOUT_MS` | `480000` | How long the Scout's stories call waits for its answer. |
+| `SCOUT_CONCURRENCY` | `7` | How many of the Scout's independent calls run at the same time (1 = one after another). |
+| `SCOUT_QUESTIONS_TIMEOUT_MS` | `420000` | How long each question group's web search may take. |
 | `PASS_SCORE_MIN` | `80` (was 85) | The Reviewer's pass mark. |
 | `MAX_WRITER_REVISIONS` | `2` | Unchanged. |
 | `PASS_AREA_MIN` | `6` (was 7) | Every Reviewer area must score at least this. Lowered on 2026-10-21: the run R-261021-0841-JR5C scored 82, 80.5 and 83.5 overall but failed on simplicity 6. The Reviewer prompt now uses the same number for "acceptable minimum" and for "must" items. |

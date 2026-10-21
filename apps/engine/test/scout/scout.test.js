@@ -295,7 +295,8 @@ test('Phase 9 B3: the stories call asks for at most 5, waits SCOUT_STORIES_TIMEO
   const q = s.ai.requests.find((x) => x.call === 'stories')
   assert.match(q.prompt, /Return at most 5 stories, the most relevant first\./)
   assert.equal(q.timeoutMs, 480000)
-  assert.ok(s.ai.requests.filter((x) => x.call !== 'stories').every((x) => x.timeoutMs === undefined), 'other calls keep AI_RTLAYER_TIMEOUT_MS')
+  assert.ok(s.ai.requests.filter((x) => x.call.startsWith('questions')).every((x) => x.timeoutMs === 420000), 'question groups: SCOUT_QUESTIONS_TIMEOUT_MS')
+  assert.ok(s.ai.requests.filter((x) => x.call !== 'stories' && !x.call.startsWith('questions')).every((x) => x.timeoutMs === undefined), 'other calls keep AI_RTLAYER_TIMEOUT_MS')
   assert.ok(r.warnings.some((w) => /stories: 7 returned, kept the first 5/.test(w)))
   assert.ok(r.counts.stories <= 5)
 })
@@ -327,4 +328,51 @@ test('Phase 9 B4: a step citing the same docs page on the other docs host maps t
   const t = [...s.store.records.values()].find((x) => x.type === 'tutorial_lead')
   assert.equal(t.payload.steps_outline[0].source_url, 'https://m91.msg91.com/docs/api.md', 'the bundle\'s own URL')
   assert.equal(t.payload.supporting_facts[0].source_url, 'https://m91.msg91.com/docs/api.md')
+})
+
+/** The Scout's fake AI, with each call taking `ms` and a count of calls in flight at once. */
+function slowAi(ms = 20) {
+  const ai = fakeAi()
+  let inFlight = 0
+  let max = 0
+  const fn = async (opts) => {
+    inFlight++
+    max = Math.max(max, inFlight)
+    await new Promise((r) => setTimeout(r, ms))
+    inFlight--
+    return ai(opts)
+  }
+  fn.requests = ai.requests
+  fn.max = () => max
+  return fn
+}
+
+test('the question groups, stories and tutorials run at the same time (at most SCOUT_CONCURRENCY); results keep their order', async () => {
+  const parallel = setup()
+  const slow = slowAi(30)
+  parallel.deps.aiSend = slow
+  const started = Date.now()
+  const r = await parallel.run()
+  const parallelMs = Date.now() - started
+  assert.equal(slow.max(), 7, '5 question groups + stories + tutorials in flight together')
+  // Facts before them; clusters (and style) after them, since they need the questions.
+  const order = slow.requests.map((q) => q.call)
+  assert.equal(order[0], 'facts')
+  assert.ok(order.indexOf('clusters') > Math.max(...['questions-1', 'questions-5', 'stories', 'tutorials'].map((c) => order.indexOf(c))))
+  const one = setup({ env: { SCOUT_CONCURRENCY: '1' } })
+  const slowOne = slowAi(30)
+  one.deps.aiSend = slowOne
+  const t1 = Date.now()
+  const r1 = await one.run()
+  assert.equal(slowOne.max(), 1, 'SCOUT_CONCURRENCY=1: one after another')
+  assert.ok(Date.now() - t1 > parallelMs + 100, 'running together is faster')
+  // Same results either way.
+  assert.deepEqual(r.counts, r1.counts)
+  const titles = (s) => [...s.store.records.values()].filter((x) => x.type === 'question_cluster' || x.type === 'story_lead' || x.type === 'tutorial_lead').map((x) => x.payload.main_question ?? x.payload.title)
+  assert.deepEqual(titles(parallel), titles(one))
+})
+
+test('a fatal error in one parallel call still fails the run (the others finish quietly)', async () => {
+  const s = setup({ answers: { 'questions-2': fatal('token') } })
+  await assert.rejects(s.run(), ScoutError)
 })
