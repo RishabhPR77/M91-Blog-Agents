@@ -13,6 +13,7 @@ import { RunButton } from '../components/RunButton'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toasts'
 import { expectedCalls, expectedMem0, PRESETS, type CostKey, type Preset } from '../config/costs'
+import { flagsOf } from '../config/flags'
 import { buildRunRequest, leastUsedGroup, TOPIC_GROUPS } from '../config/runOptions'
 import { fmtDateTime, fmtDuration } from '../format'
 import { useNow } from '../state/useRunView'
@@ -22,7 +23,7 @@ type Pending = { mode: string; label: string; costKey: CostKey; params: Record<s
 
 const RUN_ID = /R-\d{6}-\d{4}-[A-Z0-9]{4}/
 // Publisher modes use no AI: the low-cost params do not apply to them.
-const NO_AI_MODES = ['publish', 'unpublish', 'set_index', 'rebuild_blog']
+const NO_AI_MODES = ['publish', 'unpublish', 'set_index', 'rebuild_blog', 'export']
 
 const useRecords = (key: string, query: string, enabled: boolean) =>
   useQuery({ queryKey: ['records', key], queryFn: async () => (await api<{ records: Trimmed[] }>(`/api/records?${query}`)).records, enabled, staleTime: 30_000 })
@@ -88,6 +89,7 @@ export default function Control() {
   const [route, setRoute] = useState(false)
   const [promoBrief, setPromoBrief] = useState('')
   const [designBrief, setDesignBrief] = useState('')
+  const [exportBrief, setExportBrief] = useState('')
   const [publishBrief, setPublishBrief] = useState('')
   const [pending, setPending] = useState<Pending | null>(null)
   const [starting, setStarting] = useState(false)
@@ -107,6 +109,9 @@ export default function Control() {
   const offline = !online
   const outdated = Boolean(settings.data) && !modesKnown
   const blog = settings.data?.blog
+  // Phase 11: the Experience Designer and the blog actions follow EXPERIENCE_ENABLED and PUBLISH_TARGET.
+  const flags = flagsOf(settings.data)
+  const routeCost = flags.experienceOn ? 'reviewer_route' as const : 'reviewer_route_plain' as const
   // A real deploy needs the token; a dry run builds locally and needs none.
   const tokenReason = blog && !blog.deploy_token_set && !(dryRun ?? true) ? 'Deploy token not set (dry run only)' : null
   const busyReason = offline ? 'Engine offline' : outdated ? 'Restart the engine first' : !settings.data ? 'Loading settings…' : activeRun ? 'A run is in progress' : null
@@ -203,8 +208,8 @@ export default function Control() {
         {activeRun && <CurrentRun run={activeRun} />}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <RunButton title="Run full pipeline" description="Scout → Strategist → Writer → checks → Reviewer, until a pass (then it waits for you) or a limit." costKey="full" lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason}
-            onRun={() => ask('full', 'Full pipeline', 'full')} />
+          <RunButton title="Run full pipeline" description={`Scout → Strategist → Writer → checks → ${flags.experienceOn ? 'Experience Designer → ' : ''}Reviewer, until a pass (then it waits for you) or a limit.`} costKey={flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason}
+            onRun={() => ask('full', 'Full pipeline', flags.experienceOn ? 'full' : 'full_plain')} />
           <RunButton title="Run Scout" description="Research: M91 facts, questions people ask, stories and tutorials." costKey="scout" lowCost={lowCost} built={isBuilt('scout')} disabledReason={busyReason}
             onRun={() => ask('scout', 'Scout', 'scout')} />
           <RunButton title="Run Strategist" description="Plan one brief from the latest Scout data." costKey="strategist" lowCost={lowCost} built={isBuilt('strategist')} disabledReason={busyReason}
@@ -216,10 +221,10 @@ export default function Control() {
               {(briefs.data ?? []).filter((b) => b.key_id).map((b) => <option key={b.id} value={b.key_id!}>{b.key_id} · {b.status} · {(b.title ?? '').slice(0, 60)}</option>)}
             </select>
           </RunButton>
-          <RunButton title="Run Reviewer" description="Review one draft (optionally with the revision loop)." costKey={route ? 'reviewer_route' : 'reviewer'} lowCost={lowCost} built={isBuilt('reviewer')} disabledReason={busyReason ?? (draftKey ? null : 'Pick a draft')}
+          <RunButton title="Run Reviewer" description="Review one draft (optionally with the revision loop)." costKey={route ? routeCost : 'reviewer'} lowCost={lowCost} built={isBuilt('reviewer')} disabledReason={busyReason ?? (draftKey ? null : 'Pick a draft')}
             onRun={() => {
               const [b, v] = draftKey.split('|')
-              ask('reviewer', route ? 'Reviewer + routing loop' : 'Reviewer', route ? 'reviewer_route' : 'reviewer', { brief_id: b, version: Number(v), route }, [['Draft', `${b} v${v}`], ['Routing loop', route ? 'yes' : 'no']])
+              ask('reviewer', route ? 'Reviewer + routing loop' : 'Reviewer', route ? routeCost : 'reviewer', { brief_id: b, version: Number(v), route }, [['Draft', `${b} v${v}`], ['Routing loop', route ? 'yes' : 'no']])
             }}>
             <select aria-label="Draft for the Reviewer" className="input py-1.5" value={draftKey} onChange={(e) => setDraftKey(e.target.value)}>
               <option value="">Pick a draft…</option>
@@ -236,24 +241,32 @@ export default function Control() {
               </select>
             </RunButton>
           )}
-          <RunButton title="Experience Designer" description="Build the interactive guide again for an approved post (no review). Republish to put it live." costKey="designer" lowCost={lowCost} built={isBuilt('designer')} disabledReason={busyReason ?? (designBrief ? null : 'Pick an approved draft')}
+          {flags.experienceOn && <RunButton title="Experience Designer" description="Build the interactive guide again for an approved post (no review). Republish to put it live." costKey="designer" lowCost={lowCost} built={isBuilt('designer')} disabledReason={busyReason ?? (designBrief ? null : 'Pick an approved draft')}
             onRun={() => ask('designer', 'Experience Designer', 'designer', { brief_id: designBrief }, [['Approved draft of', designBrief]])}>
             <select aria-label="Approved draft for the Experience Designer" className="input py-1.5" value={designBrief} onChange={(e) => setDesignBrief(e.target.value)}>
               <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
               {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
             </select>
-          </RunButton>
-          <RunButton title="Publish" description={`Put an approved post on the blog: build, deploy, check it is live.${blog?.auto_publish ? ' (AUTO_PUBLISH is on: approving publishes too.)' : ''}`} costKey="publish" lowCost={lowCost} built={isBuilt('publish')} comingIn="Phase 7"
-            disabledReason={busyReason ?? (publishBrief ? tokenReason : 'Pick an approved draft')}
-            onRun={() => ask('publish', 'Publish', 'publish', { brief_id: publishBrief }, [['Approved draft of', publishBrief], ['Deploys to', blog?.base_url ?? '…']])}>
-            <select aria-label="Approved draft to publish" className="input py-1.5" value={publishBrief} onChange={(e) => setPublishBrief(e.target.value)}>
+          </RunButton>}
+          <RunButton title="Export Markdown" description="Save the final Markdown export of an approved post again (Mem0 and apps/engine/exports). Approving already does this." costKey="export_save" lowCost={lowCost} built={isBuilt('export')}
+            disabledReason={busyReason ?? (exportBrief ? null : 'Pick an approved draft')}
+            onRun={() => ask('export', 'Export Markdown', 'export_save', { brief_id: exportBrief, save: true }, [['Approved draft of', exportBrief]])}>
+            <select aria-label="Approved draft to export" className="input py-1.5" value={exportBrief} onChange={(e) => setExportBrief(e.target.value)}>
               <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
               {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
             </select>
           </RunButton>
-          <RunButton title="Rebuild blog" description="Rebuild and redeploy the blog from the published posts without changing any post (after a change to the blog's code or look)." costKey="rebuild_blog" lowCost={lowCost} built={isBuilt('rebuild_blog')} comingIn="Phase 7"
+          {flags.target !== 'none' && <RunButton title={flags.blogOn ? 'Publish' : 'Send to Docstar'} description={flags.blogOn ? `Put an approved post on the blog: build, deploy, check it is live.${blog?.auto_publish ? ' (AUTO_PUBLISH is on: approving publishes too.)' : ''}` : `Send an approved post's Markdown export to Docstar.${flags.docstarConfigured ? '' : ' Docstar is not configured yet (DOCSTAR_* keys): it answers "not configured".'}`} costKey="publish" lowCost={lowCost} built={isBuilt('publish')} comingIn="Phase 7"
+            disabledReason={busyReason ?? (publishBrief ? (flags.blogOn ? tokenReason : null) : 'Pick an approved draft')}
+            onRun={() => ask('publish', flags.blogOn ? 'Publish' : 'Send to Docstar', 'publish', { brief_id: publishBrief }, [['Approved draft of', publishBrief], ['Goes to', flags.blogOn ? blog?.base_url ?? '…' : 'Docstar']])}>
+            <select aria-label="Approved draft to publish" className="input py-1.5" value={publishBrief} onChange={(e) => setPublishBrief(e.target.value)}>
+              <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
+              {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
+            </select>
+          </RunButton>}
+          {flags.blogOn && <RunButton title="Rebuild blog" description="Rebuild and redeploy the blog from the published posts without changing any post (after a change to the blog's code or look)." costKey="rebuild_blog" lowCost={lowCost} built={isBuilt('rebuild_blog')} comingIn="Phase 7"
             disabledReason={busyReason ?? tokenReason}
-            onRun={() => ask('rebuild_blog', 'Rebuild blog', 'rebuild_blog', {}, [['Deploys to', blog?.base_url ?? '…']])} />
+            onRun={() => ask('rebuild_blog', 'Rebuild blog', 'rebuild_blog', {}, [['Deploys to', blog?.base_url ?? '…']])} />}
         </div>
 
         <Card title="Recent runs" actions={<Link to="/runs" className="text-sm text-sky-700 hover:underline dark:text-sky-300">All runs →</Link>}>

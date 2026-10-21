@@ -131,7 +131,7 @@ export default function RunLive() {
 
         {view.approvals.map((a) => <Banner key={a.seq} a={a} />)}
 
-        <Card title="Pipeline"><PipelineTracker view={view} hidePromo={settings.data?.designer?.promo_enabled === false} /></Card>
+        <Card title="Pipeline"><PipelineTracker view={view} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} /></Card>
         {publisherProgress(view.outputs).size > 0 && <Card title="Publisher"><PublisherSteps outputs={view.outputs} stepStatus={view.steps.publisher?.status ?? null} /></Card>}
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="Loop timeline"><LoopTimeline routes={view.routes} /></Card>

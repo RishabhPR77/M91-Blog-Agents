@@ -40,34 +40,49 @@ Leave the terminal window open while you work: closing it stops the engine.
 2. Read the post, the Reviewer's scores and notes, and the check results. **Compare** shows what changed
    from the previous version.
 3. Choose one of these:
-   - **Approve**: the post is approved. The promo pack is made, then the Designer picks the interactive
-     blocks (if blocks are on). This uses 2–4 AI calls.
+   - **Approve**: the post is approved and its final **Markdown export** is saved (the Mem0 record and
+     `apps/engine/exports/<slug>.md`). No AI calls.
    - **Request changes** (a counter prompt): write what to change, then click **Send counter prompt**. You
      can quote exact sentences from the draft. The Writer revises, and the Reviewer checks again unless you
-     turn that off. This uses 2–4 AI calls. The new version comes back to Approvals.
+     turn that off. This uses 2–4 AI calls. The new version comes back to Approvals. With the Experience
+     Designer on, there is also **Change the design**.
    - **Review this version**: one Reviewer check of this version, without a rewrite.
    - **Reject the topic**: the brief and the draft are rejected, and the topic is never picked again.
 
+## Get the Markdown file (Phase 11)
+
+The output is a clean Markdown file for Docstar (see [PHASE11_NOTES.md](PHASE11_NOTES.md)).
+
+- **Any reviewed draft:** in **Approvals**, the **Markdown export** card has **Show the Markdown**, **Copy
+  Markdown** and **Download .md**. Nothing is saved.
+- **After you approve:** the **Exports** page lists the saved files, one per approved post.
+- **From the terminal** (in `apps/engine`, 0 AI calls):
+
+```bash
+npm run export -- --brief-id=<id>
+```
+
+This writes the file to `apps/engine/exports/` only. Add `--save` for the final export (the Mem0 record
+too), and `--version=<n>` for an older reviewed version.
+
 ## Publish
 
-Publishing is manual (`AUTO_PUBLISH` is off).
-1. Open the approved draft in **Approvals**. The **Publishing** card has a **Publish** button. You can also
-   publish from **Control** or **Posts**.
-2. Click **Publish** and confirm. This uses no AI calls. The blog is rebuilt and deployed, and the engine
-   checks that the post is live. Slack gets the link.
-3. The first 10 posts are hidden from search engines (noindex). To change one, go to **Posts** and click
-   **Show in search**.
+`PUBLISH_TARGET` decides where an approved post goes:
 
-## Unpublish
+- **none** (the fallback plan): nothing is published; the Markdown export is the output. Publish, Rebuild
+  blog and the page preview are hidden.
+- **docstar**: **Send to Docstar** (on Control) sends the saved export. Until the `DOCSTAR_*` keys are set,
+  it answers "not configured" and sends nothing.
+- **embarko**: the Phase 7 blog. Open the approved draft in **Approvals**: the **Publishing** card has a
+  **Publish** button (also on **Control** and **Posts**). It uses no AI calls, and the blog is rebuilt,
+  deployed and checked. The first 10 posts are hidden from search engines; change that on **Posts**, where
+  **Unpublish** is too.
 
-Go to **Posts**, find the post, and click **Unpublish**. The blog is rebuilt without it, and its link stops
-working. The draft goes back to "approved", so you can publish it again later.
+## Interactive guides on or off
 
-## Interactive blocks on or off
-
-- In **Approvals**, the **Interactive blocks** card has an on/off switch for each post.
-- **Re-run Designer** (1–2 AI calls) picks the blocks again. The live post changes only after you click
-  **Republish** on the **Posts** page.
+`EXPERIENCE_ENABLED=false` (the fallback plan) turns the Experience Designer off everywhere: no guides, no
+**Change the design**, and the Reviewer uses its pre-Phase-10 areas and weights. With it on, see
+[PHASE10_NOTES.md](PHASE10_NOTES.md).
 
 ## What the statuses mean
 

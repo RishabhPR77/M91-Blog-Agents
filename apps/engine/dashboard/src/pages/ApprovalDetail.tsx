@@ -13,6 +13,8 @@ import { MarkdownPreview } from '../components/MarkdownPreview'
 import { PublishCard } from '../components/PublishCard'
 import { InteractiveCard, type InteractiveInfo } from '../components/InteractiveCard'
 import { PreviewCard, type PreviewInfo } from '../components/PreviewCard'
+import { ExportCard } from '../components/ExportCard'
+import { flagsOf } from '../config/flags'
 import { Card, EmptyState, PageHeader } from '../components/Page'
 import { VerdictPanel, type Review } from '../components/VerdictPanel'
 import { StatusBadge } from '../components/StatusBadge'
@@ -113,10 +115,15 @@ export default function ApprovalDetail() {
   const promoOn = settings.data?.designer?.promo_enabled === true
   const approveCost = promoOn ? COSTS.approve_promo : COSTS.approve
   const approveCalls = approveCost.normal
+  // Phase 11: EXPERIENCE_ENABLED=false hides the guide and "Change the design"; PUBLISH_TARGET decides the
+  // page preview and the Publish card (only with the blog).
+  const flags = flagsOf(settings.data)
   // C5: a counter prompt changes the writing (Writer, then the Experience Designer) or only the design.
-  const hasGuide = d.interactive?.guide_doc?.status === 'ok'
+  const hasGuide = flags.experienceOn && d.interactive?.guide_doc?.status === 'ok'
   const design = target === 'design' && hasGuide
-  const reviseCost = design ? (rereviewOn ? COSTS.human_design_rereview : COSTS.human_design_no_rereview) : (rereviewOn ? COSTS.human_revise_rereview : COSTS.human_revise_no_rereview)
+  const reviseCost = design ? (rereviewOn ? COSTS.human_design_rereview : COSTS.human_design_no_rereview)
+    : flags.experienceOn ? (rereviewOn ? COSTS.human_revise_rereview : COSTS.human_revise_no_rereview)
+    : (rereviewOn ? COSTS.human_revise_rereview_plain : COSTS.human_revise_no_rereview_plain)
   const needsReview = !reviewed && rereviewDefault
   const usedRevisions = d.revisions_used ?? d.earlier.filter((e) => e.human_feedback).length
   const revisionsLeft = maxRevisions == null ? null : maxRevisions - usedRevisions
@@ -182,7 +189,7 @@ export default function ApprovalDetail() {
 
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3">
-          <PreviewCard briefId={d.brief_id} version={d.draft.version} preview={d.preview} />
+          {flags.blogOn && <PreviewCard briefId={d.brief_id} version={d.draft.version} preview={d.preview} />}
           <Card title="Draft">
             <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
               <div className="sm:col-span-2"><dt className="text-xs text-slate-500">SEO title</dt><dd>{d.draft.seo?.title_tag ?? '—'}</dd></div>
@@ -212,8 +219,9 @@ export default function ApprovalDetail() {
         </div>
 
         <div className="space-y-4 lg:col-span-2">
-          <PublishCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} title={d.draft.title} />
-          <InteractiveCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} info={d.interactive} />
+          <ExportCard briefId={d.brief_id} version={d.draft.version} status={d.draft.status} />
+          {flags.blogOn && <PublishCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} title={d.draft.title} />}
+          {flags.experienceOn && <InteractiveCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} info={d.interactive} />}
           <Card title="Your decision">
             <div className="space-y-4">
               {error && <ActionError error={error} onClose={() => setError(null)} />}
@@ -238,8 +246,8 @@ export default function ApprovalDetail() {
                 <p className="mb-2 text-xs text-slate-500">A counter prompt.{revisionsLeft != null ? ` ${Math.max(0, revisionsLeft)} of ${maxRevisions} left for this brief.` : ''}</p>
                 <fieldset className="mb-2 space-y-1 text-sm" disabled={!waiting}>
                   <legend className="sr-only">What to change</legend>
-                  <label className="flex items-start gap-2"><input type="radio" name="revise-target" className="mt-1" checked={!design} onChange={() => setTarget('writing')} /> <span><strong>Change the writing</strong> <span className="block text-xs text-slate-500">The Writer revises the post, then the Experience Designer builds its guide again.</span></span></label>
-                  <label className="flex items-start gap-2"><input type="radio" name="revise-target" className="mt-1" checked={design} disabled={!hasGuide} onChange={() => setTarget('design')} /> <span><strong>Change the design</strong> <span className="block text-xs text-slate-500">{hasGuide ? 'Only the Experience Designer runs again (cheaper). The post’s text stays as it is.' : 'This version has no guide to change.'}</span></span></label>
+                  <label className="flex items-start gap-2"><input type="radio" name="revise-target" className="mt-1" checked={!design} onChange={() => setTarget('writing')} /> <span><strong>Change the writing</strong> <span className="block text-xs text-slate-500">{flags.experienceOn ? 'The Writer revises the post, then the Experience Designer builds its guide again.' : 'The Writer revises the post.'}</span></span></label>
+                  {flags.experienceOn && <label className="flex items-start gap-2"><input type="radio" name="revise-target" className="mt-1" checked={design} disabled={!hasGuide} onChange={() => setTarget('design')} /> <span><strong>Change the design</strong> <span className="block text-xs text-slate-500">{hasGuide ? 'Only the Experience Designer runs again (cheaper). The post’s text stays as it is.' : 'This version has no guide to change.'}</span></span></label>}
                 </fieldset>
                 <label className="label" htmlFor="feedback">Your feedback</label>
                 <textarea id="feedback" className="input min-h-28" maxLength={FEEDBACK_MAX + 200} value={feedback} onChange={(e) => setFeedback(e.target.value)} disabled={!waiting} placeholder="e.g. Make the first paragraph shorter and explain 'webhook' in plain words." />

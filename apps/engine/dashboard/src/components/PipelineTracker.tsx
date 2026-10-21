@@ -5,7 +5,7 @@ import { Ban, Check, ChevronRight, Circle, Loader2, MinusCircle, X } from 'lucid
 import { fmtDuration } from '../format'
 import { trackerSteps, type RunView, type StepState, type StepStatus } from '../state/runEvents'
 
-const LABEL: Record<string, string> = { scout: 'Scout', strategist: 'Strategist', writer: 'Writer', checks: 'Checks', reviewer: 'Reviewer', promo: 'Promo', designer: 'Experience Designer', publisher: 'Publisher' }
+const LABEL: Record<string, string> = { scout: 'Scout', strategist: 'Strategist', writer: 'Writer', checks: 'Checks', reviewer: 'Reviewer', promo: 'Promo', designer: 'Experience Designer', export: 'Markdown export', publisher: 'Publisher' }
 
 const STYLE: Record<StepStatus, string> = {
   waiting: 'border-slate-200 text-slate-400 dark:border-slate-800 dark:text-slate-500',
@@ -37,9 +37,10 @@ function Stats({ st }: { st: StepState }) {
   return bits.length ? <div className="text-xs opacity-80">{bits.join(' · ')}</div> : null
 }
 
-export function PipelineTracker({ view, hidePromo = false }: { view: RunView; hidePromo?: boolean }) {
-  // The promo pack is off: its step is hidden unless this run really made one (AI calls).
-  const steps = trackerSteps(view).filter((st) => !(hidePromo && st.name === 'promo' && !st.aiCalls))
+export function PipelineTracker({ view, hidePromo = false, hideDesigner = false }: { view: RunView; hidePromo?: boolean; hideDesigner?: boolean }) {
+  // The promo pack is off: its step is hidden unless this run really made one (AI calls). Phase 11: the same for
+  // the Experience Designer when EXPERIENCE_ENABLED=false, and the export step until a run has one.
+  const steps = trackerSteps(view).filter((st) => !(hidePromo && st.name === 'promo' && !st.aiCalls) && !(hideDesigner && st.name === 'designer' && !st.aiCalls) && !(st.name === 'export' && (st.status === 'waiting' || st.status === 'skipped')))
   return (
     <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8" aria-label="Pipeline">
       {steps.map((st, i) => {

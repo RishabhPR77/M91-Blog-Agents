@@ -32,6 +32,15 @@ export default function Settings() {
             </dl>
           ) : <p className="text-sm text-slate-500">Not reported by this engine (restart it).</p>}
         </Card>
+        <Card title="Output and publishing">
+          {d.publish ? (
+            <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
+              <dt className="text-slate-500">Publish target</dt><dd data-testid="setting-publish-target">{d.publish.target === 'none' ? 'none: the Markdown export is the output' : d.publish.target === 'docstar' ? 'Docstar' : 'the blog (Embarko)'} (PUBLISH_TARGET)</dd>
+              <dt className="text-slate-500">Markdown export</dt><dd>saved on every approval (Exports page)</dd>
+              <dt className="text-slate-500">Docstar keys set</dt><dd data-testid="setting-docstar">{d.publish.docstar_configured ? 'yes' : 'no (DOCSTAR_API_URL, DOCSTAR_API_KEY, DOCSTAR_COLLECTION_ID)'}</dd>
+            </dl>
+          ) : <p className="text-sm text-slate-500">Not reported by this engine (it predates Phase 11: restart it).</p>}
+        </Card>
         <Card title="Blog and publishing">
           {d.blog ? (
             <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
@@ -46,6 +55,7 @@ export default function Settings() {
         <Card title="Interactive guides">
           {d.designer ? (
             <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
+              <dt className="text-slate-500">Experience Designer</dt><dd data-testid="setting-experience">{d.designer.enabled === false ? 'off (EXPERIENCE_ENABLED=false): no guides, the pre-Phase-10 review' : 'on'}</dd>
               <dt className="text-slate-500">New posts get a guide</dt><dd data-testid="setting-interactive-default">{yes(d.designer.interactive_default)} (INTERACTIVE_DEFAULT)</dd>
               <dt className="text-slate-500">Experience Designer model</dt><dd className="font-mono text-xs" data-testid="setting-designer-model">{d.models.designer ? `${d.models.designer.service} · ${d.models.designer.model} · ${d.models.designer.delivery}` : 'not reported'}</dd>
               <dt className="text-slate-500">Max components per guide</dt><dd>{d.designer.max_components ?? 'not reported'}</dd>

@@ -2,6 +2,8 @@
 // adjust them here. "lowCost" applies when the low-cost switch is on (see low-cost.json).
 // mem0 (Phase 9): expected Mem0 requests, from the measured runs in apps/engine/docs/PHASE9_NOTES.md (A6);
 // Phase 10 numbers from test/fullrun-mem0.test.js (approve 9, designer 7, human_revise 18).
+// Phase 11 (EXPERIENCE_ENABLED=false): the *_plain keys are the same runs without the Experience Designer (1–2 AI
+// calls and one guide_doc write less per draft version); approving also saves the Markdown export (approve 12).
 // They are "cold" numbers; a run started from the dashboard reads less, since the engine's index serves the
 // data it already holds. The full run's range covers 1–2 Writer revisions (MAX_WRITER_REVISIONS=2).
 export type Estimate = { normal: string; lowCost: string; mem0: string; mem0LowCost?: string; note?: string }
@@ -9,16 +11,18 @@ export type Estimate = { normal: string; lowCost: string; mem0: string; mem0LowC
 export const COSTS = {
   // Phase 10: + the Experience Designer (1–2) for every draft version; Mem0 + one guide_doc write per version.
   full: { normal: '16–29', lowCost: '10–20', mem0: '≈30–48', mem0LowCost: '≈27–38', note: 'Scout + Strategist + Writer + Experience Designer + Reviewer, plus revision rounds' },
+  full_plain: { normal: '15–26', lowCost: '9–18', mem0: '≈28–45', mem0LowCost: '≈25–35', note: 'Scout + Strategist + Writer + Reviewer, plus revision rounds (no Experience Designer)' },
   scout: { normal: '≈10', lowCost: '5–6', mem0: '≈10–15', mem0LowCost: '≈8–11' },
   strategist: { normal: '1–2', lowCost: '1–2', mem0: '≈5–8' },
   writer: { normal: '1–2', lowCost: '1–2', mem0: '≈5–8' },
   reviewer: { normal: '1–2', lowCost: '1–2', mem0: '≈2–5' },
   reviewer_route: { normal: '2–14', lowCost: '2–7', mem0: '≈10–28', note: 'Reviewer, then revision rounds (Writer, Experience Designer, Reviewer) until a pass or a limit' },
+  reviewer_route_plain: { normal: '2–11', lowCost: '2–5', mem0: '≈10–25', note: 'Reviewer, then revision rounds (Writer, Reviewer) until a pass or a limit' },
   promo: { normal: '1–2', lowCost: '1–2', mem0: '≈3–5' },
   // Approval actions (Task 5): the low-cost switch does not apply to them.
   // Phase 10: the guide is built before the review, and the promo pack is off (PROMO_ENABLED=false): no AI.
-  approve: { normal: '0', lowCost: '0', mem0: '≈9', note: 'no AI: the guide was built before the review; the promo pack is off' },
-  approve_promo: { normal: '1–2', lowCost: '1–2', mem0: '≈11–14', note: 'promo pack (1, +1 if it needs a repair): PROMO_ENABLED=true' },
+  approve: { normal: '0', lowCost: '0', mem0: '≈12', note: 'no AI: saves the final Markdown export; the guide (if any) was built before the review; the promo pack is off' },
+  approve_promo: { normal: '1–2', lowCost: '1–2', mem0: '≈14–17', note: 'promo pack (1, +1 if it needs a repair): PROMO_ENABLED=true' },
   designer: { normal: '1–2', lowCost: '1–2', mem0: '≈7', note: 'Experience Designer (1, +1 if it needs a repair)' },
   approval_review: { normal: '1–2', lowCost: '1–2', mem0: '≈5–8' },
   // C5: "Change the writing" (Writer, then the Experience Designer) or "Change the design" (Experience Designer only).
@@ -26,11 +30,16 @@ export const COSTS = {
   human_revise_no_rereview: { normal: '2–4', lowCost: '2–4', mem0: '≈10–14', note: 'Writer revision and the Experience Designer' },
   human_design_rereview: { normal: '2–4', lowCost: '2–4', mem0: '≈10–14', note: 'the Experience Designer, then the Reviewer' },
   human_design_no_rereview: { normal: '1–2', lowCost: '1–2', mem0: '≈7', note: 'the Experience Designer only' },
+  human_revise_rereview_plain: { normal: '2–4', lowCost: '2–4', mem0: '≈17', note: 'Writer revision, then the Reviewer' },
+  human_revise_no_rereview_plain: { normal: '1–2', lowCost: '1–2', mem0: '≈9–13', note: 'Writer revision only' },
   reject_topic: { normal: '0', lowCost: '0', mem0: '≈4–6' },
   // Phase 7: the Publisher is code, not AI.
   publish: { normal: '0', lowCost: '0', mem0: '≈13', note: 'no AI: build, deploy and check' },
   rebuild_blog: { normal: '0', lowCost: '0', mem0: '≈6', note: 'no AI: rebuild and redeploy the blog' },
   unpublish: { normal: '0', lowCost: '0', mem0: '≈10', note: 'no AI: rebuild without the post and deploy' },
+  // Phase 11: the Markdown export is code too (export_save: the final export, record and file).
+  export: { normal: '0', lowCost: '0', mem0: '≈0–4', note: 'no AI: builds the Markdown file; nothing saved' },
+  export_save: { normal: '0', lowCost: '0', mem0: '≈4–6', note: 'no AI: the final export (Mem0 record and file)' },
   set_index: { normal: '0', lowCost: '0', mem0: '≈10', note: 'no AI: switch noindex, rebuild and deploy' }
 } satisfies Record<string, Estimate>
 
