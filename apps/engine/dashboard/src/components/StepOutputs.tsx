@@ -45,18 +45,39 @@ export function StepOutputs({ outputs, records = [] }: { outputs: Output[]; reco
   )
 }
 
-/** The Designer's step output (Phase 8): status, blocks, dropped segments, integrity, repairs. */
+/**
+ * The Designer's step output. Phase 10 (Experience Designer): guide or not, chapters, the components chosen, what
+ * was dropped (with reasons), coverage, the no-new-facts checks (first answer → final) and repairs. Phase 8 runs
+ * (blocks, integrity) still show the old way.
+ */
 function DesignerPills({ data }: { data: Record<string, unknown> }) {
   const n = (v: unknown) => (typeof v === 'number' ? v : null)
+  const components = Array.isArray(data.components) ? (data.components as string[]) : null
+  const dropped = Array.isArray(data.dropped) ? (data.dropped as { type?: string | null; chapter?: number; reason?: string }[]) : null
+  const coverage = typeof data.coverage === 'boolean' ? data.coverage : null
+  const checks = data.checks as { first?: number; final?: number } | undefined
   const integrity = data.integrity as { passed?: boolean } | boolean | null | undefined
   const passed = typeof integrity === 'boolean' ? integrity : integrity?.passed
+  const guide = components !== null
   return (
-    <div className="mt-1 flex flex-wrap gap-1.5 text-xs" data-testid="designer-pills">
-      {typeof data.status === 'string' && <span className={`pill ${data.status === 'ok' ? 'pill-green' : 'pill-amber'}`}>{data.status}</span>}
-      {n(data.blocks) !== null && <span className="pill pill-gray">{n(data.blocks)} blocks</span>}
-      {n(data.dropped) ? <span className="pill pill-amber">{n(data.dropped)} dropped</span> : null}
-      {passed !== undefined && passed !== null && <span className={`pill ${passed ? 'pill-green' : 'pill-red'}`}>integrity {passed ? 'passed' : 'failed'}</span>}
-      {n(data.repairs_used) ? <span className="pill pill-gray">{n(data.repairs_used)} repair</span> : null}
+    <div className="mt-1 text-xs" data-testid="designer-pills">
+      <div className="flex flex-wrap gap-1.5">
+        {typeof data.status === 'string' && <span className={`pill ${data.status === 'ok' ? 'pill-green' : 'pill-amber'}`}>{guide ? (data.status === 'ok' ? 'guide' : 'no guide') : data.status}</span>}
+        {n(data.chapters) ? <span className="pill pill-gray">{n(data.chapters)} chapters</span> : null}
+        {components && components.length > 0 && <span className="pill pill-gray" title={components.join(', ')}>{components.length} components</span>}
+        {n(data.blocks) !== null && <span className="pill pill-gray">{n(data.blocks)} blocks</span>}
+        {dropped?.length ? <span className="pill pill-amber">{dropped.length} dropped</span> : n(data.dropped) ? <span className="pill pill-amber">{n(data.dropped)} dropped</span> : null}
+        {coverage !== null && <span className={`pill ${coverage ? 'pill-green' : 'pill-red'}`}>coverage {coverage ? 'passed' : 'failed'}</span>}
+        {checks && (checks.first || checks.final) ? <span className={`pill ${checks.final ? 'pill-amber' : 'pill-green'}`} title="no-new-facts problems: first answer → after the repair and drops">checks {checks.first ?? 0} → {checks.final ?? 0}</span> : null}
+        {passed !== undefined && passed !== null && <span className={`pill ${passed ? 'pill-green' : 'pill-red'}`}>integrity {passed ? 'passed' : 'failed'}</span>}
+        {n(data.repairs_used) ? <span className="pill pill-gray">{n(data.repairs_used)} repair</span> : null}
+      </div>
+      {components && components.length > 0 && <p className="mt-1 text-slate-500" data-testid="designer-components">{[...new Set(components)].join(' · ')}</p>}
+      {dropped && dropped.length > 0 && (
+        <ul className="mt-1 list-disc pl-5 text-amber-800 dark:text-amber-200" aria-label="Dropped components">
+          {dropped.map((d, i) => <li key={i}>{d.type ?? 'component'}{d.chapter ? ` (chapter ${d.chapter})` : ''}: {d.reason}</li>)}
+        </ul>
+      )}
     </div>
   )
 }

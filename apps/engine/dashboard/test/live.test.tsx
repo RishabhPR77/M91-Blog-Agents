@@ -162,3 +162,12 @@ describe('Runs page', () => {
     expect(screen.getByText('R-261019-1136-UQ7F')).toBeInTheDocument()
   })
 })
+
+describe('PipelineTracker (Phase 10)', () => {
+  it('runs in the new order and hides an unused promo step while the promo pack is off', () => {
+    render(<PipelineTracker view={play(fixture.full_run as EngineEvent[])} hidePromo />)
+    const names = screen.getAllByRole('listitem').filter((li) => li.dataset.testid?.startsWith('step-')).map((li) => li.dataset.testid)
+    expect(names).toEqual(['step-scout', 'step-strategist', 'step-writer', 'step-checks', 'step-designer', 'step-reviewer', 'step-publisher'])
+    expect(screen.getByTestId('step-designer')).toHaveTextContent('Experience Designer')
+  })
+})

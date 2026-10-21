@@ -7,12 +7,13 @@
 export type Estimate = { normal: string; lowCost: string; mem0: string; mem0LowCost?: string; note?: string }
 
 export const COSTS = {
-  full: { normal: '15–23', lowCost: '9–14', mem0: '≈28–45', mem0LowCost: '≈25–35', note: 'Scout + Strategist + Writer + Reviewer, plus revision rounds' },
+  // Phase 10: + the Experience Designer (1–2) for every draft version; Mem0 + one guide_doc write per version.
+  full: { normal: '16–29', lowCost: '10–20', mem0: '≈30–48', mem0LowCost: '≈27–38', note: 'Scout + Strategist + Writer + Experience Designer + Reviewer, plus revision rounds' },
   scout: { normal: '≈10', lowCost: '5–6', mem0: '≈10–15', mem0LowCost: '≈8–11' },
   strategist: { normal: '1–2', lowCost: '1–2', mem0: '≈5–8' },
   writer: { normal: '1–2', lowCost: '1–2', mem0: '≈5–8' },
   reviewer: { normal: '1–2', lowCost: '1–2', mem0: '≈2–5' },
-  reviewer_route: { normal: '2–10', lowCost: '2–5', mem0: '≈10–25', note: 'Reviewer, then revision rounds until a pass or a limit' },
+  reviewer_route: { normal: '2–14', lowCost: '2–7', mem0: '≈10–28', note: 'Reviewer, then revision rounds (Writer, Experience Designer, Reviewer) until a pass or a limit' },
   promo: { normal: '1–2', lowCost: '1–2', mem0: '≈3–5' },
   // Approval actions (Task 5): the low-cost switch does not apply to them.
   // Phase 10: the guide is built before the review, and the promo pack is off (PROMO_ENABLED=false): no AI.

@@ -95,7 +95,6 @@ export async function runExperience(params = {}, deps = {}) {
   const claimsToAvoid = brief.claims_to_avoid ?? []
   const prompt = buildExperiencePrompt(config)
   const message = buildExperienceMessage({ title, parts: parsed.parts, snippets, brief, facts, config, feedback, previousPlan: previous?.payload?.plan ?? null })
-  const threadId = experienceThreadId(params.briefId, version)
 
   async function runLog(entry) {
     const record = { run_id: runId, brief_id: params.briefId, agent: 'designer', time: istIso(new Date(now())), ...entry }
@@ -119,7 +118,8 @@ export async function runExperience(params = {}, deps = {}) {
     throwIfCancelled()
     const t0 = now()
     try {
-      const r = await aiSend({ agent: 'designer', call, prompt, message: tail ? `${message}\n\n${tail}` : message, jsonSchema: experience_plan, threadId, retries: config.viasocket.maxRetries })
+      // A fresh thread for every call (the repair message carries everything it needs).
+      const r = await aiSend({ agent: 'designer', call, prompt, message: tail ? `${message}\n\n${tail}` : message, jsonSchema: experience_plan, threadId: experienceThreadId(params.briefId, version), retries: config.viasocket.maxRetries })
       const errors = planSchemaErrors(r.content)
       const checked = errors.length ? null : evaluate(r.content)
       const problems = errors.length ? errors : checked.problems

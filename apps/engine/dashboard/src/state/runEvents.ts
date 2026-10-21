@@ -7,7 +7,8 @@
 //   record    — only the run record's steps (runs from before Phase 6).
 import type { EngineEvent } from '../api/sse'
 
-export const PIPELINE = ['scout', 'strategist', 'writer', 'checks', 'reviewer', 'promo', 'designer', 'publisher'] as const
+// Phase 10: the Experience Designer runs after each draft, before the Reviewer; the promo pack only on approval (if on).
+export const PIPELINE = ['scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer', 'promo', 'publisher'] as const
 export const MAX_LOG = 5000
 
 export type StepStatus = 'waiting' | 'running' | 'done' | 'failed' | 'cancelled' | 'skipped'

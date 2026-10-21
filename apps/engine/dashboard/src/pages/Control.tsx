@@ -87,6 +87,7 @@ export default function Control() {
   const [draftKey, setDraftKey] = useState('')
   const [route, setRoute] = useState(false)
   const [promoBrief, setPromoBrief] = useState('')
+  const [designBrief, setDesignBrief] = useState('')
   const [publishBrief, setPublishBrief] = useState('')
   const [pending, setPending] = useState<Pending | null>(null)
   const [starting, setStarting] = useState(false)
@@ -226,14 +227,22 @@ export default function Control() {
             </select>
             <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={route} onChange={(e) => setRoute(e.target.checked)} /> Also run the routing loop</label>
           </RunButton>
-          <RunButton title="Create promo pack" description="LinkedIn post, X thread, newsletter blurb, video script for an approved draft." costKey="promo" lowCost={lowCost} built={isBuilt('promo')} disabledReason={busyReason ?? (promoBrief ? null : 'Pick an approved draft')}
-            onRun={() => ask('promo', 'Promo pack', 'promo', { brief_id: promoBrief }, [['Approved draft of', promoBrief]])}>
-            <select aria-label="Approved draft for the promo pack" className="input py-1.5" value={promoBrief} onChange={(e) => setPromoBrief(e.target.value)}>
+          {settings.data?.designer?.promo_enabled !== false && (
+            <RunButton title="Create promo pack" description="LinkedIn post, X thread, newsletter blurb, video script for an approved draft." costKey="promo" lowCost={lowCost} built={isBuilt('promo')} disabledReason={busyReason ?? (promoBrief ? null : 'Pick an approved draft')}
+              onRun={() => ask('promo', 'Promo pack', 'promo', { brief_id: promoBrief }, [['Approved draft of', promoBrief]])}>
+              <select aria-label="Approved draft for the promo pack" className="input py-1.5" value={promoBrief} onChange={(e) => setPromoBrief(e.target.value)}>
+                <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
+                {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
+              </select>
+            </RunButton>
+          )}
+          <RunButton title="Experience Designer" description="Build the interactive guide again for an approved post (no review). Republish to put it live." costKey="designer" lowCost={lowCost} built={isBuilt('designer')} disabledReason={busyReason ?? (designBrief ? null : 'Pick an approved draft')}
+            onRun={() => ask('designer', 'Experience Designer', 'designer', { brief_id: designBrief }, [['Approved draft of', designBrief]])}>
+            <select aria-label="Approved draft for the Experience Designer" className="input py-1.5" value={designBrief} onChange={(e) => setDesignBrief(e.target.value)}>
               <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
               {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
             </select>
           </RunButton>
-          <RunButton title="Designer" description="Illustrations and interactive blocks for an approved post." lowCost={lowCost} built={built.has('design')} comingIn="Phase 8" onRun={() => {}} />
           <RunButton title="Publish" description={`Put an approved post on the blog: build, deploy, check it is live.${blog?.auto_publish ? ' (AUTO_PUBLISH is on: approving publishes too.)' : ''}`} costKey="publish" lowCost={lowCost} built={isBuilt('publish')} comingIn="Phase 7"
             disabledReason={busyReason ?? (publishBrief ? tokenReason : 'Pick an approved draft')}
             onRun={() => ask('publish', 'Publish', 'publish', { brief_id: publishBrief }, [['Approved draft of', publishBrief], ['Deploys to', blog?.base_url ?? '…']])}>

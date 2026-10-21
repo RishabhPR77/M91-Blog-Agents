@@ -33,7 +33,7 @@ export function chooseGuide({ interactive, doc, markdown }) {
   }
   const g = doc.payload.guide
   const n = g.chapters.flatMap((c) => c.components).filter((x) => x.type !== 'prose').length
-  return { guide: g, note: `guide: ${g.chapters.length} chapters, ${n} components` }
+  return { guide: g, note: `guide: ${g.chapters.length} chapters, ${n} component${n === 1 ? '' : 's'}` }
 }
 
 /**

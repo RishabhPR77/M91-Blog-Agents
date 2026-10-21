@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Info, Square } from 'lucide-react'
 import { api, errorMessage, isApiError } from '../api/client'
+import { useSettings } from '../api/queries'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EventLog } from '../components/EventLog'
 import { LoopTimeline } from '../components/LoopTimeline'
@@ -42,6 +43,7 @@ function Banner({ a }: { a: ApprovalBanner }) {
 export default function RunLive() {
   const { runId = '' } = useParams()
   const { view, detail, stream, error } = useRunView(runId)
+  const settings = useSettings()
   const qc = useQueryClient()
   const running = view.status === 'running'
   const now = useNow(running)
@@ -129,7 +131,7 @@ export default function RunLive() {
 
         {view.approvals.map((a) => <Banner key={a.seq} a={a} />)}
 
-        <Card title="Pipeline"><PipelineTracker view={view} /></Card>
+        <Card title="Pipeline"><PipelineTracker view={view} hidePromo={settings.data?.designer?.promo_enabled === false} /></Card>
         {publisherProgress(view.outputs).size > 0 && <Card title="Publisher"><PublisherSteps outputs={view.outputs} stepStatus={view.steps.publisher?.status ?? null} /></Card>}
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="Loop timeline"><LoopTimeline routes={view.routes} /></Card>

@@ -176,3 +176,57 @@ describe('Designer step output and settings', () => {
     expect(screen.getByTestId('setting-promo')).toHaveTextContent('off (PROMO_ENABLED)')
   })
 })
+
+describe('Phase 10 Part D', () => {
+  it('Page preview: build it (0 AI calls), then the page is embedded with its link; an older version says so', async () => {
+    const preview = { brief_id: B, version: 3, status: 'awaiting_human', slug: 'bind-every-ai-approval', url: `/preview/${B}/posts/bind-every-ai-approval/`, guide: true, note: 'guide: 5 chapters, 4 components', built_at: '2026-10-21T10:00:00+05:30', ms: 14000, warnings: [] }
+    const calls = page(detail('awaiting_human', { on: true, default: true, set: false, guide_doc: DOC }, { preview: null }), { [`POST /api/approvals/${B}/preview`]: { body: preview } })
+    const button = await screen.findByRole('button', { name: /Preview the page · expected AI calls 0/ })
+    expect(screen.queryByTestId('preview-frame')).toBeNull()
+    await userEvent.click(button)
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === `/api/approvals/${B}/preview`)).toBe(true))
+  })
+
+  it('Page preview: an existing preview is shown in a frame, with phone width and an outdated note', async () => {
+    const preview = { brief_id: B, version: 2, status: 'awaiting_human', slug: 's', url: `/preview/${B}/posts/s/`, guide: true, note: 'guide: 5 chapters, 4 components', built_at: '2026-10-21T10:00:00+05:30', ms: 14000, warnings: ['kept the old M91 docs link x'] }
+    page(detail('awaiting_human', { on: true, default: true, set: false, guide_doc: DOC }, { preview }))
+    const frame = await screen.findByTestId('preview-frame')
+    expect(frame).toHaveAttribute('src', `/preview/${B}/posts/s/`)
+    expect(frame).toHaveAttribute('title', 'Page preview')
+    expect(screen.getByRole('link', { name: /Open in a new tab/ })).toHaveAttribute('href', `/preview/${B}/posts/s/`)
+    expect(screen.getByTestId('preview-outdated')).toHaveTextContent('older version')
+    expect(screen.getByText('kept the old M91 docs link x')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Phone width' }))
+    expect(frame.style.width).toBe('390px')
+  })
+
+  it('guide_doc record view: summary, coverage, checks, dropped with reasons, chapters with components', async () => {
+    const record = {
+      id: 'mem-gd1', type: 'guide_doc', briefId: B, status: 'ok', version: 3, date: '2026-10-21',
+      payload: {
+        summary: '2 chapters · 2 components: approve_demo, faq · 1 dropped · checks passed', model_used: 'claude-sonnet-4-6', repairs_used: 1, ms: 9100, version: 3, brief_version: 1,
+        coverage: { passed: true, details: [] }, checks: { first: [{ key: '0:1', field: 'request', problem: '"₹48,000" is not in the post' }], final: [] },
+        dropped: [{ type: 'route_compare', chapter: 2, reason: 'it still failed the checks after the repair' }],
+        guide: { title_accent: 'one tool call', hero: { agent: 'Refund bot', request: 'Refund order #1182?', person: 'Asha', decision: 'approved', result: 'Refund sent' }, status_states: ['waiting', 'ringing', 'approved'],
+          chapters: [{ id: 'c1', number: 1, label: 'The problem', heading: 'Why', components: [{ type: 'prose', id: 'p1' }, { type: 'approve_demo', id: 'd1' }] }, { id: 'c2', number: 2, label: 'Questions', heading: 'FAQ', components: [{ type: 'faq', id: 'f1' }] }],
+          your_turn: { title: 'Try it on one risky step' } }
+      }
+    }
+    mockFetch({ 'GET /api/records/mem-gd1': { body: { record } } })
+    renderApp(<Routes><Route path="/records/:memoryId" element={<RecordDetail />} /></Routes>, { route: '/records/mem-gd1' })
+    expect(await screen.findByTestId('guide-doc-summary')).toHaveTextContent('2 chapters')
+    expect(screen.getByText(/claude-sonnet-4-6 · 1 repair · 9\.1 s/)).toBeInTheDocument()
+    expect(screen.getByText('First answer: 1 problem(s) · after the repair and drops: 0')).toBeInTheDocument()
+    expect(screen.getByText('it still failed the checks after the repair')).toBeInTheDocument()
+    expect(screen.getAllByTestId('guide-chapter').map((c) => c.textContent?.slice(0, 18))).toEqual(['01 — The problem: ', '02 — Questions: FA'])
+    expect(screen.getByText('Try it on one risky step')).toBeInTheDocument()
+  })
+
+  it('the live run shows the Experience Designer output: guide, components, dropped with reasons, coverage, checks', () => {
+    render(<MemoryRouter><StepOutputs outputs={[{ seq: 6, ts: '2026-10-21T10:00:00+05:30', step: 'designer', message: '5 chapters · 4 components · 1 dropped · checks passed', data: { record_id: 'mem-gd1', status: 'ok', chapters: 5, components: ['approve_demo', 'steps_checklist', 'faq', 'faq'], dropped: [{ type: 'route_compare', chapter: 2, reason: 'a made-up number' }], coverage: true, checks: { first: 2, final: 0 }, repairs_used: 1 } }]} /></MemoryRouter>)
+    const pills = screen.getByTestId('designer-pills')
+    for (const t of ['guide', '5 chapters', '4 components', '1 dropped', 'coverage passed', 'checks 2 → 0', '1 repair']) expect(pills).toHaveTextContent(t)
+    expect(screen.getByTestId('designer-components')).toHaveTextContent('approve_demo · steps_checklist · faq')
+    expect(within(pills).getByRole('list', { name: 'Dropped components' })).toHaveTextContent('route_compare (chapter 2): a made-up number')
+  })
+})

@@ -1,10 +1,11 @@
-// Scout → Strategist → Writer → Checks → Reviewer → Promo → Designer → Publisher, with each step's state,
+// Scout → Strategist → Writer → Checks → Experience Designer → Reviewer → Promo → Publisher, with each step's state,
+// (Promo is hidden while PROMO_ENABLED=false, unless a run used it.)
 // time, AI calls, models and retries. Sub-steps (scout.facts, scout.questions.g1, …) are listed under their step.
 import { Ban, Check, ChevronRight, Circle, Loader2, MinusCircle, X } from 'lucide-react'
 import { fmtDuration } from '../format'
 import { trackerSteps, type RunView, type StepState, type StepStatus } from '../state/runEvents'
 
-const LABEL: Record<string, string> = { scout: 'Scout', strategist: 'Strategist', writer: 'Writer', checks: 'Checks', reviewer: 'Reviewer', promo: 'Promo', designer: 'Designer', publisher: 'Publisher' }
+const LABEL: Record<string, string> = { scout: 'Scout', strategist: 'Strategist', writer: 'Writer', checks: 'Checks', reviewer: 'Reviewer', promo: 'Promo', designer: 'Experience Designer', publisher: 'Publisher' }
 
 const STYLE: Record<StepStatus, string> = {
   waiting: 'border-slate-200 text-slate-400 dark:border-slate-800 dark:text-slate-500',
@@ -36,12 +37,13 @@ function Stats({ st }: { st: StepState }) {
   return bits.length ? <div className="text-xs opacity-80">{bits.join(' · ')}</div> : null
 }
 
-export function PipelineTracker({ view }: { view: RunView }) {
-  const steps = trackerSteps(view)
+export function PipelineTracker({ view, hidePromo = false }: { view: RunView; hidePromo?: boolean }) {
+  // The promo pack is off: its step is hidden unless this run really made one (AI calls).
+  const steps = trackerSteps(view).filter((st) => !(hidePromo && st.name === 'promo' && !st.aiCalls))
   return (
     <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8" aria-label="Pipeline">
       {steps.map((st, i) => {
-        const placeholder = st.placeholder || ((st.name === 'designer' || st.name === 'publisher') && st.status !== 'waiting' && st.status !== 'skipped' && /not built yet|Publishing is off/.test(st.summary ?? ''))
+        const placeholder = st.placeholder || ((st.name === 'designer' || st.name === 'publisher') && st.status !== 'waiting' && st.status !== 'skipped' && /not built yet|Publishing is off|Interactive guides are off/.test(st.summary ?? ''))
         return (
           <li key={st.name} data-testid={`step-${st.name}`} data-status={st.status} className={`relative rounded-lg border p-2.5 ${STYLE[st.status]}`}>
             <div className="flex items-center gap-1.5 text-sm font-medium">

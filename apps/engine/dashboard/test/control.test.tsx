@@ -129,14 +129,14 @@ describe('Control page', () => {
     expect(within(alert).getByRole('link', { name: 'Open R-261019-1250-WXYZ' })).toHaveAttribute('href', '/runs/R-261019-1250-WXYZ')
   })
 
-  it('run buttons are disabled for modes not in built_modes; Designer and Publish say when they come', async () => {
+  it('run buttons are disabled for modes not in built_modes; the Experience Designer needs its mode; Publish says when it comes', async () => {
     mockFetch(routes({}, { ...SETTINGS, built_modes: ['full', 'strategist', 'writer', 'reviewer', 'promo'] }))
     page()
     await screen.findByRole('option', { name: /least used/ }, { timeout: 5000 })
     await waitFor(() => expect(within(card('Run full pipeline')).getByRole('button', { name: /Run full pipeline/ })).toBeEnabled())
     expect(within(card('Run Scout')).getByRole('button')).toBeDisabled()
-    expect(within(card('Designer')).getByRole('button')).toBeDisabled()
-    expect(card('Designer')).toHaveTextContent('Coming in Phase 8')
+    expect(within(card('Experience Designer')).getByRole('button')).toBeDisabled()
+    expect(card('Experience Designer')).toHaveTextContent('Expected AI calls: 1–2')
     expect(card('Publish')).toHaveTextContent('Coming in Phase 7')
   })
 
@@ -158,5 +158,19 @@ describe('Control page', () => {
     expect(screen.getByRole('button', { name: /Stop/ })).toBeInTheDocument()
     expect(within(card('Run Scout')).getByRole('button')).toBeDisabled()
     expect(card('Run Scout')).toHaveTextContent('A run is in progress')
+  })
+})
+
+describe('Phase 10: the promo pack is hidden while PROMO_ENABLED=false', () => {
+  it('no promo card once the engine reports promo off', async () => {
+    mockFetch(routes({}, { ...SETTINGS, designer: { max_components: 10, max_repairs: 1, interactive_default: true, max_designer_revisions: 2, promo_enabled: false } }))
+    page()
+    await screen.findByTestId('run-card-Experience Designer')
+    await waitFor(() => expect(screen.queryByTestId('run-card-Create promo pack')).toBeNull())
+  })
+  it('the promo card is back with PROMO_ENABLED=true', async () => {
+    mockFetch(routes({}, { ...SETTINGS, designer: { max_components: 10, max_repairs: 1, interactive_default: true, max_designer_revisions: 2, promo_enabled: true } }))
+    page()
+    expect(await screen.findByTestId('run-card-Create promo pack')).toBeInTheDocument()
   })
 })

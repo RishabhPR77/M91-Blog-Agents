@@ -144,6 +144,7 @@ test('coverage: a missing part fails the plan; the repair fixes it (2 calls)', a
   assert.equal(ai.calls.length, 2)
   assert.equal(ai.calls[1].call, 'designer_repair')
   assert.match(ai.calls[1].message, /coverage: these parts are not used: N20/)
+  assert.notEqual(ai.calls[0].threadId, ai.calls[1].threadId, 'a fresh thread for every call')
   assert.equal(out.status, 'ok')
   assert.equal(out.repairs_used, 1)
 })

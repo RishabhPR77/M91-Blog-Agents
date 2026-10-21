@@ -1,4 +1,4 @@
-// /records/:memoryId — one record: a friendly view per type (brief, draft, review, promo pack, block doc; a readable
+// /records/:memoryId — one record: a friendly view per type (brief, draft, review, promo pack, block doc, guide doc; a readable
 // field view for the others) and the raw JSON with copy.
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -71,6 +71,7 @@ function DraftView({ rec, p }: { rec: FullRecord; p: P }) {
         <Card title="Revision notes" className="mb-4"><List items={p.revision_notes.map((n: P) => <>{n.feedback_quote && <span className="italic text-slate-500">“{n.feedback_quote}” → </span>}{n.what_changed}</>)} /></Card>
       ) : null}
       {p.human_feedback && <Card title="Your counter prompt" className="mb-4"><p className="text-sm">{p.human_feedback.text}</p><List items={p.human_feedback.quotes} /></Card>}
+      {p.design_feedback?.length ? <Card title="Your design requests" className="mb-4"><List items={p.design_feedback.map((f: P) => <>{f.text}{f.quotes?.length ? <span className="text-slate-500"> · {f.quotes.length} quote(s)</span> : null}</>)} /></Card> : null}
     </>
   )
 }
@@ -98,6 +99,50 @@ function PromoView({ p }: { p: P }) {
           <ol className="list-decimal space-y-2 pl-5 text-sm">{p.video_script.map((s: P, i: number) => <li key={i}><div className="font-medium">{s.on_screen_text}</div><div className="text-slate-600 dark:text-slate-300">{s.voiceover}</div></li>)}</ol>
         </Card>
       ) : null}
+    </>
+  )
+}
+
+/** guide_doc (Phase 10): the Experience Designer's guide — chapters and components, what was dropped, the checks. */
+function GuideDocView({ p }: { p: P }) {
+  const g = p.guide
+  const problem = (f: P) => (typeof f === 'string' ? f : `${f.key ?? ''} ${f.field ?? ''}: ${f.problem ?? ''}`.trim())
+  return (
+    <>
+      <p className="mb-2 text-sm" data-testid="guide-doc-summary">{p.summary}</p>
+      <p className="mb-4 text-xs text-slate-500">{[p.model_used, p.repairs_used != null && `${p.repairs_used} repair${p.repairs_used === 1 ? '' : 's'}`, p.ms != null && `${(p.ms / 1000).toFixed(1)} s`, p.brief_version != null && `brief v${p.brief_version}`, p.version != null && `draft v${p.version}`].filter(Boolean).join(' · ')}</p>
+      {p.error && <Section title="No guide"><p className="text-red-600 dark:text-red-400">{p.error}</p></Section>}
+      <Section title="Coverage (every part of the post, once, in order)">
+        {p.coverage ? <><span className={`pill ${p.coverage.passed ? 'pill-green' : 'pill-red'}`}>{p.coverage.passed ? 'passed' : 'failed'}</span><List items={p.coverage.details} /></> : <span className="text-slate-400">not checked</span>}
+      </Section>
+      <Section title="No new facts">
+        <p className="text-slate-600 dark:text-slate-300">First answer: {p.checks?.first?.length ?? 0} problem(s) · after the repair and drops: {p.checks?.final?.length ?? 0}</p>
+        <List items={(p.checks?.first ?? []).map(problem)} />
+      </Section>
+      <Section title="Dropped components">
+        <List items={(p.dropped ?? []).map((d: P) => <><span className="pill pill-amber">{d.type ?? 'component'}</span> chapter {d.chapter}: <span className="text-slate-600 dark:text-slate-300">{d.reason}</span></>)} />
+      </Section>
+      {g && (
+        <>
+          <Section title="Hero scene (example)">
+            <p>{g.hero?.agent}: “{g.hero?.request}” → {g.hero?.person} {g.hero?.decision} → {g.hero?.result}</p>
+            <p className="mt-1 text-slate-500">States: {(g.status_states ?? []).map((st: P) => (typeof st === 'string' ? st : `${st.state} (ch. ${st.chapter})`)).join(' → ')}{g.title_accent ? ` · title accent “${g.title_accent}”` : ''}</p>
+          </Section>
+          <Section title="Chapters">
+            <ol className="space-y-2">
+              {g.chapters.map((c: P) => (
+                <li key={c.id ?? c.number} data-testid="guide-chapter">
+                  <div className="font-medium">{String(c.number).padStart(2, '0')} — {c.label}: {c.heading}</div>
+                  {c.intro_markdown && <div className="text-slate-600 dark:text-slate-300">{c.intro_markdown}</div>}
+                  <div className="mt-0.5 flex flex-wrap gap-1">{c.components.map((x: P, i: number) => <span key={x.id ?? i} className={`pill ${x.type === 'prose' ? 'pill-gray' : 'pill-green'}`}>{x.type}</span>)}</div>
+                </li>
+              ))}
+            </ol>
+          </Section>
+          <Section title="Your turn">{g.your_turn?.title}</Section>
+        </>
+      )}
+      {p.feedback?.length ? <Section title="Design feedback it worked from"><List items={p.feedback.map((f: P) => <>{f.quote && <span className="italic text-slate-500">“{f.quote}” → </span>}{f.problem}</>)} /></Section> : null}
     </>
   )
 }
@@ -138,6 +183,7 @@ export function FriendlyView({ rec }: { rec: FullRecord }) {
     case 'draft': return <DraftView rec={rec} p={p} />
     case 'review': return <VerdictPanel review={p as Review} />
     case 'promo_pack': return <PromoView p={p} />
+    case 'guide_doc': return <GuideDocView p={p} />
     case 'block_doc': return <BlockDocView p={p} />
     default: return <FieldView data={p} />
   }

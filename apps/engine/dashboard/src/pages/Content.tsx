@@ -10,6 +10,7 @@ export const CONTENT_TABS = [
   { type: 'brief', label: 'Briefs' },
   { type: 'draft', label: 'Drafts' },
   { type: 'review', label: 'Reviews' },
+  { type: 'guide_doc', label: 'Guides' },
   { type: 'promo_pack', label: 'Promo packs' },
   { type: 'question_cluster', label: 'Question clusters' },
   { type: 'story_lead', label: 'Stories' },
@@ -24,6 +25,7 @@ const STATUSES: Record<string, string[]> = {
   brief: ['new', 'active', 'drafted', 'awaiting_human', 'approved', 'rejected', 'failed', 'superseded'],
   draft: ['drafted', 'drafted_with_issues', 'awaiting_human', 'changes_requested', 'approved', 'rejected', 'failed_review', 'superseded'],
   review: ['pass', 'fail'],
+  guide_doc: ['ok', 'fallback'],
   promo_pack: ['ok', 'with_issues'],
   question_cluster: ['open', 'used', 'old', 'discarded'],
   story_lead: ['open', 'used', 'expired', 'discarded'],
@@ -52,8 +54,8 @@ export default function Content() {
   const rows = list.data
   const statuses = useMemo(() => [...new Set([...(STATUSES[type] ?? []), ...(rows ?? []).map((r) => r.status).filter((s): s is string => Boolean(s))])], [type, rows])
   const loading = list.isPending
-  const showBrief = ['brief', 'draft', 'review', 'promo_pack', 'source_pack'].includes(type)
-  const showVersion = ['brief', 'draft', 'review', 'promo_pack', 'source_pack'].includes(type)
+  const showBrief = ['brief', 'draft', 'review', 'guide_doc', 'promo_pack', 'source_pack'].includes(type)
+  const showVersion = ['brief', 'draft', 'review', 'guide_doc', 'promo_pack', 'source_pack'].includes(type)
 
   function pick(t: string) {
     setStatus('')

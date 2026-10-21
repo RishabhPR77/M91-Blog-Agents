@@ -41,7 +41,7 @@ export const PUBLISH_MODES = Object.freeze(['publish', 'unpublish', 'set_index',
 // The human's decisions on a draft that waits at awaiting_human (Phase 5.5).
 export const DECISION_MODES = Object.freeze(['approve', 'human_revise', 'reject_topic', 'approval_review'])
 export const TRIGGERS = Object.freeze(['manual', 'cron', 'api', 'cli'])
-const TOP_STEPS = ['scout', 'strategist', 'writer', 'checks', 'reviewer', 'promo', 'designer', 'publisher']
+const TOP_STEPS = ['scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer', 'promo', 'publisher']
 
 export class RunError extends Error {
   constructor(code, message, status = 400) {
