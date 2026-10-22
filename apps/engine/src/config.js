@@ -48,7 +48,7 @@ const DEFAULTS = {
   M91_DOCS_URL: 'https://m91-api.msg91.com/llms.txt',
   PASS_SCORE_MIN: '80', PASS_AREA_MIN: '6',
   MAX_WRITER_REVISIONS: '2', MAX_STRATEGIST_REBRIEFS: '1', MAX_SCOUT_RETRIES: '1', MAX_AI_ROUNDS_PER_POST: '5',
-  TARGET_WORDS_MIN: '700', TARGET_WORDS_MAX: '1500',
+  TARGET_WORDS_MIN: '500', TARGET_WORDS_MAX: '1200',
   DEFAULT_TONE: 'friendly-teacher', TIMEZONE: 'Asia/Kolkata',
   AUTO_PUBLISH: 'false', DRY_RUN: 'false', LOG_LEVEL: 'info',
   // Phase 9: the engine's local data folder (run lock, Mem0 usage) and when a run lock counts as stale
@@ -68,7 +68,7 @@ const DEFAULTS = {
   URL_CHECK_TIMEOUT_MS: '10000',
   // Phase 4: Writer
   WRITER_MAX_REPAIRS: '1', WRITER_REVISION_INPUT: 'context', TUTORIAL_SOURCE_MAX_CHARS: '40000', SLACK_POST_DRAFTS: 'false',
-  READING_GRADE_HARD_MARGIN: '2', WORDS_HARD_MARGIN_PCT: '20', SLACK_CHUNK_CHARS: '2800',
+  READING_GRADE_HARD_MARGIN: '0', SENTENCE_MAX_WORDS: '20', SENTENCE_HARD_MAX_WORDS: '25', PARAGRAPH_MAX_SENTENCES: '3', WORDS_HARD_MARGIN_PCT: '20', SLACK_CHUNK_CHARS: '2800',
   // Phase 5: Reviewer, lessons, promo pack
   REVIEWER_MAX_SOURCE_CHECKS: '5', REVIEW_FEEDBACK_MAX_ITEMS: '8', LESSONS_PER_REVIEW_MAX: '3',
   SLACK_POST_APPROVED: 'true', PROMO_LINKEDIN_MAX_CHARS: '1300', PROMO_X_POST_MAX_CHARS: '270',
@@ -94,7 +94,7 @@ const DEFAULTS = {
   // Phase 3: Strategist
   STRATEGIST_MAX_REPAIRS: '1', RECENT_BRIEFS_WINDOW: '10', TITLE_MAX_CHARS: '70', KEYWORD_MAX_WORDS: '6', OUTLINE_MIN_SECTIONS: '4',
   OUTLINE_MAX_SECTIONS: '8', MIN_QUESTION_HEADINGS: '3', LESSONS_LIMIT: '5', ALLOW_UPDATE_BRIEFS: 'false',
-  READING_GRADE_INTRO_MAX: '6', READING_GRADE_POST_MAX: '8',
+  READING_GRADE_INTRO_MAX: '6', READING_GRADE_POST_MAX: '7',
   M91_SKILL_REPO_URL: 'https://github.com/MSG91/m91-skill',
   COMPETITORS: 'withHuman, PagerDuty, Opsgenie, Twilio A2H, Pushover'
 }
@@ -363,6 +363,11 @@ export function loadConfig(env = process.env) {
       readingGradeIntroMax: int('READING_GRADE_INTRO_MAX', { min: 1, max: 20 }),
       readingGradePostMax: int('READING_GRADE_POST_MAX', { min: 1, max: 20 }),
       readingGradeHardMargin: num('READING_GRADE_HARD_MARGIN', { min: 0, max: 10 }),
+      // Phase 12: a sentence over SENTENCE_HARD_MAX_WORDS or a paragraph over PARAGRAPH_MAX_SENTENCES is a hard check
+      // (a repair call); sentences of SENTENCE_MAX_WORDS+1 to SENTENCE_HARD_MAX_WORDS words are listed for the Reviewer.
+      sentenceMaxWords: int('SENTENCE_MAX_WORDS', { min: 5, max: 60 }),
+      sentenceHardMaxWords: int('SENTENCE_HARD_MAX_WORDS', { min: 5, max: 200 }),
+      paragraphMaxSentences: int('PARAGRAPH_MAX_SENTENCES', { min: 1, max: 99 }),
       wordsHardMarginPct: int('WORDS_HARD_MARGIN_PCT', { max: 100 }),
       timezone
     },

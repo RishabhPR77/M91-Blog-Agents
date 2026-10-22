@@ -476,3 +476,15 @@ test('autoFixDraft: acronyms fixed in title, title_tag and meta_description; the
 test('Writer prompt: one line asks for acronyms in capitals in the title, title_tag and meta_description', () => {
   assert.match(WRITER_BASE, /Write acronyms in capitals in the title, "title_tag" and "meta_description": AI, API, MCP, SDK, LLM, SRE, CRM, JSON, URL, HTTP, SMS, OTP, M91 \(IoT stays "IoT"\)\./)
 })
+
+test('Phase 12 Writer prompt: one question per section, the answer first, no warm-ups, the hard limits from the settings, earlier guides', async () => {
+  const { buildWriterPrompt } = await import('../../src/writer/prompts.js')
+  const p = buildWriterPrompt(config(), brief(), 'new')
+  assert.match(p, /One question per section\. Every paragraph must help answer that section's question: no history, background or side topics unless the brief asks for them\./)
+  assert.match(p, /The answer comes in the first 2 sentences of the post and in the first 2 sentences of every section\./)
+  assert.match(p, /No warm-up openings such as "In this article"/)
+  assert.match(p, /Hard limits \(code checks them\): no sentence over 25 words, no paragraph over 3 sentences\./)
+  assert.match(p, /split any sentence over 20 words/)
+  assert.match(p, /point to that guide in one sentence instead of explaining the concept again/)
+  assert.match(p, /"terms_to_define"/)
+})

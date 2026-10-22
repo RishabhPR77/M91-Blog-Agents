@@ -6,16 +6,19 @@ import { reviewerIds } from './schemas.js'
 
 // Phase 10: experience (10) is new; structure and originality give 5 each (the guide now carries structure).
 // Before Phase 10, and whenever EXPERIENCE_ENABLED=false.
+// Phase 12: simplicity and to-the-point weigh more (20 and 15); structure (the code checks enforce it), tone and
+// originality weigh 5 each. SEO keeps 10. Both variants add up to 100.
 export const LEGACY_WEIGHTS = Object.freeze({
-  answers_question: 15, simplicity: 15, accuracy: 15, seo: 10, structure: 10,
-  tone: 10, originality: 10, ai_answer_readiness: 5, to_the_point: 5, m91_fit_cta: 5
+  answers_question: 15, simplicity: 20, accuracy: 15, seo: 10, structure: 5,
+  tone: 5, originality: 5, ai_answer_readiness: 5, to_the_point: 15, m91_fit_cta: 5
 })
 /** The area weights for a mode (design: is the Experience Designer on?). */
 export const weightsFor = (design = true) => (design ? WEIGHTS : LEGACY_WEIGHTS)
 
+// With the Experience Designer on, experience takes 10 from to_the_point (15 → 10) and seo (10 → 5).
 export const WEIGHTS = Object.freeze({
-  answers_question: 15, simplicity: 15, accuracy: 15, seo: 10, structure: 5,
-  tone: 10, originality: 5, ai_answer_readiness: 5, to_the_point: 5, m91_fit_cta: 5, experience: 10
+  answers_question: 15, simplicity: 20, accuracy: 15, seo: 5, structure: 5,
+  tone: 5, originality: 5, ai_answer_readiness: 5, to_the_point: 10, m91_fit_cta: 5, experience: 10
 })
 
 export const CODE_GATE_IDS = Object.freeze(['checks_hard_passed', 'sources_contradicted'])

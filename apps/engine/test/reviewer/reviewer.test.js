@@ -20,7 +20,14 @@ test('weights add up to 100; total = Σ(score/10 × weight), 1 decimal', () => {
   assert.equal(computeTotal(areasAll(10)), 100)
   assert.equal(computeTotal(areasAll(8)), 80)
   const mixed = AREA_IDS.map((id) => ({ id, score: ['answers_question', 'simplicity', 'accuracy', 'to_the_point'].includes(id) ? 9 : 8 }))
-  assert.equal(computeTotal(mixed), 85)
+  assert.equal(computeTotal(mixed), 86, 'Phase 12: those four weigh 60 (15 + 20 + 15 + 10)')
+})
+
+test('Phase 12 weights: simplicity 20 and to_the_point 15 (structure, tone, originality 5; seo 10); with the Experience Designer, experience 10', async () => {
+  const { LEGACY_WEIGHTS } = await import('../../src/reviewer/decide.js')
+  assert.deepEqual({ ...LEGACY_WEIGHTS }, { answers_question: 15, simplicity: 20, accuracy: 15, seo: 10, structure: 5, tone: 5, originality: 5, ai_answer_readiness: 5, to_the_point: 15, m91_fit_cta: 5 })
+  assert.equal(Object.values(LEGACY_WEIGHTS).reduce((a, b) => a + b, 0), 100)
+  assert.deepEqual([WEIGHTS.simplicity, WEIGHTS.to_the_point, WEIGHTS.seo, WEIGHTS.experience], [20, 10, 5, 10])
 })
 
 test('pass rule edges: 79.9 fails, 80.0 passes (PASS_SCORE_MIN=80, Phase 9); 84.9 fails at 85; one area at 6 fails; a failed AI gate fails; a failed code gate fails even with 95', () => {

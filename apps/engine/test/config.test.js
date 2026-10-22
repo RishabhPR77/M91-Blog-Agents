@@ -151,7 +151,7 @@ test('Phase 3 Strategist keys: defaults and validation', () => {
     { r: 1, w: 10, t: 70, min: 4, max: 8, q: 3, l: 5, u: false }
   )
   assert.equal(c.content.readingGradeIntroMax, 6)
-  assert.equal(c.content.readingGradePostMax, 8)
+  assert.equal(c.content.readingGradePostMax, 7)
   const keys = problemsForKeys({ OUTLINE_MIN_SECTIONS: '9', ALLOW_UPDATE_BRIEFS: 'maybe', MIN_QUESTION_HEADINGS: '12' })
   for (const k of ['OUTLINE_MIN_SECTIONS', 'ALLOW_UPDATE_BRIEFS', 'MIN_QUESTION_HEADINGS']) assert.ok(keys.includes(k), k)
 })
@@ -172,7 +172,8 @@ test('Phase 4 Writer keys: defaults, fallback pairing, validation', () => {
   assert.equal(c.writer.tutorialSourceMaxChars, 40000)
   assert.equal(c.writer.postDrafts, false)
   assert.equal(c.writer.fallbackService, undefined)
-  assert.equal(c.content.readingGradeHardMargin, 2)
+  assert.equal(c.content.readingGradeHardMargin, 0)
+  assert.deepEqual([c.content.sentenceMaxWords, c.content.sentenceHardMaxWords, c.content.paragraphMaxSentences], [20, 25, 3])
   assert.equal(c.content.wordsHardMarginPct, 20)
   assert.equal(c.notify.chunkChars, 2800)
   assert.equal(c.reviewer.stubMode, undefined, 'REVIEWER_STUB_MODE is gone (Phase 5)')

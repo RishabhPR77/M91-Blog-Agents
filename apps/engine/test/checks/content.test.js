@@ -34,8 +34,8 @@ const draft = (md = GOOD, over = {}) => ({
   ...over
 })
 const allowed = new Set([CTA, ISSUE, LLMS].map(urlKey))
-const run = (md, { b = brief(), d, statuses, snippets, snippetErrors, snippetRangeErrors, inserts, schemaErrors } = {}) =>
-  runContentChecks({ draft: d ?? draft(md), brief: b, config, allowedUrls: allowed, snippets, snippetErrors, snippetRangeErrors, inserts, linkStatuses: statuses, schemaErrors })
+const run = (md, { b = brief(), d, statuses, snippets, snippetErrors, snippetRangeErrors, inserts, schemaErrors, cfg } = {}) =>
+  runContentChecks({ draft: d ?? draft(md), brief: b, config: cfg ?? config, allowedUrls: allowed, snippets, snippetErrors, snippetRangeErrors, inserts, linkStatuses: statuses, schemaErrors })
 const get = (r, id) => r.results.find((x) => x.id === id)
 
 test('the good fixture passes every hard check and the main soft checks', () => {
@@ -51,6 +51,10 @@ test('the good fixture passes every hard check and the main soft checks', () => 
 
 // One failing variant per hard check.
 const hardCases = [
+  // Phase 12: hard so they trigger the Writer's repair call.
+  ['reading_intro', (md) => md.replace('- Agent approval pauses a risky action until a person says yes or no.', '- Comprehensive organizational authorization infrastructure necessitates deterministic accountability.'), {}],
+  ['sentence_hard', (md) => md.replace('An agent is a program that takes steps on its own.', 'An agent is a program that takes many different steps on its own without any person checking each one of those steps before they happen in the system.'), {}],
+  ['paragraph_length', (md) => md.replace('Some steps are risky, like sending money.', 'Some steps are risky. Like sending money. Or deleting data.'), {}],
   ['schema', (md) => md, { schemaErrors: ['/ must have required property tldr'] }],
   ['h1', (md) => md.replace('# How agent', '# Something else about'), {}],
   ['h1', (md) => md + '\n# A second H1\n', {}],
@@ -98,9 +102,8 @@ test('story and news attribution pass when present', () => {
 const softCases = [
   ['outline_match', (md) => md.replace('## How do I start?', '## Getting going').replace('## What happens after someone answers?', '## After the call')],
   ['words_target', (md) => md + '\n' + 'More plain words here. '.repeat(120)],
-  ['reading_intro', (md) => md.replace('- Agent approval pauses a risky action until a person says yes or no.', '- Comprehensive organizational authorization infrastructure necessitates deterministic accountability.')],
-  ['sentence_length', (md) => md.replace('An agent is a program that takes steps on its own.', 'An agent is a program that takes many different steps on its own without any person checking each one of those steps before they happen in the system.')],
-  ['paragraph_length', (md) => md.replace('Some steps are risky, like sending money.', 'Some steps are risky. Like sending money. Or deleting data.')],
+  // 21–25 words: listed for the Reviewer (soft); over 25 is sentence_hard.
+  ['sentence_length', (md) => md.replace('An agent is a program that takes steps on its own.', 'An agent is a program that takes many different steps on its own without a person checking each of those steps first.')],
   ['answer_first', (md) => md.replace('A ringing phone gets attention fast. A chat message can wait unread for hours.', 'A ringing phone gets attention. It is loud. A chat can wait.')],
   ['links_count', (md) => md.replace('[one framework handles it](https://github.com/example/agents/issues/1)', 'one framework handles it')],
   ['claims_soft', (md) => md.replace('M91 only carries the answer.', 'M91 always reaches someone instantly.')],
@@ -224,4 +227,20 @@ test('snippet_range_invalid is hard; ai_written_code accepts an inserted line ra
   assert.equal(get(run(withCode('step two\nstep three'), { snippets, inserts: [{ id: 'S1', from: 2, to: 3, code: 'step two\nstep three' }] }), 'ai_written_code').passed, true)
   assert.equal(get(run(withCode('step two\nstep three'), { snippets }), 'ai_written_code').passed, false, 'a range that was not inserted')
   assert.equal(get(run(withCode('step two\nstep 3'), { snippets, inserts: [{ id: 'S1', from: 2, to: 3, code: 'step two\nstep three' }] }), 'ai_written_code').passed, false)
+})
+
+test('Phase 12 sentence and paragraph limits: the details name the sentences; the limits come from the settings', () => {
+  const long = 'An agent is a program that takes many different steps on its own without any person checking each one of those steps before they happen in the system.'
+  const r = run(GOOD.replace('An agent is a program that takes steps on its own.', long))
+  const hard = get(r, 'sentence_hard')
+  assert.equal(hard.value, 1)
+  assert.match(hard.detail, /^1 sentence\(s\) over 25 words: "An agent is a program that takes many…" \(\d+ words\)$/)
+  assert.equal(get(r, 'sentence_length').passed, true, 'a hard sentence is not listed twice')
+  const loose = run(GOOD.replace('An agent is a program that takes steps on its own.', long), { cfg: fakeConfig({ M91_CTA_URL: CTA, TARGET_WORDS_MIN: '180', TARGET_WORDS_MAX: '500', SENTENCE_HARD_MAX_WORDS: '40', SENTENCE_MAX_WORDS: '20' }) })
+  assert.equal(get(loose, 'sentence_hard').passed, true)
+  assert.equal(get(loose, 'sentence_length').passed, false)
+  assert.match(get(loose, 'sentence_length').detail, /of 21–40 words/)
+  const p = run(GOOD.replace('Some steps are risky, like sending money.', 'Some steps are risky. Like sending money. Or deleting data.'), { cfg: fakeConfig({ M91_CTA_URL: CTA, TARGET_WORDS_MIN: '180', TARGET_WORDS_MAX: '500', PARAGRAPH_MAX_SENTENCES: '5' }) })
+  assert.equal(get(p, 'paragraph_length').passed, true)
+  assert.equal(get(run(GOOD), 'reading_post_hard').detail, 'hard limit grade 7', 'READING_GRADE_POST_MAX=7, margin 0: the target is the hard limit')
 })

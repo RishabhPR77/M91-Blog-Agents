@@ -203,15 +203,25 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
   const postGrade = fleschKincaidGrade(p.prose)
   const introText = [...(p.tldr ?? []), p.firstParagraph].join('. ')
   const introGrade = fleschKincaidGrade(introText)
+  // Phase 12: the post's grade is hard at READING_GRADE_POST_MAX (READING_GRADE_HARD_MARGIN 0), the intro's at
+  // READING_GRADE_INTRO_MAX; a sentence over SENTENCE_HARD_MAX_WORDS and a paragraph over PARAGRAPH_MAX_SENTENCES
+  // are hard too (the Writer's repair call fixes them).
   const hardGrade = c.readingGradePostMax + (c.readingGradeHardMargin ?? 2)
   R('reading_post_hard', postGrade !== null && postGrade <= hardGrade, 'hard', postGrade, `hard limit grade ${hardGrade}`)
   R('reading_post', postGrade !== null && postGrade <= c.readingGradePostMax, 'soft', postGrade, `target grade ${c.readingGradePostMax}`)
-  R('reading_intro', introGrade !== null && introGrade <= c.readingGradeIntroMax, 'soft', introGrade, `TL;DR + first paragraph, target grade ${c.readingGradeIntroMax}`)
-  const ss = sentenceStats(p.prose)
-  R('sentence_length', ss.average <= 15 && ss.over === 0, 'soft', ss.average, `average ${ss.average} words; ${ss.over} sentence(s) over 25 words`)
+  R('reading_intro', introGrade !== null && introGrade <= c.readingGradeIntroMax, c.strictIntro === false ? 'soft' : 'hard', introGrade, `TL;DR + first paragraph, limit grade ${c.readingGradeIntroMax}`)
+  const softMax = c.sentenceMaxWords ?? 20
+  const sentenceHard = c.sentenceHardMaxWords ?? 25
+  const lens = sentences(p.prose).map((x) => ({ text: x, n: words(x).length }))
+  const tooLong = lens.filter((x) => x.n > sentenceHard)
+  const longish = lens.filter((x) => x.n > softMax && x.n <= sentenceHard)
+  const quote = (x) => `"${x.text.split(/\s+/).slice(0, 8).join(' ')}…" (${x.n} words)`
+  R('sentence_hard', tooLong.length === 0, 'hard', tooLong.length, tooLong.length ? `${tooLong.length} sentence(s) over ${sentenceHard} words: ${tooLong.slice(0, 3).map(quote).join(' | ')}` : `no sentence over ${sentenceHard} words`)
+  R('sentence_length', longish.length === 0, 'soft', longish.length, longish.length ? `${longish.length} sentence(s) of ${softMax + 1}–${sentenceHard} words: ${longish.slice(0, 3).map(quote).join(' | ')}` : `every sentence at most ${softMax} words`)
   const allParas = p.sections.flatMap((s) => paragraphsOf(s.lines))
-  const longParas = allParas.filter((x) => sentenceCount(x) > 3).length
-  R('paragraph_length', longParas === 0, 'soft', longParas, 'paragraphs longer than 3 sentences')
+  const paraMax = c.paragraphMaxSentences ?? 3
+  const longParas = allParas.filter((x) => sentenceCount(x) > paraMax)
+  R('paragraph_length', longParas.length === 0, 'hard', longParas.length, longParas.length ? `${longParas.length} paragraph(s) over ${paraMax} sentences: ${longParas.slice(0, 2).map((x) => `"${x.split(/\s+/).slice(0, 8).join(' ')}…"`).join(' | ')}` : `every paragraph at most ${paraMax} sentences`)
   const answerFails = p.sections
     .filter((s) => !/what to do next/i.test(s.heading))
     .filter((s) => {

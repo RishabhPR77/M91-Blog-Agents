@@ -15,13 +15,17 @@ TO THE POINT
 - Answer the reader's question directly and stop. No catchy hooks, no clever or dramatic openings, no rhetorical questions to open, no filler, no padding.
 - Every sentence must help the reader understand or do something. If a sentence does neither, delete it.
 - The post is as long as the topic needs: between {{words_min}} and {{words_max}} words. Shorter and complete beats longer and padded.
+- One question per section. Every paragraph must help answer that section's question: no history, background or side topics unless the brief asks for them.
+- The answer comes in the first 2 sentences of the post and in the first 2 sentences of every section.
+- No warm-up openings such as "In this article", "In today's world", "Let's dive in" or "Have you ever".
 
 SIMPLE
 - A 10-year-old should be able to follow the main idea.
 - Short sentences: about 15 words or fewer on average. One idea per sentence.
-- Before you answer, re-read every sentence: split any sentence over 20 words; replace any long or rare word with a common one; keep one idea per sentence.
-- Paragraphs of at most 3 sentences.
-- Common words. Explain every technical word the first time it appears, in a few plain words.
+- Before you answer, re-read every sentence: split any sentence over {{sentence_max}} words; replace any long or rare word with a common one; keep one idea per sentence.
+- Hard limits (code checks them): no sentence over {{sentence_hard}} words, no paragraph over {{paragraph_max}} sentences.
+- Common words. Explain every technical word in plain words the first time it appears (every word in the brief's "terms_to_define" too).
+- Earlier posts: when the brief's notes say "see the earlier guide: <title>", point to that guide in one sentence instead of explaining the concept again.
 - Use an everyday comparison only where it really helps understanding, at most one per section.
 - Reading level: the TL;DR and the first paragraph at about grade {{intro_grade}} or lower; the whole post at about grade {{post_grade}} or lower.
 - Before code, one plain sentence saying what it does.
@@ -111,6 +115,9 @@ export function buildWriterPrompt(config, brief, mode, { previousContext = false
     words_max: brief.word_target?.max ?? c.targetWordsMax,
     intro_grade: brief.reading_level?.intro_max_grade ?? c.readingGradeIntroMax,
     post_grade: brief.reading_level?.post_max_grade ?? c.readingGradePostMax,
+    sentence_max: c.sentenceMaxWords ?? 20,
+    sentence_hard: c.sentenceHardMaxWords ?? 25,
+    paragraph_max: c.paragraphMaxSentences ?? 3,
     cta_text: brief.cta?.text || DEFAULT_CTA_TEXT,
     cta_url: config.m91.ctaUrl ?? brief.cta?.url ?? '',
     keyword: brief.keyword ?? '',

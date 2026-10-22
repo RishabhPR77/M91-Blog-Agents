@@ -51,8 +51,8 @@ test('plan: one call, brief saved with code fields, lead marked used, Slack summ
   assert.equal(saved[0].version, 1)
   const p = saved[0].payload
   assert.equal(p.slug, 'how-to-make-your-ai-agent-wait-for-a-human-yes')
-  assert.deepEqual(p.word_target, { min: 700, max: 1500 })
-  assert.deepEqual(p.reading_level, { intro_max_grade: 6, post_max_grade: 8 })
+  assert.deepEqual(p.word_target, { min: 500, max: 1200 })
+  assert.deepEqual(p.reading_level, { intro_max_grade: 6, post_max_grade: 7 })
   assert.deepEqual(p.internal_links, [])
   assert.equal(p.run_id, '261017-1405-ABCD')
   for (const c of STANDING_CLAIMS) assert.ok(p.claims_to_avoid.includes(c))
