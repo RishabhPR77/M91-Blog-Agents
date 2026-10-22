@@ -12,17 +12,31 @@ The header at the top of the dashboard shows:
 - **Engine online**: the engine is running.
 - **Live**: the dashboard is receiving live updates.
 - **Data loaded N min ago**: how old the dashboard's copy of the data is.
-- **Mem0 n/1000**: how many Mem0 requests have been used this month (an estimate).
+- **Mem0 n/1000 · adds n/10000**: how many Mem0 reads and writes have been used this month (an estimate).
 - **DRY RUN default** or **Live runs by default**: whether runs save and send by default.
 
 Leave the terminal window open while you work: closing it stops the engine.
 
+## The roadmap (Phase 12)
+
+Runs follow a roadmap: a learning path from "what M91 is" to comparisons and migrations, in 6 stages.
+Nothing runs until the roadmap is approved.
+
+1. Go to **Roadmap** and click **Generate** (1–2 AI calls, about 5–8 Mem0 requests). The roadmap comes back
+   as a draft.
+2. Read the stages and slots. Change what you like: **Edit** a slot, **Move** it up or down, **Skip** it.
+   Proposed slots (found by the Scout, with the demand it saw) wait for **Accept** or **Reject**.
+3. Click **Approve roadmap**. Problems (if any) are listed and block the approval.
+
+The slot marked **Next up** is what the next full run writes. Slots already written are locked.
+
 ## Run the pipeline
 
-1. Go to **Control**.
+1. Go to **Control**. Above **Run full pipeline** you see **Next up**: the slot this run will write. If it
+   says "Approve the roadmap first" or that there is nothing to write, the button is blocked.
 2. Pick a preset:
-   - **Normal run** (the default): full research, up to 2 Writer revisions. About 15–23 AI calls and 28–45
-     Mem0 requests.
+   - **Normal run** (the default): research for the slot, up to 2 Writer revisions. About 5–12 AI calls and
+     20–35 Mem0 requests.
    - **Low-cost test run**: one question group and fewer calls. About 9–14 AI calls and 25–35 Mem0 requests.
      Use it to try something out.
 3. Check **Dry run**. When it is ticked, the AI is still called (credits are used), but nothing is saved and
@@ -37,7 +51,8 @@ Leave the terminal window open while you work: closing it stops the engine.
 ## Read a draft and decide
 
 1. Go to **Approvals** and open the draft.
-2. Read the post, the Reviewer's scores and notes, and the check results. **Compare** shows what changed
+2. Read the post, the Reviewer's scores and notes, and the check results. The **Roadmap** card shows the
+   slot, its stage and the earlier posts it builds on. **Compare** shows what changed
    from the previous version.
 3. Choose one of these:
    - **Approve**: the post is approved and its final **Markdown export** is saved (the Mem0 record and
@@ -47,7 +62,8 @@ Leave the terminal window open while you work: closing it stops the engine.
      turn that off. This uses 2–4 AI calls. The new version comes back to Approvals. With the Experience
      Designer on, there is also **Change the design**.
    - **Review this version**: one Reviewer check of this version, without a rewrite.
-   - **Reject the topic**: the brief and the draft are rejected, and the topic is never picked again.
+   - **Reject the topic**: the brief and the draft are rejected, and the topic is never picked again. Its
+     roadmap slot is marked skipped.
 
 ## Get the Markdown file (Phase 11)
 
@@ -117,8 +133,9 @@ too), and `--version=<n>` for an older reviewed version.
 
 ## The Mem0 quota banner
 
-Mem0 (where the engine keeps its data) allows a limited number of requests per month (1,000 on your plan).
-The engine counts its own requests:
+Mem0 (where the engine keeps its data) has two monthly limits on your plan: 1,000 **retrievals** (reads and
+searches, `MEM0_MONTHLY_LIMIT`) and 10,000 **adds** (writes, `MEM0_MONTHLY_ADD_LIMIT`). The engine counts its
+own requests, and the banner names the limit that is close:
 - **Amber banner (80% or more):** you are getting close. Runs still work. Each run's summary also mentions
   it.
 - **Red banner (95% or more):** new runs are paused until the 1st of next month, so the data stays usable.
@@ -126,10 +143,17 @@ The engine counts its own requests:
 
 The engine's figure is an estimate. **The Mem0 console has the exact number.** If they differ, set the
 engine's figure from the console: in the `apps/engine` terminal, type `npm run mem0:usage -- --set=` followed
-by the number. Type `npm run mem0:usage` on its own to see the current estimate.
+by the Retrieval number, and `--set-adds=` followed by the Add number. Type `npm run mem0:usage` on its own
+to see the current estimate.
 
 **"Data may be out of date":** a command was run outside the dashboard and changed the data. Click **Refresh
 from Mem0** (about 7 Mem0 requests).
+
+## Start again from zero
+
+`npm run reset:all -- --dry-run` shows what would be deleted (1 Mem0 request). `npm run reset:all` deletes
+every Mem0 memory of this engine (our agent id only) and the local files in `data/` and `exports/`, after you
+type "yes". It cannot be undone. Stop any run first.
 
 ## Stop everything
 
