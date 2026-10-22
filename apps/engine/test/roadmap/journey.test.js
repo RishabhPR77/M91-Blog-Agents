@@ -2,7 +2,7 @@
 // reader's level, earlier posts instead of re-explaining, why_today). Fake AI, memory store: no AI, no Mem0.
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { knowledgeOf, saveKnowledge, knowledgeMap } from '../../src/roadmap/knowledge.js'
+import { knowledgeOf, saveKnowledge, knowledgeMap, knowledgeForPrompt, KNOWLEDGE_MAX } from '../../src/roadmap/knowledge.js'
 import { runStrategist } from '../../src/strategist/index.js'
 import { ROADMAP_RULES } from '../../src/strategist/prompts.js'
 import { saveRoadmap, loadRoadmap } from '../../src/roadmap/model.js'
@@ -33,6 +33,20 @@ test('knowledgeOf / saveKnowledge / knowledgeMap: one record per approved post, 
   assert.deepEqual((await knowledgeMap(store)).map((x) => [x.title, x.summary]), [['What M91 is', 'Your code gets the answer by a callback.'], ['Read the answer', 'Changed.']])
 })
 
+const entry = (i, summary = `Post ${i} in one line.`) => ({ brief_id: `B-${i}`, title: `Post ${i}`, slot_id: `s1-${i}`, stage: 1, stage_name: 'Foundations', concepts: ['c'], terms_defined: [], summary, link: null, export_slug: `post-${i}`, approved_at: `2026-10-20T10:${String(i).padStart(2, '0')}:00+05:30` })
+
+test('knowledgeForPrompt: at most the last 40 entries, newest first, each summary at most 200 characters', () => {
+  const map = Array.from({ length: 45 }, (_, i) => entry(i + 1, i === 44 ? 'x'.repeat(300) : undefined))
+  const out = knowledgeForPrompt(map)
+  assert.equal(KNOWLEDGE_MAX, 40)
+  assert.equal(out.length, 40)
+  assert.deepEqual([out[0].title, out[39].title], ['Post 45', 'Post 6'])
+  assert.equal(out[0].summary.length, 200)
+  assert.equal(out[1].summary, 'Post 44 in one line.')
+  assert.deepEqual(knowledgeForPrompt(map.slice(0, 2)).map((k) => k.title), ['Post 2', 'Post 1'])
+  assert.deepEqual(knowledgeForPrompt([]), [])
+})
+
 async function slotStore() {
   const store = await seededStore()
   // The focused Scout's cluster for slot s1-2 (C-1, made the slot's cluster here).
@@ -54,13 +68,26 @@ test('the Strategist plans only the slot: one lead, the stage level, the knowled
   assert.match(q.prompt, /Never re-explain those concepts/)
   assert.match(q.message, /--- POST TO PLAN \(from the roadmap\) ---\n\{"slot_id":"s1-2","title_idea":"Why a phone call beats a chat message"/)
   assert.match(q.message, /"stage":\{"number":1,"name":"Foundations","level":"beginner"/)
-  assert.match(q.message, /--- KNOWLEDGE MAP \(what the reader already learned, oldest first\) ---\n\[\{"title":"What a human approval step is","slot_id":"s1-1"/)
+  assert.match(q.message, /--- KNOWLEDGE MAP \(what the reader already learned, newest first\) ---\n\[\{"title":"What a human approval step is","slot_id":"s1-1"/)
   assert.match(q.message, /--- QUESTION CLUSTERS ---\n\[\{"cluster_id":"C-1"/)
   assert.ok(!/"cluster_id":"C-2"/.test(q.message), 'no other cluster')
   assert.match(q.message, /--- RAPID-RESPONSE STORIES ---\nnone\n--- OTHER STORIES ---\nnone/)
   assert.equal(r.brief.slot_id, 's1-2')
   assert.deepEqual(r.brief.terms_to_define, ['callback'])
   assert.equal(store.byType('brief')[0].payload.slot_id, 's1-2')
+})
+
+test('the Strategist gets the last 40 knowledge entries, newest first; the 5 oldest are left out', async () => {
+  const restore = quiet()
+  const store = await slotStore()
+  for (let i = 1; i <= 45; i++) await saveKnowledge(store, entry(i))
+  const ai = fakeAi({ plan: validBrief({ slot_id: 's1-2', terms_to_define: [], why_today: 'Builds on Post 45.' }) })
+  await runStrategist({ mode: 'plan', runId: '261022-1203-ABCD', briefId: '261022-1203-ABCD', target: slotTarget('s1-2') }, { config: strategistConfig(), store, aiSend: ai, now: () => NOW })
+  restore()
+  const sent = JSON.parse(ai.requests[0].message.split('--- KNOWLEDGE MAP (what the reader already learned, newest first) ---\n')[1].split('\n')[0])
+  assert.equal(sent.length, 40)
+  assert.deepEqual([sent[0].title, sent[39].title], ['Post 45', 'Post 6'])
+  assert.ok(!sent.some((k) => k.title === 'What a human approval step is'), 'the oldest entry (approved 2026-10-20 10:00) is left out')
 })
 
 test('a wrong or missing slot_id is fixed by code (no repair call); the plain Strategist schema stays without the roadmap', async () => {

@@ -20,6 +20,10 @@ export function knowledgeOf({ briefId, brief = {}, draft = {}, slot = null, stag
   }
 }
 
+// The Strategist's message carries at most the last 40 entries, newest first, each summary at most 200 characters.
+export const KNOWLEDGE_MAX = 40
+export const KNOWLEDGE_SUMMARY_MAX = 200
+
 /** All knowledge records, oldest first (the order the reader met them). */
 export async function knowledgeMap(store) {
   return (await store.getRecords({ type: 'knowledge' }))
@@ -40,5 +44,8 @@ export async function saveKnowledge(store, payload) {
 
 /** The compact list for the Strategist's message. */
 export const compactKnowledge = (k) => ({
-  title: k.title, slot_id: k.slot_id, stage: k.stage, concepts: k.concepts, terms_defined: k.terms_defined, summary: k.summary, ...(k.link && { link: k.link }), ...(k.export_slug && { export_slug: k.export_slug })
+  title: k.title, slot_id: k.slot_id, stage: k.stage, concepts: k.concepts, terms_defined: k.terms_defined, summary: String(k.summary ?? '').slice(0, KNOWLEDGE_SUMMARY_MAX), ...(k.link && { link: k.link }), ...(k.export_slug && { export_slug: k.export_slug })
 })
+
+/** The knowledge map as the Strategist gets it: the last `max` entries (from the oldest-first map), newest first, compact. */
+export const knowledgeForPrompt = (entries, max = KNOWLEDGE_MAX) => entries.slice(-max).reverse().map(compactKnowledge)

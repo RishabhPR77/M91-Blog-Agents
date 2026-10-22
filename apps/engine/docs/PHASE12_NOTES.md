@@ -81,7 +81,8 @@ They are not written until you accept them.
 
 - After each approval, a `knowledge` record lists what the reader has learned (the slot's `teaches` and the
   brief's `terms_to_define`).
-- The Strategist gets the post to plan, the knowledge map and the sources. Its brief says which earlier posts
+- The Strategist gets the post to plan, the knowledge map and the sources. The map it gets is capped: at most
+  the last 40 entries, newest first, each summary at most 200 characters (no agent gets an earlier post's text). Its brief says which earlier posts
   it builds on (`why_today`) and which terms it must define (up to 8).
 
 ## Task 6: a stricter, simpler Writer

@@ -1,7 +1,7 @@
 // Inputs for the Strategist, gathered by code from Mem0 (Phase 3 brief, section 6). Never by the AI.
 
 import { istDate } from '../util/time.js'
-import { knowledgeMap, compactKnowledge } from '../roadmap/knowledge.js'
+import { knowledgeMap, knowledgeForPrompt } from '../roadmap/knowledge.js'
 import { storyDateRule } from '../scout/checks.js'
 import { MESSAGE_MAX } from '../scout/prompts.js'
 
@@ -198,7 +198,7 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     leadCount: leadIndex.size,
     // Phase 12
     target: slotTarget ? { slot_id: slotTarget.slot.slot_id, title_idea: slotTarget.slot.title_idea, question: slotTarget.slot.question, teaches: slotTarget.slot.teaches ?? [], needs: slotTarget.slot.needs ?? [], stage: slotTarget.stage } : pinTarget ? { pinned_id: pinTarget.pin.pinned_id, topic: pinTarget.pin.topic } : null,
-    knowledge: knowledge.map(compactKnowledge),
+    knowledge: knowledgeForPrompt(knowledge),
     slotSources
   }
 }
@@ -211,7 +211,7 @@ export function buildStrategistMessage(inputs, tail = '', max = MESSAGE_MAX) {
   const take = { other: 10, covered: 60, clusters: 8, tutorials: 5 }
   const build = () => [
     '--- TODAY ---', inputs.today,
-    ...(inputs.target ? ['--- POST TO PLAN (from the roadmap) ---', json(inputs.target), '--- KNOWLEDGE MAP (what the reader already learned, oldest first) ---', listOrNone(inputs.knowledge ?? []), '--- SOURCES FOR THIS POST ---', listOrNone(inputs.slotSources ?? [])] : []),
+    ...(inputs.target ? ['--- POST TO PLAN (from the roadmap) ---', json(inputs.target), '--- KNOWLEDGE MAP (what the reader already learned, newest first) ---', listOrNone(inputs.knowledge ?? []), '--- SOURCES FOR THIS POST ---', listOrNone(inputs.slotSources ?? [])] : []),
     '--- PINNED TOPICS DUE ---', listOrNone(inputs.pinnedDue),
     '--- RAPID-RESPONSE STORIES ---', listOrNone(inputs.rapidStories),
     '--- OTHER STORIES ---', listOrNone(inputs.otherStories.slice(0, take.other)),
