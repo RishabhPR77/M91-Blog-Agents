@@ -282,9 +282,10 @@ async function main() {
 
   // Phase 9 A5: this month's Mem0 usage estimate; --set=<n> takes the figure from the Mem0 console.
   if (args._[0] === 'mem0-usage') {
-    const u = args.set !== undefined ? setUsage(config, Number(args.set)) : usageStatus(config)
-    console.log(`Mem0 requests this month (${u.month}, estimate): ${u.used}/${u.limit} (${u.pct}%) · level ${u.level} · resets ${u.resets_on.slice(0, 10)}${u.seed ? ` · ${u.seed} from the Mem0 console` : ''}`)
-    console.log(`counted here: reads ${u.total.reads}, searches ${u.total.searches}, writes ${u.total.writes}. The Mem0 console has the exact figure.`)
+    // --set=<retrievals> [--set-adds=<adds>]: the two figures from the Mem0 console (Retrieval and Add).
+    const u = args.set !== undefined ? setUsage(config, Number(args.set), { ...(args['set-adds'] !== undefined && { adds: Number(args['set-adds']) }) }) : usageStatus(config)
+    console.log(`Mem0 retrievals this month (${u.month}, estimate): ${u.used}/${u.limit} (${u.pct}%) · adds ${u.adds.used}/${u.adds.limit} (${u.adds.pct}%) · level ${u.level} · resets ${u.resets_on.slice(0, 10)}${u.seed || u.seed_adds ? ` · ${u.seed} retrievals and ${u.seed_adds} adds from the Mem0 console` : ''}`)
+    console.log(`counted here: reads ${u.total.reads}, searches ${u.total.searches} (retrievals), writes ${u.total.writes} (adds). The Mem0 console has the exact figures.`)
     return
   }
 

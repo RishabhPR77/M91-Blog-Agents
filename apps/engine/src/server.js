@@ -374,7 +374,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     // Health never touches Mem0: the index's age and whether another process changed Mem0 since it loaded.
     if (method === 'GET' && path === '/api/health') {
       const u = config ? usageStatus(config, { now }) : null
-      return send(res, 200, { ok: true, version: VERSION, run_in_progress: isRunning(), ...(store?.isIndex && { index: store.status() }), ...(u && { mem0_usage: { month: u.month, used: u.used, limit: u.limit, pct: u.pct, level: u.level, warn_pct: u.warn_pct, stop_pct: u.stop_pct, resets_on: u.resets_on, total: u.total } }) })
+      return send(res, 200, { ok: true, version: VERSION, run_in_progress: isRunning(), ...(store?.isIndex && { index: store.status() }), ...(u && { mem0_usage: { month: u.month, used: u.used, limit: u.limit, pct: u.pct, level: u.level, limited: u.limited, adds: u.adds, warn_pct: u.warn_pct, stop_pct: u.stop_pct, resets_on: u.resets_on, total: u.total } }) })
     }
 
     if (path === '/api/login' && method === 'POST') {
