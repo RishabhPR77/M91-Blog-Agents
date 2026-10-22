@@ -5,7 +5,7 @@ import { log } from '../util/log.js'
 import { istDate, istIso } from '../util/time.js'
 import { newBriefId, newRecordId, newScoutThreadId } from '../util/ids.js'
 import { createViaSocketClient, AiError, TruncatedError } from '../viasocket.js'
-import { SCOUT_BASE, FACTS, QUESTIONS, STORIES, TUTORIALS, CLUSTERS, STYLE, SOURCES, SCHEMA_RETRY_NOTE, TOPIC_GROUPS, MESSAGE_MAX, buildPrompt, fitMessage } from './prompts.js'
+import { SCOUT_BASE, FACTS, QUESTIONS, STORIES, TUTORIALS, CLUSTERS, STYLE, SOURCES, SLOT_QUESTIONS, SLOT_SOURCES, SCHEMA_RETRY_NOTE, TOPIC_GROUPS, MESSAGE_MAX, buildPrompt, fitMessage } from './prompts.js'
 import { SCHEMAS, scout_m91_facts_inline } from './schemas.js'
 import { limiter, validateAgainst, createUrlChecker, normaliseUrl, isKeptStatus, protectFields, removeLongQuotes, storyDateRule, freshnessFromDates } from './checks.js'
 import { buildDocsBundle, fetchSkillReadme, DocsError } from './docs.js'
@@ -14,6 +14,8 @@ import { rankClusters } from './rank.js'
 import { emit, scoutStepName, throwIfCancelled, CancelledError } from '../events.js'
 import { saveRunLog } from '../util/runlog.js'
 import { dedupeSettings } from '../dedupe.js'
+import { loadRoadmap, saveRoadmap, allSlots } from '../roadmap/model.js'
+import { roadmapProblems } from '../roadmap/checks.js'
 
 /** An error that fails the pipeline run (brief 13). */
 export class ScoutError extends Error {
@@ -169,6 +171,8 @@ export async function runScout(params = {}, deps = {}) {
   }
 
   if (params.mode === 'sources') return sourcesMode()
+  // Phase 12: one roadmap slot (or a due pinned topic) only: facts, its questions, its sources (+ tutorial steps in stage 2).
+  if (params.mode === 'slot') return slotMode()
   // Phase 12: the facts step alone (the Roadmap Planner's input); today's record is reused.
   if (params.mode === 'facts') {
     const f = await getFacts()
@@ -176,6 +180,132 @@ export async function runScout(params = {}, deps = {}) {
   }
   if (params.mode !== 'research') throw new ScoutError(`unknown Scout mode "${params.mode}"`)
   return researchMode()
+
+  // ======================= slot mode (Phase 12) =======================
+
+  /**
+   * The focused Scout: research only the post the roadmap chose (params.target: { kind: 'slot', slot, stage } or
+   * { kind: 'pinned', pin }). About 2 AI calls (questions, sources), +1 for the facts when today's are not there
+   * yet, +1 for tutorial steps in stage 2 (First steps). No stories, clusters or style calls.
+   * Saves: one question_cluster (with the slot id), one source_pack (for the run's brief id), a tutorial_lead in
+   * stage 2, and, when people strongly ask about something not on the roadmap, a "proposed" slot for the person.
+   */
+  async function slotMode() {
+    const t = params.target
+    if (!t || (t.kind !== 'slot' && t.kind !== 'pinned')) throw new ScoutError('slot mode needs a target (a roadmap slot or a pinned topic)')
+    const slot = t.kind === 'slot' ? t.slot : { slot_id: null, title_idea: t.pin.topic, question: /\?$/.test(t.pin.topic) ? t.pin.topic : `${t.pin.topic}?`, teaches: [], needs: [] }
+    const stage = t.kind === 'slot' ? t.stage : null
+    const factsResult = await getFacts()
+    const facts = factsResult.payload
+    const factsSummary = summariseFacts(facts)
+    const slotText = [
+      `Question: ${slot.question}`,
+      `Working title: ${slot.title_idea}`,
+      slot.teaches?.length ? `Teaches: ${slot.teaches.join(', ')}` : null,
+      stage ? `Stage: ${stage.number} ${stage.name} (${stage.level}): ${stage.goal}` : 'A pinned topic (outside the roadmap)',
+      t.kind === 'pinned' && t.pin.notes ? `Notes: ${t.pin.notes}` : null
+    ].filter(Boolean).join('\n')
+    const roadmapRec = await loadRoadmap(store)
+    const roadmapText = roadmapRec?.payload ? roadmapRec.payload.stages.map((st) => `Stage ${st.number} ${st.name}: ${st.slots.map((s) => s.title_idea).join(' · ')}`).join('\n') : '(no roadmap)'
+
+    // 1. The real questions about this post (web).
+    const qRes = await callAi('questions-slot', {
+      task: SLOT_QUESTIONS,
+      values: { questions_max: sc.questionsPerGroup },
+      sections: { facts: factsSummary, slot: slotText, roadmap: roadmapText },
+      schema: SCHEMAS.scout_slot_questions,
+      delivery: sc.researchDelivery,
+      fewer: { values: { questions_max: Math.max(1, Math.floor(sc.questionsPerGroup / 2)) }, note: 'Your last answer was cut off. Return fewer related questions.' },
+      timeoutMs: sc.questionsTimeoutMs
+    })
+    const related = []
+    for (const q of qRes.value.related_questions.slice(0, sc.questionsPerGroup)) {
+      const live = await liveUrl(q.source_url)
+      if (!live) continue
+      protectFields(q, [], ['question', 'demand_evidence'])
+      related.push({ ...q, source_url: live.url, url_status: live.status })
+    }
+    await runLog(qRes.meta, { returned: qRes.value.related_questions.length, kept: related.length, dropped: qRes.value.related_questions.length - related.length })
+    const clusterPayload = {
+      cluster_id: newRecordId('C', new Date(now())), main_question: qRes.value.main_question || slot.question, related_questions: related.map((q) => q.question),
+      questions: related, demand: qRes.value.demand, slot_id: slot.slot_id, stage: stage?.number ?? null, pinned_id: t.kind === 'pinned' ? t.pin.pinned_id : null,
+      title_idea: slot.title_idea, teaches: slot.teaches ?? [], m91_fit: { score: 5, reason: t.kind === 'slot' ? 'a slot of the approved roadmap' : 'a pinned topic' }
+    }
+    const clusterRec = await store.createRecord({ type: 'question_cluster', briefId: null, payload: clusterPayload, status: 'open', date: today })
+
+    // 2. Sources a writer can cite for it (web).
+    // A failed sources call is a warning: the post can still be planned from the M91 facts.
+    const sRes = await tryCall('sources-slot', {
+      task: SLOT_SOURCES,
+      values: { sources_max: 6 },
+      sections: { facts: factsSummary, slot: slotText },
+      schema: SCHEMAS.scout_slot_sources,
+      delivery: sc.researchDelivery
+    })
+    const results = []
+    for (const s of (sRes?.value.sources ?? []).slice(0, 6)) {
+      const live = await liveUrl(s.url)
+      if (!live) continue
+      protectFields(s, [], ['what_it_covers'])
+      results.push({ url: live.url, publisher: s.publisher, verdict: 'supports', note: s.what_it_covers, kind: s.kind, url_status: live.status })
+    }
+    if (sRes) await runLog(sRes.meta, { returned: sRes.value.sources.length, kept: results.length, dropped: sRes.value.sources.length - results.length })
+    const packPayload = { brief_id: params.briefId ?? runId, version: null, slot_id: slot.slot_id, claims: [{ claim: slot.question, results, verdict: results.length ? 'supported' : 'unverified' }] }
+    const packRec = await store.createRecord({ type: 'source_pack', briefId: params.briefId ?? runId, payload: packPayload, status: 'current', date: today })
+
+    // 3. Stage 2 (First steps): tutorial steps, only from the M91 docs and the skill repository.
+    const tutorialIds = []
+    if (stage?.number === 2) {
+      const readme = await fetchSkillReadme({ repoUrl: config.m91.skillRepoUrl, fetch: fetchImpl })
+      const tRes = await tryCall('tutorials', {
+        task: `${TUTORIALS}\n\nOnly ideas for this post: ${slot.question} (return at most 2).`,
+        sections: { facts: summariseFacts(facts, { only: ['can', 'integrations'] }), skillRepo: readme.text ?? `(README not available) ${config.m91.skillRepoUrl}`, slot: slotText },
+        schema: SCHEMAS.scout_tutorials,
+        delivery: sc.delivery,
+        fewer: { values: {}, note: 'Your last answer was cut off. Return at most 1 tutorial idea.' }
+      })
+      for (const idea of (tRes?.value.tutorials ?? []).slice(0, 2)) {
+        const payload = { tutorial_id: newRecordId('T', new Date(now())), ...idea, slot_id: slot.slot_id }
+        await store.createRecord({ type: 'tutorial_lead', briefId: null, payload, status: 'open', topicGroup: idea.topic_group ?? null, date: today })
+        tutorialIds.push(payload.tutorial_id)
+      }
+      if (tRes) await runLog(tRes.meta, { returned: tRes.value.tutorials?.length ?? 0, kept: tutorialIds.length, dropped: 0 })
+    }
+
+    // 4. Strong demand off the roadmap: a "proposed" slot for the person to accept (never picked on its own).
+    const proposed = []
+    if (roadmapRec?.payload && qRes.value.off_roadmap.length) {
+      const roadmap = structuredClone(roadmapRec.payload)
+      const known = new Set(allSlots(roadmap).map((s) => s.title_idea.toLowerCase()))
+      for (const o of qRes.value.off_roadmap.slice(0, 2)) {
+        if (known.has(o.title_idea.toLowerCase())) continue
+        const st = roadmap.stages.find((x) => x.number === o.stage)
+        if (!st) continue
+        const used = new Set(st.slots.map((s) => s.slot_id))
+        let n = 1
+        while (used.has(`s${st.number}-${n}`)) n++
+        const candidate = { slot_id: `s${st.number}-${n}`, title_idea: o.title_idea.slice(0, 90), question: o.question, teaches: o.teaches.slice(0, 3), needs: [], status: 'proposed', brief_id: '', evidence_url: o.evidence_url, demand_evidence: o.demand_evidence, proposed_at: istIso(new Date(now())) }
+        st.slots.push(candidate)
+        const problems = roadmapProblems(roadmap)
+        if (problems.length) {
+          st.slots.pop()
+          warnings.push(`proposed slot "${o.title_idea}" not added: ${problems[0]}`)
+          continue
+        }
+        proposed.push(candidate.slot_id)
+      }
+      if (proposed.length) await saveRoadmap(store, roadmap, roadmapRec, { now })
+    }
+
+    return {
+      mode: 'slot', run_id: runId, target: { kind: t.kind, slot_id: slot.slot_id, stage: stage?.number ?? null },
+      facts_record_id: factsResult.id, facts_reused: factsResult.reused, cluster_id: clusterPayload.cluster_id, cluster_record_id: clusterRec.id,
+      cluster_ids: [clusterPayload.cluster_id], source_pack_id: packRec.id, sources: results.length, tutorial_ids: tutorialIds, proposed_slot_ids: proposed,
+      top_clusters: [{ cluster_id: clusterPayload.cluster_id, main_question: clusterPayload.main_question }],
+      counts: { questions: related.length, clusters_new: 1, clusters_merged: 0, stories: 0, tutorials: tutorialIds.length, sources: results.length },
+      calls_used: callsUsed, warnings, calls
+    }
+  }
 
   // ======================= research mode =======================
 

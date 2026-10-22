@@ -50,7 +50,13 @@ export const VALID = {
       { claim: 'M91 rings a phone for approval', results: [{ url: DOC_INTRO, publisher: 'M91 docs', verdict: 'supports', note: 'The docs say so.' }] },
       { claim: 'M91 was founded on the Moon', results: [] }
     ]
-  }
+  },
+  // Phase 12: the focused Scout.
+  scout_slot_questions: {
+    main_question: 'What is M91?', related_questions: [{ question: 'Why page a human?', source_url: 'https://reddit.example.com/r1', demand_evidence: '10 upvotes' }],
+    demand: { level: 'medium', reason: 'asked a few times' }, off_roadmap: []
+  },
+  scout_slot_sources: { sources: [{ url: DOC_INTRO, publisher: 'M91 docs', what_it_covers: 'What M91 does.', kind: 'docs' }] }
 }
 
 /** One invalid answer per schema. */
@@ -61,7 +67,9 @@ export const INVALID = {
   scout_tutorials: { tutorials: [{ title: 't' }] },
   scout_clusters: { clusters: [{ main_question: 'q', extra: true }] },
   scout_style: { topic: 't', based_on: [], notes: {} },
-  scout_sources: { claims: [{ claim: 'c', results: [{ url: 'u', publisher: 'p', verdict: 'maybe', note: 'n' }] }] }
+  scout_sources: { claims: [{ claim: 'c', results: [{ url: 'u', publisher: 'p', verdict: 'maybe', note: 'n' }] }] },
+  scout_slot_questions: { main_question: 'q', related_questions: [], demand: { level: 'huge', reason: 'r' }, off_roadmap: [] },
+  scout_slot_sources: { sources: [{ url: 'u', publisher: 'p', what_it_covers: 'w', kind: 'blog' }] }
 }
 
 export const CALL_RE = /-(facts|questions-[1-5]|stories|tutorials|clusters|style|sources)-[a-z0-9]{4}$/

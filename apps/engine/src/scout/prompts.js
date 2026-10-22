@@ -110,6 +110,25 @@ For each claim return up to 2 results with:
 - "note": one sentence on what exactly the source says, in your own words.
 If you find nothing, return the claim with an empty results list.`
 
+// Phase 12: the focused Scout researches only the post the roadmap chose (POST TO RESEARCH).
+export const SLOT_QUESTIONS = `Task: find the real questions people ask about ONE planned post: the POST TO RESEARCH in the message.
+
+Search like a real user would: Google-style questions, Reddit, Stack Overflow, GitHub issues and discussions, Hacker News. Prefer questions asked recently.
+
+Return:
+- "main_question": the reader's question in plain, simple words. Keep the post's question unless people clearly ask it another way.
+- "related_questions": up to {{questions_max}} real questions people ask about this post's topic, each with "question" (plain words), "source_url" (where you saw it) and "demand_evidence" (the visible sign of demand: upvotes, comments, answers; "none visible" if none). Never estimate search volumes.
+- "demand": "level" (high, medium or low) and a one-sentence "reason" based only on what you saw.
+- "off_roadmap": topics people clearly and strongly ask about that are NOT in ROADMAP and fit M91 (use M91 FACTS). At most 2, often none. Each with "title_idea", "question" (ending with "?"), "stage" (1 to 5, from the stage names in ROADMAP), "teaches" (1 to 3 concepts), "evidence_url" and "demand_evidence". Comparisons and migrations only in stage 5.`
+
+export const SLOT_SOURCES = `Task: find authoritative sources a writer can cite for ONE planned post: the POST TO RESEARCH in the message.
+Prefer, in this order: official documentation (the M91 docs in M91 FACTS first), the company's own blog or announcements, standards bodies or regulators, reputable publications.
+Return up to {{sources_max}} sources, each with:
+- "url" and "publisher",
+- "what_it_covers": one sentence, in your own words, on what the page explains that helps answer the post's question,
+- "kind": docs, official, standard, publication or community.
+Only pages you could open. Never invent a URL.`
+
 // Appended to a call whose answer failed schema validation (brief 11.1).
 export const SCHEMA_RETRY_NOTE = 'Your last answer did not match the schema. Return only valid JSON.'
 
@@ -138,7 +157,7 @@ export function buildPrompt(task, values) {
 export const MESSAGE_MAX = 50000
 const CUT_NOTE = '\n[… cut to fit the message size limit]'
 // Sections that can lose their tail without breaking anything, cut first.
-const CUTTABLE = ['docs', 'skillRepo', 'alreadyCovered', 'facts']
+const CUTTABLE = ['docs', 'skillRepo', 'alreadyCovered', 'roadmap', 'facts']
 
 /**
  * buildMessage, guaranteed ≤ max characters: trims cuttable sections (largest share first, in
@@ -165,7 +184,9 @@ export function fitMessage(sections, max = MESSAGE_MAX) {
 export function buildMessage(sections) {
   const order = [
     ['today', 'TODAY'], ['facts', 'M91 FACTS (summary)'], ['alreadyCovered', 'ALREADY COVERED'], ['competitors', 'COMPETITORS'],
-    ['questions', 'QUESTIONS'], ['docs', 'M91 DOCS'], ['skillRepo', 'M91 SKILL REPO'], ['claims', 'CLAIMS']
+    ['questions', 'QUESTIONS'], ['docs', 'M91 DOCS'], ['skillRepo', 'M91 SKILL REPO'], ['claims', 'CLAIMS'],
+    // Phase 12: the focused Scout.
+    ['slot', 'POST TO RESEARCH'], ['roadmap', 'ROADMAP']
   ]
   return order
     .filter(([key]) => sections[key] !== undefined && sections[key] !== null)

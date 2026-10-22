@@ -45,7 +45,10 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
     async scout(ctx) {
       const output = ctx.scoutMode === 'sources'
         ? await runScout({ mode: 'sources', briefId: ctx.briefId, version: ctx.version, claims: ctx.routeClaims ?? ctx.review?.claims ?? [], reviewerNote: ctx.review?.summary }, deps)
-        : await runScout({ mode: 'research', runId: ctx.runId }, deps)
+        // Phase 12: with a roadmap target, the focused Scout researches only that post.
+        : ctx.scoutMode === 'slot'
+          ? await runScout({ mode: 'slot', runId: ctx.runId, briefId: ctx.briefId, target: ctx.target }, deps)
+          : await runScout({ mode: 'research', runId: ctx.runId }, deps)
       return { model: config.scout.model, output }
     },
     async writer(ctx) {
@@ -315,7 +318,7 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   }
 
   async function research() {
-    scoutMode = 'research'
+    scoutMode = target && target.kind !== 'none' ? 'slot' : 'research'
     leads = await step('scout', ctx())
   }
   // Reviewer sent the post to the Scout: find sources for its claims, then back to the Writer.
