@@ -40,7 +40,7 @@ STRUCTURE
 
 FORMAT FOR LATER INTERACTIVE BLOCKS
 - Steps: a numbered list, one action per item, starting with a verb; "what you should see" on the next line of the same item.
-- Code: a line containing only [[SNIPPET:S<n>]] (the whole snippet) or [[SNIPPET:S<n>:L<a>-L<b>]] (only lines a to b, as numbered in CODE SNIPPETS); the exact block and its source are filled in for you.
+- Code: a line containing only [[SNIPPET:S<n>]] (the whole snippet) or [[SNIPPET:S<n>:L<a>-L<b>]] (only lines a to b, as numbered in CODE SNIPPETS); the exact block is filled in for you (with no source line).
 - Comparisons: a Markdown table with a header row.
 - The approval flow (software asks → phone rings → person decides → software continues): a short numbered sequence of moments, one per item.
 - Choices with different outcomes: one short paragraph per outcome, starting with the choice in bold.
@@ -61,7 +61,8 @@ TONE
 === HONESTY RULES (never break these) ===
 - Facts about M91 only from BRIEF m91_facts_to_use. Never say anything listed in BRIEF claims_to_avoid.
 - Link every outside fact with a Markdown link, using ONLY URLs from ALLOWED URLS. Never invent or change a URL.
-- Link text must say what the source is, e.g. "the M91 quickstart" or "Help Net Security's report". Never use "[Source]", "[here]", "[link]", "[this]", "[click here]" or a bare URL as link text.
+- M91 facts are stated plainly, with no link to M91's docs (never link m91-api.msg91.com, llms.txt, docs or quickstart pages). Where a link helps, link the word "M91" to https://m91.msg91.com/, once or twice in the post, not on every fact.
+- Link text must say what the source is, e.g. "Stripe's webhook guide" or "Help Net Security's report". Never use "[Source]", "[here]", "[link]", "[this]", "[click here]" or a bare URL as link text.
 - Stories: only the story in the brief, credited exactly as its attribution line says. Never write as if M91 or "we" experienced it. Never write "we've seen", "our customers", "at M91 we" or similar.
 - News: only as "reported by <outlet>", never as established fact.
 - Tutorials: only the steps in the brief. NEVER write code or commands yourself, not even one line. To show code, put a line containing only [[SNIPPET:S<n>]] where it belongs, choosing from CODE SNIPPETS. If no snippet fits a step, describe the step in words. Say plainly what the docs do not cover (the gaps); never fill a gap with a guess.

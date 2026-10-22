@@ -66,6 +66,8 @@ export async function latestExport(store, briefId) {
  */
 export async function saveFinalExport({ store, config, briefId, version, now = Date.now, dir = exportDir(config) }) {
   const built = await previewExport({ store, config, briefId, version, now })
+  // The hard check on the export: a file that still links to M91's docs is never written.
+  if (built.docs_links?.length) throw new ExportError('docs_links', `the export still links to M91's docs: ${built.docs_links.slice(0, 3).join(', ')}`, 409)
   mkdirSync(dir, { recursive: true })
   const path = join(dir, built.filename)
   writeFileSync(path, built.markdown, 'utf8')
@@ -79,4 +81,32 @@ export async function saveFinalExport({ store, config, briefId, version, now = D
     ? { id: existing.id, ...(await store.updateRecord(existing.id, payload, { status: 'final', slug: built.slug }, { known: existing })) }
     : await store.createRecord({ type: 'markdown_export', briefId, payload, status: 'final', version: built.version, meta: { slug: built.slug, brief_version: built.brief_version } })
   return { ...built, record_id: record?.id ?? existing?.id ?? null, path, exported_at: payload.exported_at, replaced: Boolean(existing) }
+}
+
+/**
+ * Re-exports every approved (or published) post with the current export rules, e.g. no M91 docs links (0 AI
+ * calls): for each brief, the newest approved draft gets its final export again (record replaced, file rewritten).
+ * A post that fails is listed and the others go on. Returns { exported: [...], failed: [...] }.
+ */
+export async function reexportApproved({ store, config, now = Date.now, dir = exportDir(config) }) {
+  const newest = new Map()
+  for (const status of ['approved', 'published']) {
+    for (const d of await store.getRecords({ type: 'draft', status })) {
+      const briefId = d.briefId ?? d.payload?.brief_id
+      if (!briefId || draftVersion(d) === null) continue
+      const best = newest.get(briefId)
+      if (!best || draftBriefVersion(d) > draftBriefVersion(best) || (draftBriefVersion(d) === draftBriefVersion(best) && draftVersion(d) > draftVersion(best))) newest.set(briefId, d)
+    }
+  }
+  const exported = []
+  const failed = []
+  for (const [briefId, d] of newest) {
+    try {
+      const out = await saveFinalExport({ store, config, briefId, version: draftVersion(d), now, dir })
+      exported.push({ brief_id: briefId, version: out.version, filename: out.filename, path: out.path, replaced: out.replaced, warnings: out.warnings })
+    } catch (error) {
+      failed.push({ brief_id: briefId, version: draftVersion(d), error: error.message })
+    }
+  }
+  return { exported, failed }
 }

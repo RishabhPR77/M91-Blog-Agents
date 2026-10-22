@@ -25,7 +25,7 @@ import { runReviewer } from './reviewer/index.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { runPromo, approvedDraft } from './promo/index.js'
 import { runExperience, designableDraft } from './experience/index.js'
-import { saveFinalExport, previewExport, exportableDraft, latestExport, ExportError } from './export/index.js'
+import { saveFinalExport, previewExport, exportableDraft, latestExport, ExportError, reexportApproved } from './export/index.js'
 import { createDocstar, publishToDocstar } from './publisher/docstar.js'
 import { createPublisher, publishPreflight, PublishError } from './publisher/index.js'
 import { draftsOf } from './writer/save.js'
@@ -413,6 +413,15 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       // Phase 11: the Markdown export of a reviewed draft (0 AI calls). save: also the final export (record + file).
       emit('step.started', { agent: 'export', step: 'export' })
       try {
+        if (params.all_approved) {
+          // Every approved post again, with the current export rules (no M91 docs links). 0 AI calls.
+          const r = await reexportApproved({ store, config: runConfig, now })
+          const summary = `Re-exported ${r.exported.length} approved post${r.exported.length === 1 ? '' : 's'}${r.failed.length ? `, ${r.failed.length} failed` : ''}`
+          emit('step.finished', { agent: 'export', step: 'export' })
+          emit('step.output', { agent: 'export', step: 'export', message: summary, data: { exported: r.exported.map((x) => x.filename), failed: r.failed } })
+          const warnings = [...r.exported.flatMap((x) => x.warnings.map((w) => `${x.filename}: ${w}`)), ...r.failed.map((f) => `${f.brief_id} v${f.version}: ${f.error}`)]
+          return { status: 'succeeded', summary, warnings, output: r }
+        }
         const out = params.save
           ? await saveFinalExport({ store, config: runConfig, briefId: params.brief_id, version: params.version, now })
           : await previewExport({ store, config: runConfig, briefId: params.brief_id, version: params.version, now })
@@ -521,6 +530,8 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
 
   /** export mode: params.brief_id of a brief with a reviewed draft (params.version optional, params.save boolean). */
   async function checkExportParams(params, runConfig) {
+    if (params.all_approved !== undefined && params.all_approved !== true) throw new RunError('bad_params', 'all_approved must be true')
+    if (params.all_approved) return
     if (typeof params.brief_id !== 'string' || !params.brief_id.trim()) throw new RunError('bad_params', 'export needs params.brief_id')
     if (params.save !== undefined && typeof params.save !== 'boolean') throw new RunError('bad_params', 'save must be true or false')
     try {

@@ -6,6 +6,7 @@ import { BANNED_PHRASES, FIRST_PERSON_PHRASES, HARD_CLAIM_PATTERNS, SOFT_CLAIM_W
 import { needsStartHere, START_HERE_RE } from '../timely/starthere.js'
 import { fleschKincaidGrade, sentences, words, sentenceStats } from './readability.js'
 import { normaliseCode } from '../writer/snippets.js'
+import { docsLinksIn, M91_SITE_URL } from '../util/m91links.js'
 
 export const urlKey = (u) => String(u ?? '').trim().replace(/\/+$/, '').toLowerCase()
 const norm = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9?]+/g, ' ').trim()
@@ -236,6 +237,9 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
   const linkUrls = [...new Set(p.links.map((l) => l.url))]
   const notAllowed = linkUrls.filter((u) => !allowedUrls.has(urlKey(u)))
   R('links_allowed', notAllowed.length === 0, 'hard', notAllowed.length, notAllowed.length ? `not in ALLOWED URLS: ${notAllowed.slice(0, 3).join(', ')}` : 'ok')
+  // No M91 docs links in posts (outside code): only outside sources and M91's main site.
+  const docsLinks = docsLinksIn(md, config)
+  R('no_docs_links', docsLinks.length === 0, 'hard', docsLinks.length, docsLinks.length ? `links to M91's docs (use ${M91_SITE_URL}): ${docsLinks.slice(0, 3).join(', ')}` : 'ok')
   if (linkStatuses) {
     const dead = linkUrls.filter((u) => {
       const s = linkStatuses.get(urlKey(u))
@@ -243,7 +247,7 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
     })
     R('links_alive', dead.length === 0, 'hard', dead.length, dead.length ? `dead: ${dead.slice(0, 3).join(', ')}` : 'ok')
   } else R('links_alive', true, 'hard', 0, 'not checked')
-  const outside = linkUrls.filter((u) => urlKey(u) !== urlKey(ctaUrl) && !(brief?.internal_links ?? []).some((l) => urlKey(l.url) === urlKey(u)))
+  const outside = linkUrls.filter((u) => urlKey(u) !== urlKey(ctaUrl) && urlKey(u) !== urlKey(M91_SITE_URL) && !(brief?.internal_links ?? []).some((l) => urlKey(l.url) === urlKey(u)))
   const docsOnly = isTutorial && outside.every((u) => {
     try {
       const host = new URL(u).hostname.toLowerCase()

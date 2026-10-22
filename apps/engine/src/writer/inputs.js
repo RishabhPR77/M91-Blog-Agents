@@ -4,6 +4,7 @@ import { htmlToText, parseRepo, sourceHeader } from '../scout/docs.js'
 import { MESSAGE_MAX } from '../scout/prompts.js'
 import { urlKey } from '../checks/content.js'
 import { defaultToneNotes } from './tones.js'
+import { docsLinkRule, M91_SITE_URL } from '../util/m91links.js'
 
 export class WriterInputError extends Error {
   constructor(message) {
@@ -25,8 +26,11 @@ export async function loadBrief(store, briefId, briefVersion) {
   return (live.length ? live : versions).sort((a, b) => v(b) - v(a))[0]
 }
 
-/** Every URL the post may link to (brief 6.5). Returns a Set of urlKey()s plus the plain list. */
-export function allowedUrlSet(brief, { sourcePack = null, ctaUrl, snippets = [] } = {}) {
+/**
+ * Every URL the post may link to (brief 6.5). Returns a Set of urlKey()s plus the plain list. With `config`, M91
+ * docs links are left out and M91's main site is added (no docs links in posts; the docs are still read for facts).
+ */
+export function allowedUrlSet(brief, { sourcePack = null, ctaUrl, snippets = [], config = null } = {}) {
   const urls = [
     ...snippets.map((s) => s.source_url),
     ...(brief.sources ?? []).map((s) => s.url),
@@ -37,9 +41,11 @@ export function allowedUrlSet(brief, { sourcePack = null, ctaUrl, snippets = [] 
     ...(brief.outline ?? []).flatMap((s) => s.source_urls ?? []),
     ...(brief.internal_links ?? []).map((l) => l.url),
     ...supportedSources(sourcePack).map((r) => r.url),
-    ctaUrl
+    ctaUrl,
+    config ? M91_SITE_URL : null
   ].filter(Boolean)
-  const list = [...new Map(urls.map((u) => [urlKey(u), u])).values()]
+  const isDocs = config ? docsLinkRule(config).isDocs : () => false
+  const list = [...new Map(urls.filter((u) => !isDocs(u)).map((u) => [urlKey(u), u])).values()]
   return { set: new Set(list.map(urlKey)), list }
 }
 

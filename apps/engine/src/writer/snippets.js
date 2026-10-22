@@ -223,12 +223,15 @@ export function rangeBreaksJson(s, from, to) {
   return isValidJson(s.code) && !isValidJson(insertedCode(s, from, to))
 }
 
-const blockFor = (s, from, to) => ['```' + s.language, insertedCode(s, from, to), '```', '', `Source: [${sourceLabel(s)}](${s.source_url})`]
+// No source line under the code: the code comes only from the docs, but posts never link to them.
+const blockFor = (s, from, to) => ['```' + s.language, insertedCode(s, from, to), '```']
+// The block as drafts written before that rule show it (with its docs source line), so they still tokenise.
+const legacyBlockFor = (s, from, to) => [...blockFor(s, from, to), '', `Source: [${sourceLabel(s)}](${s.source_url})`]
 const tokenFor = (id, from, to) => (from ? `[[SNIPPET:${id}:L${from}-L${to}]]` : `[[SNIPPET:${id}]]`)
 
 /**
  * Replaces each line holding only [[SNIPPET:Sn]] or [[SNIPPET:Sn:La-Lb]] with the exact fenced block
- * (the whole snippet, or lines a..b) and its source line.
+ * (the whole snippet, or lines a..b), with no source line (posts never link to the docs).
  * @returns {{ markdown, used: string[], inserts: {id, from, to, code}[], errors: string[], rangeErrors: string[], widened: string[] }}
  *   errors: unknown ids and tokens not alone on a line; rangeErrors: invalid line ranges;
  *   widened: JSON line ranges that would have been invalid JSON, inserted as the whole snippet instead.
@@ -277,7 +280,7 @@ export function replaceSnippetTokens(markdown, snippets) {
 }
 
 /**
- * The reverse, for a repair or revision: each inserted block (and its source line) becomes its token
+ * The reverse, for a repair or revision: each inserted block (with or without an old source line) becomes its token
  * again. inserts: the line ranges that were inserted ({ id, from, to }); whole snippets need none.
  */
 export function tokeniseSnippets(markdown, snippets, inserts = []) {
@@ -285,8 +288,8 @@ export function tokeniseSnippets(markdown, snippets, inserts = []) {
   const byId = new Map(snippets.map((s) => [s.id, s]))
   for (const ins of inserts.filter((x) => x.from)) {
     const s = byId.get(ins.id)
-    if (s) md = md.split(blockFor(s, ins.from, ins.to).join('\n')).join(tokenFor(ins.id, ins.from, ins.to))
+    if (s) for (const b of [legacyBlockFor, blockFor]) md = md.split(b(s, ins.from, ins.to).join('\n')).join(tokenFor(ins.id, ins.from, ins.to))
   }
-  for (const s of snippets) md = md.split(blockFor(s).join('\n')).join(tokenFor(s.id))
+  for (const s of snippets) for (const b of [legacyBlockFor, blockFor]) md = md.split(b(s).join('\n')).join(tokenFor(s.id))
   return md
 }

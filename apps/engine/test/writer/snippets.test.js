@@ -71,14 +71,18 @@ test('language: fence tag first, then a guess', () => {
   assert.equal(normaliseCode('\n   a  \n     b\n\n'), 'a\n  b')
 })
 
-test('replacement: a token line becomes the exact block plus a source line; unknown ids and inline tokens are errors; tokenise reverses it', () => {
+test('replacement: a token line becomes the exact block (no source line: posts never link the docs); unknown ids and inline tokens are errors; tokenise reverses it', () => {
   const { snippets } = extractSnippets(SOURCE)
   const md = 'Intro.\n\nThis sends a test alert.\n\n[[SNIPPET:S1]]\n\nThen [[SNIPPET:S2]] inline.\n\n  [[SNIPPET:S9]]  \n'
   const r = replaceSnippetTokens(md, snippets)
   assert.deepEqual(r.used, ['S1'])
   assert.deepEqual(r.errors, ['[[SNIPPET:S2]] must be alone on its own line', 'unknown snippet id S9 (CODE SNIPPETS has S1, S2, S3, S4)'])
-  assert.ok(r.markdown.includes('```bash\ncurl -X POST "$SEND_LINK" \\\n  -d \'{"title":"Test"}\'\n```\n\nSource: [M91 Quickstart](https://m91.msg91.com/api/public/quickstart.md)'))
+  assert.ok(r.markdown.includes('```bash\ncurl -X POST "$SEND_LINK" \\\n  -d \'{"title":"Test"}\'\n```\n\nThen'))
+  assert.ok(!r.markdown.includes('Source:'))
   assert.equal(tokeniseSnippets(r.markdown, snippets), md)
+  // A draft written before the rule (block + docs source line) still tokenises.
+  const legacy = r.markdown.replace('```\n\nThen', '```\n\nSource: [M91 Quickstart](https://m91.msg91.com/api/public/quickstart.md)\n\nThen')
+  assert.equal(tokeniseSnippets(legacy, snippets), md)
   assert.equal(sourceLabel({ source_url: 'https://github.com/MSG91/m91-skill/blob/main/scripts/m91.sh' }), 'github.com: scripts/m91.sh')
 })
 
@@ -120,7 +124,8 @@ test('line ranges: valid range inserts exactly those lines; out of range and rev
   const r = replaceSnippetTokens(md, snippets)
   assert.deepEqual(r.inserts.map((x) => [x.id, x.from, x.to]), [['S1', 5, 7], ['S1', 10, 11]])
   assert.equal(r.inserts[0].code, '#   ./m91.sh check\n#   ./m91.sh send --title "..." [--severity HIGH]\n#                 [--custom-id x] [--auto-close]')
-  assert.ok(r.markdown.includes('```bash\nset -uo pipefail\necho done\n```\n\nSource: [github.com: scripts/m91.sh](' + SCRIPT_URL + ')'))
+  assert.ok(r.markdown.includes('```bash\nset -uo pipefail\necho done\n```'))
+  assert.ok(!r.markdown.includes('Source:'))
   assert.equal(r.rangeErrors.length, 3)
   assert.match(r.rangeErrors[0], /S1:L9-L12 is not a valid line range \(S1 has lines 1-11/)
   assert.match(r.rangeErrors[1], /S1:L7-L5/)

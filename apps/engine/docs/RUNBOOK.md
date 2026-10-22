@@ -105,6 +105,10 @@ npm run export -- --brief-id=<id>
 This writes the file to `apps/engine/exports/` only. Add `--save` for the final export (the Mem0 record
 too), and `--version=<n>` for an older reviewed version.
 
+Posts never link to M91's docs: a docs link becomes a link to https://m91.msg91.com/ (the run's warnings say
+so). To bring every approved post's file up to that rule, type `npm run export -- --all-approved` (0 AI calls,
+a few Mem0 requests per post).
+
 ## Publish
 
 `PUBLISH_TARGET` decides where an approved post goes:

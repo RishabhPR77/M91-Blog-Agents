@@ -7,8 +7,9 @@
 //   # Title
 //   Description
 //   ## TL;DR            (the three takeaways)
-//   …the body…          (the post without its H1 and TL;DR; old M91 site links → M91_CTA_URL; raw HTML removed)
-//   ## Sources          (every outside link, unless the body already has a Sources section)
+//   …the body…          (the post without its H1 and TL;DR; old M91 site links → M91_CTA_URL; M91 docs links →
+//                        https://m91.msg91.com/; raw HTML removed)
+//   ## Sources          (every outside link, unless the body already has a Sources section; never a docs link)
 //   ## Try M91          (the call to action, unless the body already links to M91_CTA_URL)
 //
 // Docstar's editor turns pasted or imported Markdown into blocks; its documented syntax covers headings, lists,
@@ -18,6 +19,7 @@
 import { stripTitleAndTldr, chooseSlug, sourcesOf, tagsOf, rewriteOldSiteLinks } from '../publisher/post.js'
 import { urlKey } from '../checks/content.js'
 import { istDate } from '../util/time.js'
+import { stripDocsLinks, docsLinksIn, M91_SITE_URL } from '../util/m91links.js'
 
 export const TOPIC_NAMES = Object.freeze({ 1: 'AI agents', 2: 'Fintech', 3: 'On-call', 4: 'Best practices', 5: 'Comparisons' })
 export const CTA_HEADING = 'Try M91'
@@ -76,7 +78,10 @@ export function buildMarkdownExport({ draft, brief = {}, review = null, briefId,
   warnings.push(...stripped.warnings)
   const { text: linked, count: oldLinks } = rewriteOldSiteLinks(stripped.markdown, ctaUrl)
   if (oldLinks) warnings.push(`replaced ${oldLinks} link${oldLinks === 1 ? '' : 's'} to the old M91 site with M91_CTA_URL`)
-  const { text: body, removed } = stripHtml(linked)
+  // No M91 docs links: each becomes M91's main site (link text kept); the Sources list drops docs links and duplicates.
+  const docs = stripDocsLinks(linked, config)
+  warnings.push(...docs.fixes)
+  const { text: body, removed } = stripHtml(docs.markdown)
   if (removed) warnings.push(`removed ${removed} raw HTML tag${removed === 1 ? '' : 's'} (the export is Markdown only)`)
 
   const sections = [`# ${title}`]
@@ -84,7 +89,7 @@ export function buildMarkdownExport({ draft, brief = {}, review = null, briefId,
   const tldr = (d.tldr ?? []).map((t) => String(t).trim()).filter(Boolean)
   if (tldr.length) sections.push(`## TL;DR\n\n${tldr.map((t) => `- ${t}`).join('\n')}`)
   sections.push(body.trim())
-  const sources = sourcesOf(body, { baseUrl: config.blog?.baseUrl ?? '', ctaUrl })
+  const sources = sourcesOf(body, { baseUrl: config.blog?.baseUrl ?? '', ctaUrl }).filter((s) => urlKey(s.url) !== urlKey(M91_SITE_URL))
   if (sources.length && !hasHeading(body, /^sources?\b/i)) sections.push(`## Sources\n\n${sources.map((s, i) => `${i + 1}. [${s.title.replace(/[[\]]/g, '')}](${s.url})`).join('\n')}`)
   const linksCta = ctaUrl && sourcesOf(body, { baseUrl: '', ctaUrl: null }).some((s) => urlKey(s.url) === urlKey(ctaUrl))
   if (ctaUrl && !linksCta) sections.push(`## ${CTA_HEADING}\n\n${CTA_LINE} [Get started with M91](${ctaUrl}).`)
@@ -106,5 +111,5 @@ export function buildMarkdownExport({ draft, brief = {}, review = null, briefId,
     review_passed: typeof review?.pass === 'boolean' ? review.pass : null,
     date: istDate(at)
   }
-  return { slug, filename: `${slug}.md`, title, markdown: `${frontMatter(meta)}\n${content}`, body: content, front_matter: meta, warnings }
+  return { slug, filename: `${slug}.md`, title, markdown: `${frontMatter(meta)}\n${content}`, body: content, front_matter: meta, warnings, docs_links: docsLinksIn(content, config) }
 }

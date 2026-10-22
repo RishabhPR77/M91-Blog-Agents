@@ -97,10 +97,12 @@ test('automatic fixes: fenced JSON string, missing H1, missing CTA, http→https
   const d = { title: 'T', post_markdown: 'Intro line.   \n\n\n\n\nSee http://m91.msg91.com/llms.txt now.' }
   const notes = autoFixDraft(d, { config: cfg, brief: brief() })
   assert.match(d.post_markdown, /^# T\n\nIntro line\.\n/)
-  assert.match(d.post_markdown, /https:\/\/m91\.msg91\.com\/llms\.txt/)
+  // A docs URL (here bare, after http → https) becomes M91's main site.
+  assert.match(d.post_markdown, /See https:\/\/m91\.msg91\.com\/ now\./)
+  assert.ok(notes.includes('docs links: rewrote 1 M91 docs link to https://m91.msg91.com/'), JSON.stringify(notes))
   assert.match(d.post_markdown, /## What to do next\n\n\[Try M91: send your first alert in a few minutes\.\]\(https:\/\/m91\.msg91\.com\/signup\)\n$/)
   assert.ok(!/\n{4,}/.test(d.post_markdown))
-  assert.equal(notes.length, 4)
+  assert.equal(notes.length, 5)
 })
 
 test('CTA auto-fix: a near-miss CTA URL (slash, host case, http) becomes exactly M91_CTA_URL; another URL is left alone', () => {
@@ -306,7 +308,8 @@ test('tutorial: source text fetched, code given as CODE SNIPPETS, [[SNIPPET:Sn]]
   assert.match(msg, /\[S2\] kind: file · language: bash · lines 1-2 · source: https:\/\/github\.com\/MSG91\/m91-skill\/blob\/main\/scripts\/m91\.sh/)
   assert.match(s.ai.requests[0].prompt, /NEVER write code or commands yourself, not even one line\./)
   const saved = drafts(s.store)[0].payload
-  assert.ok(saved.post_markdown.includes(`\`\`\`bash\n#!/bin/sh\n${TUTORIAL_CODE}\n\`\`\`\n\nSource: [github.com: scripts/m91.sh](${SCRIPT})`), saved.post_markdown)
+  assert.ok(saved.post_markdown.includes(`\`\`\`bash\n#!/bin/sh\n${TUTORIAL_CODE}\n\`\`\``), saved.post_markdown)
+  assert.ok(!saved.post_markdown.includes('Source:') && !saved.post_markdown.includes(SCRIPT), 'no source line, no link to the skill repo')
   assert.equal(saved.checks.results.find((x) => x.id === 'ai_written_code').passed, true)
   assert.deepEqual(saved.snippets_used, ['S2'])
   assert.equal(r.hard_passed, true)
@@ -417,7 +420,8 @@ test('tutorial: a line-range token inserts exactly those lines; the range is sav
   assert.deepEqual(s.ai.requests.map((q) => q.call), ['new', 'repair'])
   assert.match(s.ai.requests[1].message, /- snippet_range_invalid: S2:L2-L9 is not a valid line range \(S2 has lines 1-2/)
   const saved = drafts(s.store)[0].payload
-  assert.ok(saved.post_markdown.includes(`\`\`\`bash\n${TUTORIAL_CODE}\n\`\`\`\n\nSource: [github.com: scripts/m91.sh](${SCRIPT})`))
+  assert.ok(saved.post_markdown.includes(`\`\`\`bash\n${TUTORIAL_CODE}\n\`\`\``))
+  assert.ok(!saved.post_markdown.includes('Source:'))
   assert.ok(!saved.post_markdown.includes('#!/bin/sh'), 'only line 2')
   assert.deepEqual(saved.snippet_inserts.map((x) => [x.id, x.from, x.to]), [['S2', 2, 2]])
   assert.equal(saved.checks.results.find((x) => x.id === 'ai_written_code').passed, true)

@@ -223,3 +223,33 @@ The order is: a pinned topic that is due, then one `write_now` card, then the ro
 | Check news | 1 | ≈2–3 retrievals, + 1 add per new card |
 | Full run (news check on) | 6–13 | ≈21–37 |
 | Write now / Add to roadmap / Dismiss | 0 | 1–2 |
+
+## No M91 docs links in posts
+
+A post's links and its Sources list contain only real outside sources (news, articles, threads, official
+third-party docs), M91's main site https://m91.msg91.com/ and the call to action (`M91_CTA_URL`, unless it is
+itself a docs page). The agents still **read** the docs for facts (Scout facts, the Strategist's
+`m91_facts_to_use`, the Reviewer's M91 FACTS); only the links readers see change.
+
+- **What counts as a docs link** (`src/util/m91links.js`): any URL on `m91-api.msg91.com`; any path on
+  `m91.msg91.com` other than the home page (llms.txt, `/api/public/*.md`, docs.html, quickstart, …); the M91
+  skill repository on GitHub (`M91_SKILL_REPO_URL`).
+- **Writer:**
+  - docs URLs are out of ALLOWED URLS, and the main site is in;
+  - the prompt says to state M91 facts without a docs link, and to link the word "M91" to the main site once
+    or twice per post.
+- **Code snippets:** no "Source: <docs link>" line under the code. The code still comes only from the docs.
+  Drafts written with the old line still turn back into snippet tokens for a revision.
+- **Automatic fix (code, 0 AI calls):** it runs before the checks and again in the Markdown export.
+  - A docs link outside code becomes `[same text](https://m91.msg91.com/)`, and a bare docs URL becomes the
+    main site.
+  - A leftover "Source:" line goes, and the Sources list drops docs links and duplicates.
+  - Code (fenced blocks and inline code) is never changed.
+  - Each change is in the run's warnings ("docs links: …").
+- **Hard check `no_docs_links`:** no docs link may remain in the post. The export is never saved while it
+  still has one (409 `docs_links`).
+- **`links_count`** (soft): neither the docs nor the main site count as an outside source.
+- **Reviewer:** an M91 claim that matches M91 FACTS passes without a link; outside facts still need their
+  outside source. Its ALLOWED URLS follow the Writer's.
+- **Re-export:** `npm run export -- --all-approved` exports every approved post again under these rules (record
+  replaced, file rewritten). It makes 0 AI calls and a few Mem0 requests per post.

@@ -35,11 +35,12 @@ test('Scout: doc links and the bundle accept both hosts; other hosts are skipped
   assert.ok(!calls.includes('https://evil.example.com/x'))
 })
 
-test('Writer: http → https on both hosts; cited pages on both hosts are fetched; other hosts are not', async () => {
+test('Writer: docs links on both hosts become M91\'s main site; cited pages on both hosts are fetched; other hosts are not', async () => {
   const config = fakeConfig({ M91_CTA_URL: `${OLD}/signup` })
   const draft = { post_markdown: `# T\n\nSee [a](http://m91-api.msg91.com/api/public/fields.md) and [b](http://m91.msg91.com/docs/a.md).\n\n## What to do next\n\n[Try M91](${OLD}/signup)` }
   autoFixDraft(draft, { config, brief: { cta: { url: `${OLD}/signup` } } })
-  assert.ok(draft.post_markdown.includes(`(${NEW}/api/public/fields.md)`) && draft.post_markdown.includes(`(${OLD}/docs/a.md)`))
+  assert.ok(draft.post_markdown.includes('See [a](https://m91.msg91.com/) and [b](https://m91.msg91.com/).'), draft.post_markdown)
+  assert.ok(draft.post_markdown.includes(`[Try M91](${OLD}/signup)`), 'the CTA stays')
   assert.ok(!draft.post_markdown.includes('http://'))
   const fetched = []
   const fetch = async (url) => { fetched.push(url); return page(`text of ${url}`) }

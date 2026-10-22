@@ -14,7 +14,7 @@ CHECK RESULTS are measured by code (word count, reading grades, link status, phr
 - m91_claims_correct: every statement about M91 matches M91 FACTS. Anything about M91 not in M91 FACTS fails this gate.
 - claims_to_avoid_respected: nothing in the post says what BRIEF claims_to_avoid forbids.
 - no_invented_content: no invented numbers, quotes, customers, companies, results, stories or first-person experiences ("we've seen", "our customers").
-- sources_support_claims: every outside fact is linked to an allowed URL, and the sources you checked support what the post says.
+- sources_support_claims: every outside fact is linked to its outside source in ALLOWED URLS, and the sources you checked support what the post says. A claim about M91 that matches M91 FACTS passes without a link: posts never link to M91's docs.
 - story_attribution_correct: if a story is used, it is credited as the brief's attribution line says and never presented as M91's own experience. If no story is used, pass.
 - tutorial_traceable: for tutorials, every step comes from the brief's tutorial steps, and code appears only as inserted snippets. For other posts, pass if the post has no code beyond snippets.
 - answers_main_question: the post clearly answers the brief's main question near the top.

@@ -389,7 +389,7 @@ async function main() {
     await Promise.all([...new Set(parsed.links.map((l) => l.url))].map(async (u) => linkStatuses.set(urlKey(u), await checker.check(u))))
     // A bare Markdown file has no JSON answer or SEO fields: those two checks don't apply.
     const draft = { title: parsed.h1[0] ?? '', post_markdown: md, tldr: parsed.tldr ?? [], seo: { title_tag: 'n/a', meta_description: 'n/a', slug_suggestion: '' } }
-    const r = runContentChecks({ draft, brief, config, allowedUrls: allowedUrlSet(brief, { ctaUrl: config.m91.ctaUrl, snippets }).set, snippets, linkStatuses })
+    const r = runContentChecks({ draft, brief, config, allowedUrls: allowedUrlSet(brief, { ctaUrl: config.m91.ctaUrl, snippets, config }).set, snippets, linkStatuses })
     printChecks(r.results.filter((x) => x.id !== 'schema' && x.id !== 'seo_lengths'))
     console.log(`words ${r.word_count} · grades intro ${r.reading.intro_grade} / post ${r.reading.post_grade} · hard checks ${r.results.filter((x) => x.severity === 'hard' && x.id !== 'schema' && x.id !== 'seo_lengths').every((x) => x.passed) ? 'passed' : 'FAILED'}`)
     return
@@ -440,7 +440,15 @@ async function main() {
   // Phase 11: the Markdown export of a reviewed draft (0 AI calls). Without --save: the file only (exports folder,
   // or --out), nothing saved in Mem0. With --save: the final export (the brief's markdown_export record + the file).
   if (args._[0] === 'export') {
-    if (typeof args['brief-id'] !== 'string') throw new Error('usage: npm run export -- --brief-id=<id> [--version=<n>] [--save] [--out=<folder>]')
+    // Every approved post again, with the current export rules (no M91 docs links). 0 AI calls.
+    if (args['all-approved']) {
+      const result = await startAndWait(config, { mode: 'export', params: { all_approved: true } })
+      console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
+      for (const w of result.run?.warnings ?? []) console.log(`WARNING: ${w}`)
+      process.exitCode = result.status === 'succeeded' ? 0 : 1
+      return
+    }
+    if (typeof args['brief-id'] !== 'string') throw new Error('usage: npm run export -- --brief-id=<id> [--version=<n>] [--save] [--out=<folder>]  |  --all-approved')
     const version = args.version ? Number(args.version) : undefined
     if (args.save) {
       const result = await startAndWait(config, { mode: 'export', params: { brief_id: args['brief-id'], save: true, ...(version && { version }) } })

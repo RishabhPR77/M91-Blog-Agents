@@ -163,7 +163,10 @@ test('runReviewer: one call on a fresh reviewer thread, inputs in B3 order, revi
   const order = [...q.message.matchAll(/^--- ([A-Z0-9 ]+) ---$/gm)].map((m) => m[1])
   assert.deepEqual(order, ['POST', 'BRIEF', 'CHECK RESULTS', 'M91 FACTS', 'ALLOWED URLS', 'TONE NOTES'])
   assert.match(q.message, /--- CHECK RESULTS ---\n\[\{"id":"cta_exact","passed":true,"severity":"hard","value":1,"detail":"ok"\}/)
-  assert.match(q.message, /- https:\/\/m91\.msg91\.com\/llms\.txt \(source: x; M91 fact: Rings every phone/)
+  // No docs links in posts: the docs URL is not an allowed link; M91's main site is.
+  const allowedSection = q.message.split('--- ALLOWED URLS ---\n')[1].split('\n--- ')[0]
+  assert.ok(!allowedSection.includes('llms.txt'), allowedSection)
+  assert.match(allowedSection, /- https:\/\/m91\.msg91\.com\/ \(M91's main site/)
   assert.equal(r.pass, true)
   assert.equal(r.total, 90)
   assert.equal(r.gates.length, 11)

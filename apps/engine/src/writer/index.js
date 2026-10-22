@@ -15,6 +15,7 @@ import { buildWriterPrompt, repairTail, truncatedProblem } from './prompts.js'
 import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, citedDocsSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage } from './inputs.js'
 import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets, SNIPPET_LIST_MAX_LINES } from './snippets.js'
 import { needsStartHere, starterPost, withStartHere } from '../timely/starthere.js'
+import { stripDocsLinks, isDocsFix } from '../util/m91links.js'
 import { draftsOf, nextDraftVersion, saveDraft, draftVersion, isEarlierDraft } from './save.js'
 import { saveRunLog } from '../util/runlog.js'
 
@@ -100,6 +101,11 @@ export function autoFixDraft(draft, { config, brief }) {
     })
     if (n) fixes.push(`rewrote ${n} CTA link(s) to exactly M91_CTA_URL`)
   }
+  // After the CTA fix (a near-miss CTA is the CTA, not a docs page).
+  // No M91 docs links in posts: each becomes a link to M91's main site; docs Source lines and Sources items go.
+  const docs = stripDocsLinks(md, config)
+  md = docs.markdown
+  fixes.push(...docs.fixes)
   if (ctaUrl && !/^##\s+what to do next/im.test(md)) {
     md = `${md.trimEnd()}\n\n## What to do next\n\n[${brief.cta?.text || DEFAULT_CTA_TEXT}](${ctaUrl})\n`
     fixes.push('appended the missing "What to do next" CTA section')
@@ -163,7 +169,7 @@ export async function runWriter(params = {}, deps = {}) {
   // The only code a post may show: blocks extracted from the tutorial source or the cited docs pages.
   const snippetSource = isTutorial ? tutorialText : await citedDocsSourceText(brief, { config, fetch: deps.fetch, warnings })
   const { snippets, text: tokenisedSource } = extractSnippets(snippetSource)
-  const allowed = allowedUrlSet(brief, { sourcePack: params.sourcePack, ctaUrl: config.m91.ctaUrl, snippets })
+  const allowed = allowedUrlSet(brief, { sourcePack: params.sourcePack, ctaUrl: config.m91.ctaUrl, snippets, config })
   const tone = await toneSection(store, brief, config)
   const lessons = await latestLessons(store, config.strategist.lessonsLimit)
   const drafts = await draftsOf(store, params.briefId)
@@ -268,6 +274,7 @@ export async function runWriter(params = {}, deps = {}) {
     emit('step.started', { agent: 'writer', step: 'checks' })
     const fixes = autoFixDraft(draft, { config, brief })
     autoFixes.push(...fixes)
+    for (const f of fixes) if (isDocsFix(f) && !warnings.includes(f)) warnings.push(f)
     const linkUrls = [...new Set(parseMarkdown(draft.post_markdown).links.map((l) => l.url))]
     const linkStatuses = new Map()
     await Promise.all(linkUrls.map(async (u) => linkStatuses.set(urlKey(u), await urlChecker.check(u))))

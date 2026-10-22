@@ -5,6 +5,7 @@ import { MESSAGE_MAX } from '../scout/prompts.js'
 import { allowedUrlSet, supportedSources, toneSection } from '../writer/inputs.js'
 import { draftVersion, draftBriefVersion, isEarlierDraft } from '../writer/save.js'
 import { guideForReviewer } from '../experience/review.js'
+import { docsLinkRule, M91_SITE_URL } from '../util/m91links.js'
 
 export class ReviewerInputError extends Error {
   constructor(message) {
@@ -36,11 +37,15 @@ export async function loadPreviousReview(store, briefId, current) {
   return reviews[0]?.payload ?? null
 }
 
-/** Every allowed URL with a short label (B3): the Writer's set, labelled by where it came from. */
-export function labelledAllowedUrls(brief, { sourcePack = null, ctaUrl, snippets = [] } = {}) {
+/**
+ * Every allowed URL with a short label (B3): the Writer's set, labelled by where it came from. With `config`,
+ * M91 docs links are left out and M91's main site is in (no docs links in posts).
+ */
+export function labelledAllowedUrls(brief, { sourcePack = null, ctaUrl, snippets = [], config = null } = {}) {
   const labels = new Map()
+  const isDocs = config ? docsLinkRule(config).isDocs : () => false
   const add = (url, label) => {
-    if (!url) return
+    if (!url || isDocs(url)) return
     const k = urlKey(url)
     if (!labels.has(k)) labels.set(k, { url, labels: [] })
     if (label && labels.get(k).labels.length < 2) labels.get(k).labels.push(String(label).slice(0, 100))
@@ -55,7 +60,8 @@ export function labelledAllowedUrls(brief, { sourcePack = null, ctaUrl, snippets
   for (const r of supportedSources(sourcePack)) add(r.url, `source pack: ${r.publisher ?? ''} — ${r.claim ?? ''}`)
   for (const s of snippets) add(s.source_url, `code snippet ${s.id}`)
   add(ctaUrl, 'M91 call to action')
-  const { set } = allowedUrlSet(brief, { sourcePack, ctaUrl, snippets })
+  if (config) add(M91_SITE_URL, "M91's main site (the only M91 link besides the call to action)")
+  const { set } = allowedUrlSet(brief, { sourcePack, ctaUrl, snippets, config })
   return { set, list: [...labels.values()].map((x) => `- ${x.url} (${x.labels.join('; ') || 'allowed'})`) }
 }
 
@@ -64,7 +70,7 @@ export function labelledAllowedUrls(brief, { sourcePack = null, ctaUrl, snippets
  * @param {{ draft, brief, facts, sourcePack, story, previousReview, snippets }} input
  */
 export async function buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets = [], guide = null }) {
-  const allowed = labelledAllowedUrls(brief, { sourcePack, ctaUrl: config.m91.ctaUrl, snippets })
+  const allowed = labelledAllowedUrls(brief, { sourcePack, ctaUrl: config.m91.ctaUrl, snippets, config })
   const results = (draft.checks?.results ?? []).map(({ id, passed, severity, value, detail }) => ({ id, passed, severity, value, detail }))
   const isTutorial = brief.post_type === 'tutorial' || brief.tutorial?.use === true
   const tone = await toneSection(store, brief, config)

@@ -6,8 +6,11 @@ import { countSyllables, fleschKincaidGrade, sentenceStats } from '../../src/che
 import { findPhrases, BANNED_PHRASES, FIRST_PERSON_PHRASES } from '../../src/checks/phrases.js'
 import { extractSnippets } from '../../src/writer/snippets.js'
 import { fakeConfig } from '../helpers.js'
+import { stripDocsLinks } from '../../src/util/m91links.js'
 
-const GOOD = readFileSync(new URL('../fixtures/good-post.md', import.meta.url), 'utf8')
+// The shared fixture still links to M91's docs (the Embarko tests use it as it is); the Writer's fix runs first.
+const GOOD_RAW = readFileSync(new URL('../fixtures/good-post.md', import.meta.url), 'utf8')
+const GOOD = stripDocsLinks(GOOD_RAW, fakeConfig({ M91_CTA_URL: 'https://m91.msg91.com/signup' })).markdown
 const CTA = 'https://m91.msg91.com/signup'
 const ISSUE = 'https://github.com/example/agents/issues/1'
 const LLMS = 'https://m91.msg91.com/llms.txt'
@@ -33,7 +36,7 @@ const draft = (md = GOOD, over = {}) => ({
   seo: { title_tag: 'Agent approval with a phone call', meta_description: 'How agent approval pauses a risky step until a person answers a phone call.', slug_suggestion: 'agent-approval-phone-call', image_ideas: [] },
   ...over
 })
-const allowed = new Set([CTA, ISSUE, LLMS].map(urlKey))
+const allowed = new Set([CTA, ISSUE, LLMS, 'https://m91.msg91.com/'].map(urlKey))
 const run = (md, { b = brief(), d, statuses, snippets, snippetErrors, snippetRangeErrors, inserts, schemaErrors, cfg } = {}) =>
   runContentChecks({ draft: d ?? draft(md), brief: b, config: cfg ?? config, allowedUrls: allowed, snippets, snippetErrors, snippetRangeErrors, inserts, linkStatuses: statuses, schemaErrors })
 const get = (r, id) => r.results.find((x) => x.id === id)
@@ -42,10 +45,13 @@ test('the good fixture passes every hard check and the main soft checks', () => 
   const r = run(GOOD, { statuses: new Map([[urlKey(ISSUE), 'ok'], [urlKey(LLMS), 'ok'], [urlKey(CTA), 'blocked']]) })
   assert.deepEqual(hardProblems(r.results), [])
   assert.equal(r.hard_passed, true)
-  for (const id of ['outline_match', 'words_target', 'reading_post', 'sentence_length', 'paragraph_length', 'answer_first', 'links_count', 'keyword_first_100', 'keyword_title_h1_slug', 'keyword_count', 'exclamations', 'legal_framing', 'claims_soft', 'block_code_lang', 'inline_code_known', 'block_approval_sequence', 'block_choices_bold']) {
+  for (const id of ['outline_match', 'words_target', 'reading_post', 'sentence_length', 'paragraph_length', 'answer_first', 'keyword_first_100', 'keyword_title_h1_slug', 'keyword_count', 'exclamations', 'legal_framing', 'claims_soft', 'block_code_lang', 'inline_code_known', 'block_approval_sequence', 'block_choices_bold']) {
     assert.equal(get(r, id)?.passed, true, `${id}: ${JSON.stringify(get(r, id))}`)
   }
   assert.ok(r.word_count >= 180 && r.word_count <= 500, `words ${r.word_count}`)
+  // Neither M91's main site nor (any longer) its docs count as an outside source: one is left, a soft warning.
+  assert.deepEqual([get(r, 'links_count').passed, get(r, 'links_count').severity, get(r, 'links_count').value], [false, 'soft', 1])
+  assert.equal(get(r, 'no_docs_links').passed, true)
   assert.ok(r.reading.post_grade <= 8, `grade ${r.reading.post_grade}`)
 })
 
