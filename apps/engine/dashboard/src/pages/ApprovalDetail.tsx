@@ -13,6 +13,7 @@ import { MarkdownPreview } from '../components/MarkdownPreview'
 import { PublishCard } from '../components/PublishCard'
 import { InteractiveCard, type InteractiveInfo } from '../components/InteractiveCard'
 import { PreviewCard, type PreviewInfo } from '../components/PreviewCard'
+import { SlotCard, type SlotInfo } from '../components/SlotCard'
 import { ExportCard } from '../components/ExportCard'
 import { flagsOf } from '../config/flags'
 import { Card, EmptyState, PageHeader } from '../components/Page'
@@ -40,6 +41,8 @@ export type ApprovalDetailData = {
   checks: CheckResult[]
   /** Phase 10: the interactive guide (null or missing from older engines). */
   interactive?: InteractiveInfo | null
+  /** Phase 12: the roadmap slot of this post (null without the roadmap). */
+  slot?: SlotInfo | null
   /** Phase 10 D1: the page preview built for this brief (null: none yet; missing: older engine). */
   preview?: PreviewInfo | null
   /** Counter prompts used for this brief (writing and design); older engines: counted from earlier versions. */
@@ -220,6 +223,7 @@ export default function ApprovalDetail() {
 
         <div className="space-y-4 lg:col-span-2">
           <ExportCard briefId={d.brief_id} version={d.draft.version} status={d.draft.status} />
+          <SlotCard slot={d.slot} />
           {flags.blogOn && <PublishCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} title={d.draft.title} />}
           {flags.experienceOn && <InteractiveCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} info={d.interactive} />}
           <Card title="Your decision">

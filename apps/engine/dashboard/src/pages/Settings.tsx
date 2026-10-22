@@ -28,6 +28,15 @@ export default function Settings() {
             <dt className="text-slate-500">Built run modes</dt><dd data-testid="setting-built-modes">{modes?.join(', ') ?? 'not reported (restart the engine)'}</dd>
           </dl>
         </Card>
+        <Card title="Roadmap">
+          {d.roadmap ? (
+            <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
+              <dt className="text-slate-500">Runs follow the roadmap</dt><dd data-testid="setting-roadmap">{yes(d.roadmap.enabled)} (ROADMAP_ENABLED)</dd>
+              <dt className="text-slate-500">Roadmap Planner model</dt><dd className="font-mono text-xs">{d.models.planner ? `${d.models.planner.service} · ${d.models.planner.model} · ${d.models.planner.delivery}` : 'not reported'}</dd>
+              <dt className="text-slate-500">Rapid-response posts</dt><dd>{yes(d.roadmap.rapid_response_enabled)} (RAPID_RESPONSE_ENABLED)</dd>
+            </dl>
+          ) : <p className="text-sm text-slate-500">Not reported by this engine (it predates Phase 12: restart it).</p>}
+        </Card>
         <Card title="Approval">
           {d.approval ? (
             <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">

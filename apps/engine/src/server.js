@@ -23,6 +23,11 @@ import { reviewOfDraft, hardChecksPassed } from './approval.js'
 import { lessonText } from './lessons.js'
 import { isInteractive, latestGuideDoc } from './experience/index.js'
 import { buildPreview, readPreview, previewDir, PREVIEW_ROOT, PreviewError } from './publisher/preview.js'
+import { loadRoadmap } from './roadmap/model.js'
+import { roadmapProblems } from './roadmap/checks.js'
+import { pickTarget } from './roadmap/pick.js'
+import { approveRoadmap, editSlot, moveSlot, setSkipped, decideProposed, RoadmapError } from './roadmap/actions.js'
+import { knowledgeMap } from './roadmap/knowledge.js'
 import { previewExport, latestExport, ExportError } from './export/index.js'
 import { createDocstar } from './publisher/docstar.js'
 import { withMem0Count, mem0Requests } from './util/mem0count.js'
@@ -63,6 +68,7 @@ export function publicSettings(config) {
     models: {
       scout: { ...agent(sc), research_delivery: sc.researchDelivery },
       strategist: agent(st), writer: agent(config.writer), reviewer: agent(config.reviewer), promo: agent(config.promo),
+      ...(config.planner && { planner: agent(config.planner) }),
       ...(config.designer && { designer: agent(config.designer) })
     },
     scout: {
@@ -104,6 +110,8 @@ export function publicSettings(config) {
       max_components: config.designer.maxComponents, max_repairs: config.designer.maxRepairs, interactive_default: config.designer.interactiveDefault,
       max_designer_revisions: config.limits?.maxDesignerRevisions ?? null, promo_enabled: Boolean(config.promo?.enabled)
     },
+    // Phase 12: the roadmap (runs follow it) and rapid response (off).
+    roadmap: { enabled: Boolean(config.roadmap?.enabled), rapid_response_enabled: Boolean(config.scout?.rapidResponseEnabled) },
     built_modes: [...BUILT_MODES],
     decision_modes: [...DECISION_MODES],
     publish_modes: [...PUBLISH_MODES]
@@ -284,6 +292,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       },
       review: review && { total: review.total, pass: review.pass, gates: review.gates, areas: review.areas, feedback: review.feedback, summary: review.summary, sources_checked: review.sources_checked },
       checks: p.checks?.results ?? [],
+      // Phase 12: the roadmap slot of this post and the earlier posts it builds on (from the engine's index).
+      slot: config?.roadmap?.enabled ? await slotOfBrief(briefId, d) : null,
       // Phase 10 D1: the page preview built for this brief, if any (read from disk, no Mem0).
       preview: readPreview(briefId, previewRoot),
       // Counter prompts used for this brief: writing changes (human_feedback) and design changes (C5).
@@ -302,6 +312,25 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         ...(() => { const t = reviewOf(e)?.total ?? e.metadata?.review_total ?? null; return { score: t, total: t } })(),
         human_feedback: e.payload?.human_feedback ?? null, record_id: e.id
       }))
+    }
+  }
+
+  /** The roadmap slot a brief belongs to, with its stage and the slots it needs (and their posts), or null. */
+  async function slotOfBrief(briefId, draftRec) {
+    const rm = (await loadRoadmap(store))?.payload
+    if (!rm) return null
+    const brief = (await store.getRecords({ type: 'brief', brief_id: briefId })).sort((a, b) => (b.payload?.brief_version ?? 0) - (a.payload?.brief_version ?? 0))[0]
+    const id = brief?.payload?.slot_id || rm.stages.flatMap((st) => st.slots).find((s) => s.brief_id === briefId)?.slot_id
+    if (!id) return null
+    const st = rm.stages.find((x) => x.slots.some((s) => s.slot_id === id))
+    const s = st.slots.find((x) => x.slot_id === id)
+    const all = new Map(rm.stages.flatMap((x) => x.slots.map((y) => [y.slot_id, y])))
+    const known = new Map((await knowledgeMap(store)).map((k) => [k.slot_id, k]))
+    return {
+      slot_id: s.slot_id, title_idea: s.title_idea, question: s.question, teaches: s.teaches, status: s.status,
+      stage: { number: st.number, name: st.name, level: st.level },
+      builds_on: (s.needs ?? []).map((n) => ({ slot_id: n, title: known.get(n)?.title ?? all.get(n)?.title_idea ?? n, status: all.get(n)?.status ?? 'unknown', brief_id: all.get(n)?.brief_id || null })),
+      why_today: brief?.payload?.why_today ?? null, terms_to_define: brief?.payload?.terms_to_define ?? []
     }
   }
 
@@ -474,6 +503,37 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       if (!rec) return fail(res, 404, 'not_found', `no final Markdown export of ${briefId} yet: approve it first`)
       if (seg[3] === 'download') return sendMarkdown(res, rec.payload.markdown, rec.payload.filename, true)
       return send(res, 200, { export: { ...exportSummary(rec), markdown: rec.payload.markdown, front_matter: rec.payload.front_matter, warnings: rec.payload.warnings ?? [] } })
+    }
+
+    // Phase 12: the roadmap. GET it (with what is next and any problems); approve it; change slots. Every change
+    // is checked by the roadmap rules and saves the one roadmap record (about 2 Mem0 requests). Generate: POST
+    // /api/runs with mode "roadmap".
+    if (seg[1] === 'roadmap') {
+      if (path === '/api/roadmap' && method === 'GET') {
+        const rec = await loadRoadmap(store)
+        const next = rec?.payload ? await pickTarget(store, { now }) : { kind: 'none', reason: 'there is no roadmap yet: generate it' }
+        const compactNext = next.kind === 'slot' ? { kind: 'slot', slot_id: next.slot.slot_id, title_idea: next.slot.title_idea, stage: next.stage } : next.kind === 'pinned' ? { kind: 'pinned', topic: next.pin.topic, pinned_id: next.pin.pinned_id } : { kind: 'none', reason: next.reason }
+        return send(res, 200, { roadmap: rec?.payload ?? null, record_id: rec?.id ?? null, next: compactNext, problems: rec?.payload ? roadmapProblems(rec.payload) : [] })
+      }
+      if (method === 'POST') {
+        if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: change the roadmap when it has finished')
+        const body = await readJson(req)
+        try {
+          let rec
+          if (path === '/api/roadmap/approve') rec = await approveRoadmap(store, { now })
+          else if (seg[2] === 'slots' && seg[3] && seg.length === 4) rec = await editSlot(store, seg[3], body, { now })
+          else if (seg[2] === 'slots' && seg[3] && seg[4] === 'move' && seg.length === 5) rec = await moveSlot(store, seg[3], body.direction, { now })
+          else if (seg[2] === 'slots' && seg[3] && seg[4] === 'skip' && seg.length === 5) {
+            if (typeof body.skipped !== 'boolean') throw new ApiError(400, 'bad_params', 'skipped must be true or false')
+            rec = await setSkipped(store, seg[3], body.skipped, { now })
+          } else if (seg[2] === 'slots' && seg[3] && (seg[4] === 'accept' || seg[4] === 'reject') && seg.length === 5) rec = await decideProposed(store, seg[3], seg[4] === 'accept', { now })
+          else return fail(res, 404, 'not_found', `no route ${method} ${path}`)
+          return send(res, 200, { roadmap: rec.payload, record_id: rec.id })
+        } catch (error) {
+          if (error instanceof RoadmapError) throw new ApiError(error.status, error.code, error.message)
+          throw error
+        }
+      }
     }
 
     // Phase 10 D1: the page preview of a brief's newest draft. POST builds it (no AI, nothing saved or deployed);

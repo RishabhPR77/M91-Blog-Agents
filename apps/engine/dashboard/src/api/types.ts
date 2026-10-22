@@ -12,6 +12,8 @@ export type AgentModel = { service?: string; model?: string; delivery?: string; 
 
 export type Settings = {
   version: string
+  /** Phase 12: the roadmap (runs follow it) and rapid response. */
+  roadmap?: { enabled: boolean; rapid_response_enabled: boolean }
   models: Record<string, AgentModel>
   scout: Record<string, unknown> & { question_groups?: number[]; max_calls?: number }
   strategist: Record<string, unknown>

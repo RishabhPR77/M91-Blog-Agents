@@ -14,6 +14,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toasts'
 import { expectedCalls, expectedMem0, PRESETS, type CostKey, type Preset } from '../config/costs'
 import { flagsOf } from '../config/flags'
+import { useRoadmap, nextUpText } from '../api/roadmap'
 import { buildRunRequest, leastUsedGroup, TOPIC_GROUPS } from '../config/runOptions'
 import { fmtDateTime, fmtDuration } from '../format'
 import { useNow } from '../state/useRunView'
@@ -111,6 +112,9 @@ export default function Control() {
   const blog = settings.data?.blog
   // Phase 11: the Experience Designer and the blog actions follow EXPERIENCE_ENABLED and PUBLISH_TARGET.
   const flags = flagsOf(settings.data)
+  // Phase 12: with the roadmap on, the run writes the next slot (shown above the Run button).
+  const roadmapOn = settings.data?.roadmap?.enabled === true
+  const roadmap = useRoadmap(roadmapOn)
   const routeCost = flags.experienceOn ? 'reviewer_route' as const : 'reviewer_route_plain' as const
   // A real deploy needs the token; a dry run builds locally and needs none.
   const tokenReason = blog && !blog.deploy_token_set && !(dryRun ?? true) ? 'Deploy token not set (dry run only)' : null
@@ -208,8 +212,10 @@ export default function Control() {
         {activeRun && <CurrentRun run={activeRun} />}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <RunButton title="Run full pipeline" description={`Scout → Strategist → Writer → checks → ${flags.experienceOn ? 'Experience Designer → ' : ''}Reviewer, until a pass (then it waits for you) or a limit.`} costKey={flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason}
-            onRun={() => ask('full', 'Full pipeline', flags.experienceOn ? 'full' : 'full_plain')} />
+          <RunButton title="Run full pipeline" description={`Scout → Strategist → Writer → checks → ${flags.experienceOn ? 'Experience Designer → ' : ''}Reviewer, until a pass (then it waits for you) or a limit.`} costKey={roadmapOn ? 'full_roadmap' : flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason ?? (roadmapOn && roadmap.data?.next.kind === 'none' ? roadmap.data.next.reason : null)}
+            onRun={() => ask('full', 'Full pipeline', roadmapOn ? 'full_roadmap' : flags.experienceOn ? 'full' : 'full_plain', {}, roadmapOn ? [['Next up', nextUpText(roadmap.data?.next)]] : [])}>
+            {roadmapOn && <p className="text-sm" data-testid="control-next-up"><span className="font-medium">Next up:</span> {roadmap.isPending ? 'loading…' : nextUpText(roadmap.data?.next)} <Link className="text-xs text-sky-700 underline dark:text-sky-300" to="/roadmap">Roadmap</Link></p>}
+          </RunButton>
           <RunButton title="Run Scout" description="Research: M91 facts, questions people ask, stories and tutorials." costKey="scout" lowCost={lowCost} built={isBuilt('scout')} disabledReason={busyReason}
             onRun={() => ask('scout', 'Scout', 'scout')} />
           <RunButton title="Run Strategist" description="Plan one brief from the latest Scout data." costKey="strategist" lowCost={lowCost} built={isBuilt('strategist')} disabledReason={busyReason}
