@@ -14,6 +14,8 @@ export type Settings = {
   version: string
   /** Phase 12: the roadmap (runs follow it) and rapid response. */
   roadmap?: { enabled: boolean; rapid_response_enabled: boolean }
+  /** The timely lane (on with RAPID_RESPONSE_ENABLED and the roadmap). */
+  timely?: { enabled: boolean; check_on_run: boolean; window_days: number; max_per_week: number }
   models: Record<string, AgentModel>
   scout: Record<string, unknown> & { question_groups?: number[]; max_calls?: number }
   strategist: Record<string, unknown>

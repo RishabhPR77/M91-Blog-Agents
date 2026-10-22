@@ -12,7 +12,10 @@ export const COSTS = {
   // Phase 10: + the Experience Designer (1–2) for every draft version; Mem0 + one guide_doc write per version.
   full: { normal: '16–29', lowCost: '10–20', mem0: '≈30–48', mem0LowCost: '≈27–38', note: 'Scout + Strategist + Writer + Experience Designer + Reviewer, plus revision rounds' },
   // Phase 12: with the roadmap, the focused Scout (2–3 calls) and one slot: about 5–12 calls.
-  full_roadmap: { normal: '5–12', lowCost: '5–12', mem0: '≈20–35', note: 'focused Scout (2–3) + Strategist + Writer (with repairs) + Reviewer, for the next roadmap slot' },
+  full_roadmap: { normal: '6–13', lowCost: '6–13', mem0: '≈21–37', note: 'news check (1) + focused Scout (2–3) + Strategist + Writer (with repairs) + Reviewer, for the next post (pinned, timely or roadmap slot)' },
+  // The timely lane: the news check (1 call; Mem0: ≈2–3 retrievals, plus one add per new card). A full run with
+  // TIMELY_CHECK_ON_RUN=true makes it first (full_roadmap includes it).
+  timely_check: { normal: '1', lowCost: '1', mem0: '≈2–3', note: 'one web search for fresh events; +1 add per new card; it writes nothing' },
   roadmap: { normal: '1–2', lowCost: '1–2', mem0: '≈5–8', note: 'the Roadmap Planner (1), +1 for the M91 facts when there are none yet' },
   full_plain: { normal: '15–26', lowCost: '9–18', mem0: '≈28–45', mem0LowCost: '≈25–35', note: 'Scout + Strategist + Writer + Reviewer, plus revision rounds (no Experience Designer)' },
   scout: { normal: '≈10', lowCost: '5–6', mem0: '≈10–15', mem0LowCost: '≈8–11' },

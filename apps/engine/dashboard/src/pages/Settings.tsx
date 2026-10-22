@@ -33,7 +33,10 @@ export default function Settings() {
             <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
               <dt className="text-slate-500">Runs follow the roadmap</dt><dd data-testid="setting-roadmap">{yes(d.roadmap.enabled)} (ROADMAP_ENABLED)</dd>
               <dt className="text-slate-500">Roadmap Planner model</dt><dd className="font-mono text-xs">{d.models.planner ? `${d.models.planner.service} · ${d.models.planner.model} · ${d.models.planner.delivery}` : 'not reported'}</dd>
-              <dt className="text-slate-500">Rapid-response posts</dt><dd>{yes(d.roadmap.rapid_response_enabled)} (RAPID_RESPONSE_ENABLED)</dd>
+              <dt className="text-slate-500">Timely lane</dt><dd data-testid="setting-timely">{d.timely ? `${yes(d.timely.enabled)} (RAPID_RESPONSE_ENABLED)` : `${yes(d.roadmap.rapid_response_enabled)} (RAPID_RESPONSE_ENABLED)`}</dd>
+              {d.timely && <><dt className="text-slate-500">News check on every run</dt><dd>{yes(d.timely.check_on_run)} (TIMELY_CHECK_ON_RUN)</dd>
+              <dt className="text-slate-500">Timely window</dt><dd>{d.timely.window_days} days (TIMELY_WINDOW_DAYS)</dd>
+              <dt className="text-slate-500">Timely posts per 7 days</dt><dd>at most {d.timely.max_per_week} (TIMELY_MAX_PER_WEEK)</dd></>}
             </dl>
           ) : <p className="text-sm text-slate-500">Not reported by this engine (it predates Phase 12: restart it).</p>}
         </Card>

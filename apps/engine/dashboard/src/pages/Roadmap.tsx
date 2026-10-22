@@ -10,6 +10,8 @@ import { roadmapKey, useRoadmap, nextUpText, type RoadmapSlot, type RoadmapStage
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Card, EmptyState, PageHeader } from '../components/Page'
 import { StatusBadge } from '../components/StatusBadge'
+import { TimelySection } from '../components/TimelySection'
+import { useRuns, useSettings } from '../api/queries'
 import { toast } from '../components/Toasts'
 import { COSTS } from '../config/costs'
 import { fmtDateTime } from '../format'
@@ -21,6 +23,10 @@ export default function RoadmapPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const q = useRoadmap()
+  // The timely lane's cards (with RAPID_RESPONSE_ENABLED and the roadmap on).
+  const settings = useSettings()
+  const timelyOn = settings.data?.timely?.enabled === true
+  const runBusy = Boolean(useRuns(5).data?.some((r) => r.status === 'running'))
   const [busy, setBusy] = useState(false)
   const [generate, setGenerate] = useState(false)
   const [approve, setApprove] = useState(false)
@@ -87,8 +93,10 @@ export default function RoadmapPage() {
         <>
           <Card className="mb-4">
             <p className="text-sm" data-testid="next-up"><span className="font-semibold">Next up:</span> {nextUpText(next)}</p>
+            {next?.timely_waiting && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" data-testid="next-up-timely-waiting">Timely card waiting: {next.timely_waiting.title} — {next.timely_waiting.reason}</p>}
             <p className="mt-1 text-xs text-slate-500">{rm.generated_at ? `Generated ${fmtDateTime(rm.generated_at)}` : ''}{rm.model_used ? ` · ${rm.model_used}` : ''}{rm.approved_at ? ` · approved ${fmtDateTime(rm.approved_at)}` : ''}{rm.notes && rm.notes !== 'none' ? ` · Planner notes: ${rm.notes}` : ''}</p>
           </Card>
+          {timelyOn && <TimelySection runBusy={runBusy} />}
           <div className="space-y-4">
             {rm.stages.map((st) => <StageCard key={st.number} stage={st} nextId={nextId} busy={busy} onAct={act} onEdit={setEditing} />)}
           </div>

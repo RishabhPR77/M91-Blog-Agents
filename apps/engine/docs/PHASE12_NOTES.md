@@ -14,7 +14,7 @@ PLANNER_AI_MODEL=gpt-5.6-luna
 PLANNER_DELIVERY=sync
 PLANNER_MAX_REPAIRS=1
 ROADMAP_ENABLED=true
-RAPID_RESPONSE_ENABLED=false
+RAPID_RESPONSE_ENABLED=true
 READING_GRADE_POST_MAX=7
 READING_GRADE_INTRO_MAX=6
 READING_GRADE_HARD_MARGIN=0
@@ -68,7 +68,7 @@ The banner level is the worse of the two, and it names the limit reached. The he
 - The gate: a full run answers 409 `roadmap_not_approved` ("Approve the roadmap first") or `nothing_to_write`.
 - Slot statuses: planned → drafting → in_review → approved. A failed or cancelled run puts the slot back to
   planned. Rejecting the topic marks the slot skipped.
-- Rapid response is off (`RAPID_RESPONSE_ENABLED=false`).
+- Rapid response was off in Phase 12; it is now the timely lane (see below), where you decide on every post.
 
 ## Task 4: a focused Scout
 
@@ -106,7 +106,7 @@ They are not written until you accept them.
   requests). The button is blocked with the reason when there is nothing to write.
 - **Approval screen:** a Roadmap card with the slot, its stage and level, what it teaches and explains, the
   posts it builds on (linked), and how it builds on them.
-- **Settings:** a Roadmap card (roadmap on or off, rapid response, the Planner's model).
+- **Settings:** a Roadmap card (roadmap on or off, the timely lane, the Planner's model).
 
 ## Expected costs
 
@@ -115,3 +115,111 @@ They are not written until you accept them.
 | Generate the roadmap | 1–2 | ≈5–8 |
 | Full run (one slot) | 5–12 | ≈20–35 |
 | Approve a post | 0 | a few (export + knowledge record) |
+
+## The timely lane (next to the roadmap)
+
+When something happens in the world that M91 could help with, the engine finds it and you decide. A timely post
+jumps the queue without breaking the roadmap: it never uses up a slot.
+
+### Settings
+
+```
+RAPID_RESPONSE_ENABLED=true
+TIMELY_CHECK_ON_RUN=true
+TIMELY_WINDOW_DAYS=7
+TIMELY_MAX_PER_WEEK=1
+```
+
+`RAPID_RESPONSE_ENABLED=true` now means "the timely lane is on, and you decide". It works only with
+`ROADMAP_ENABLED=true`. These values are also the defaults.
+
+### The news check (1 AI call)
+
+- A Scout mode, `timely`, makes one web-search call. It asks for real events of the last `TIMELY_WINDOW_DAYS`
+  where M91 genuinely helps: AI agents acting without approval, missed alerts or approvals, payment or
+  deployment mistakes, new rules about human oversight, Opsgenie news.
+- **Each event has:** a title, what happened (2 sentences, in its own words), the source URL, outlet and
+  date, why it matters for M91, and an urgency (low, medium or high) with a reason.
+- **Code keeps an event only when:**
+  - its date is inside the window (not undated, not in the future);
+  - its source loads (the URL check);
+  - it is not already known: the same source URL as a card, or a title close to a card's or an approved post's
+    (local similarity, `DEDUPE_SIMILARITY_LOCAL`).
+- **What's kept:** at most 5 events. Each becomes a `timely_opportunity` card with status `proposed`.
+- **It runs:**
+  - first in every full run (`TIMELY_CHECK_ON_RUN=true`); a failed check is a warning, and the run goes on;
+  - on demand: **Check news** on the Roadmap page, or `npm run timely -- --check`. Both run as a normal run
+    (mode `timely_check`).
+- **Facts:** it uses the newest M91 facts as they are; a facts call is made only when there are none at all.
+- **Mem0:** 2–3 retrievals (the cards, the facts and the knowledge map; the engine's index serves the
+  cards), plus one add per new card.
+
+### Cards (`timely_opportunity`)
+
+| Status | Meaning |
+| --- | --- |
+| proposed | found by a news check; waits for you |
+| write_now | you clicked **Write now**: the next run writes it |
+| added_to_roadmap | it became a planned slot in the stage you picked |
+| dismissed | you dismissed it, or rejected the timely post's topic |
+| written | its timely post was approved |
+| expired | proposed or write_now, and more than `TIMELY_WINDOW_DAYS` past the event's date |
+
+- **Expiry:** a card expires `TIMELY_WINDOW_DAYS` after the event's date. A card being written never expires.
+  Cards are marked expired at each news check; the list shows them as expired right away.
+- **Add to roadmap:** the card becomes a planned slot in the chosen stage. Its question comes from the event,
+  and it teaches one concept (the event's title), which you can edit on the Roadmap page. The roadmap's own
+  rules apply (comparisons only in stage 5).
+
+### Picking order (code)
+
+The order is: a pinned topic that is due, then one `write_now` card, then the roadmap's next slot.
+
+- **Starter rule:** no timely post until the Starter (stage 0) has an approved post.
+- **Weekly cap:** at most `TIMELY_MAX_PER_WEEK` timely posts per 7 days. A post counts once it is written
+  (approved) or being written.
+- **When a card waits:** the run writes the roadmap's next slot instead. Control, the Roadmap page and the run
+  show why the card waits.
+- **During a run:** the card holds the run's brief id. A failed or cancelled run frees it again; it stays
+  write_now.
+
+### Writing a timely post
+
+- **Scout (slot mode):** researches the event. Its source URL is the first source in the source pack, and the
+  card becomes the run's story lead (`reported by <outlet>`).
+- **Strategist:**
+  - `post_type: rapid_response`, with the news fields filled from that story; `slot_id` is "";
+  - the timely rules; the most relevant earlier posts from the knowledge map as notes for the Writer and
+    internal links;
+  - the story counts within `TIMELY_WINDOW_DAYS`.
+- **Writer:** code puts "New to M91? Start here: **<Starter post title>**." as the first line of the body,
+  right after the TL;DR. Any line the Writer wrote itself is replaced. The Starter post is the first approved
+  stage-0 post. With `PUBLISH_TARGET=none` there are no public URLs, so it is the title in bold; it becomes a
+  link once the post has a URL.
+- **Checks:**
+  - `start_here_line`, a new hard check for timely posts;
+  - the existing `news_attribution` check ("reported by <outlet>").
+- **Reviewer:** the existing news gates apply.
+- **On approval:** the card becomes `written`. The knowledge map saves the post with `kind: "timely"`.
+  Rejecting the topic dismisses the card.
+
+### API, CLI, dashboard
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/timely` | The cards (newest first), the open count, the card written next, and a waiting card with its reason. 0 Mem0 requests with the index. |
+| `POST /api/timely/<id>` | `{ "action": "write_now" }`, `{ "action": "add_to_roadmap", "stage": 1–5 }` or `{ "action": "dismiss" }`. 409 while a run is in progress or when the status doesn't allow it. |
+| `POST /api/runs` with `mode: "timely_check"` | The news check alone. |
+
+- **CLI** (in `apps/engine`): `npm run timely -- --check | --list | --write-now <id> | --dismiss <id> | --add <id> --stage <1-5>`.
+- **Dashboard:**
+  - the Roadmap page has a **Timely opportunities** section: the cards with their three buttons, **Check
+    news** with its cost (1 AI call, ≈2–3 Mem0), and the waiting reason;
+  - Control shows a badge with the open cards;
+  - Settings shows the four settings.
+
+| Action | AI calls | Mem0 requests |
+| --- | --- | --- |
+| Check news | 1 | ≈2–3 retrievals, + 1 add per new card |
+| Full run (news check on) | 6–13 | ≈21–37 |
+| Write now / Add to roadmap / Dismiss | 0 | 1–2 |

@@ -15,6 +15,7 @@ import { toast } from '../components/Toasts'
 import { expectedCalls, expectedMem0, PRESETS, type CostKey, type Preset } from '../config/costs'
 import { flagsOf } from '../config/flags'
 import { useRoadmap, nextUpText } from '../api/roadmap'
+import { useTimely } from '../api/timely'
 import { buildRunRequest, leastUsedGroup, TOPIC_GROUPS } from '../config/runOptions'
 import { fmtDateTime, fmtDuration } from '../format'
 import { useNow } from '../state/useRunView'
@@ -115,6 +116,9 @@ export default function Control() {
   // Phase 12: with the roadmap on, the run writes the next slot (shown above the Run button).
   const roadmapOn = settings.data?.roadmap?.enabled === true
   const roadmap = useRoadmap(roadmapOn)
+  // The timely lane: open cards (a badge) and a Write now card that waits.
+  const timelyOn = settings.data?.timely?.enabled === true
+  const timely = useTimely(timelyOn)
   const routeCost = flags.experienceOn ? 'reviewer_route' as const : 'reviewer_route_plain' as const
   // A real deploy needs the token; a dry run builds locally and needs none.
   const tokenReason = blog && !blog.deploy_token_set && !(dryRun ?? true) ? 'Deploy token not set (dry run only)' : null
@@ -215,6 +219,7 @@ export default function Control() {
           <RunButton title="Run full pipeline" description={`Scout → Strategist → Writer → checks → ${flags.experienceOn ? 'Experience Designer → ' : ''}Reviewer, until a pass (then it waits for you) or a limit.`} costKey={roadmapOn ? 'full_roadmap' : flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason ?? (roadmapOn && roadmap.data?.next.kind === 'none' ? roadmap.data.next.reason : null)}
             onRun={() => ask('full', 'Full pipeline', roadmapOn ? 'full_roadmap' : flags.experienceOn ? 'full' : 'full_plain', {}, roadmapOn ? [['Next up', nextUpText(roadmap.data?.next)]] : [])}>
             {roadmapOn && <p className="text-sm" data-testid="control-next-up"><span className="font-medium">Next up:</span> {roadmap.isPending ? 'loading…' : nextUpText(roadmap.data?.next)} <Link className="text-xs text-sky-700 underline dark:text-sky-300" to="/roadmap">Roadmap</Link></p>}
+            {timelyOn && (timely.data?.open ?? 0) > 0 && <p className="text-sm" data-testid="control-timely"><Link to="/roadmap#timely" className="pill pill-amber">{timely.data!.open} timely opportunit{timely.data!.open === 1 ? 'y' : 'ies'}</Link>{timely.data?.waiting ? <span className="ml-2 text-xs text-slate-500">“{timely.data.waiting.title}” waits: {timely.data.waiting.reason}</span> : null}</p>}
           </RunButton>
           <RunButton title="Run Scout" description="Research: M91 facts, questions people ask, stories and tutorials." costKey="scout" lowCost={lowCost} built={isBuilt('scout')} disabledReason={busyReason}
             onRun={() => ask('scout', 'Scout', 'scout')} />

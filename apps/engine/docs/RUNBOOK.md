@@ -30,6 +30,30 @@ Nothing runs until the roadmap is approved.
 
 The slot marked **Next up** is what the next full run writes. Slots already written are locked.
 
+## Timely posts (the timely lane)
+
+News that M91 could help with shows up as cards in **Roadmap → Timely opportunities**. A badge on Control
+shows how many are open.
+
+1. **Find events:** every full run checks the news first. You can also click **Check news** (1 AI call), or
+   run this in `apps/engine`:
+
+```bash
+npm run timely -- --check
+```
+
+2. **Decide on each card:**
+   - **Write now:** the next run writes it before the roadmap's next slot. It does not use up a slot.
+   - **Add to roadmap:** it becomes a planned slot in the stage you pick.
+   - **Dismiss:** the card goes away.
+3. **Run the full pipeline** as usual. A Write now card waits in two cases: until the Starter (stage 0) has an
+   approved post, and while `TIMELY_MAX_PER_WEEK` timely posts were already written this week. Control and the
+   Roadmap page say why.
+4. **Approve it** like any post. A timely post starts with "New to M91? Start here: …" and credits its source
+   ("reported by …").
+
+Cards you don't act on expire `TIMELY_WINDOW_DAYS` after the event.
+
 ## Run the pipeline
 
 1. Go to **Control**. Above **Run full pipeline** you see **Next up**: the slot this run will write. If it
