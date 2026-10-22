@@ -387,16 +387,16 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
   }
 
   /**
-   * Phase 12 (reset:all): deletes every memory of this agent id with one request (Mem0 runs it in the
-   * background; its event is followed when it returns one). Never another agent, user, app or project:
-   * only agent_id is sent, and an empty or wildcard agent id is refused.
+   * Phase 12 (reset:all): deletes every memory of this agent id with one request. Mem0 runs it in the
+   * background; its event is NOT polled (a delete event never reported SUCCEEDED and polling cost one request a
+   * second): the caller checks with one list instead. Never another agent, user, app or project: only agent_id is
+   * sent, and an empty or wildcard agent id is refused.
    */
   async function deleteAllForAgent() {
     if (!agentId || /[*]/.test(agentId)) throw new StoreError(`refusing to delete: MEM0_AGENT_ID "${agentId}" is empty or a wildcard`)
     const c = await client()
     const res = await net(() => c.deleteAll({ agentId }), 'delete')
     const eventId = res?.event_id ?? res?.eventId ?? null
-    if (eventId) await waitForEvent(eventId)
     forgetLists()
     cache.records.clear()
     wrote({ op: 'delete_all' })

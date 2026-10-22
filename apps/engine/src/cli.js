@@ -181,7 +181,7 @@ async function ask(question) {
  * local leftovers; without --dry-run, asks for "yes", then deletes them (Mem0's delete-all for our agent id
  * only) and clears exports/ and data/ (keeping data/mem0-usage.json). Prints the Mem0 requests it used.
  */
-export async function resetCommand(args, { store, config, confirm = ask, print = console.log }) {
+export async function resetCommand(args, { store, config, confirm = ask, print = console.log, sleepFn }) {
   const { planReset, runReset, planLines } = await import('./reset.js')
   const { withMem0Count, mem0Requests } = await import('./util/mem0count.js')
   const { counts, result } = withMem0Count(async () => {
@@ -192,7 +192,7 @@ export async function resetCommand(args, { store, config, confirm = ask, print =
       return plan
     }
     return runReset({
-      store, config,
+      store, config, ...(sleepFn && { sleepFn }),
       confirm: async (plan) => {
         for (const l of planLines(plan)) print(l)
         if (plan.total === 0 && !plan.local.exports.files && !plan.local.data.entries.length) {
@@ -208,7 +208,7 @@ export async function resetCommand(args, { store, config, confirm = ask, print =
     if (!r.done) print('Nothing deleted.')
     else {
       print(`Deleted ${r.deleted} Mem0 memories (left: ${r.left}). Local: ${r.removedLocal.length ? r.removedLocal.join(', ') : 'nothing'}.`)
-      if (r.left) print(`WARNING: ${r.left} memories are still listed: Mem0 deletes in the background; run the dry run again in a minute.`)
+      if (r.left) print(`${r.left} memories are still listed: Mem0 deletes in the background (event ${r.event_id ?? 'unknown'}). Run the dry run again in a few minutes (1 Mem0 request).`)
       print('A running engine now says its data may be out of date: click Refresh from Mem0 in the dashboard.')
     }
   }

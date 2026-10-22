@@ -87,13 +87,17 @@ test('real reset: nothing happens without "yes"; with "yes" one delete-all for o
   assert.ok(existsSync(join(s.data, 'previews')))
 
   s.mem0.calls.length = 0
-  const r = await runReset({ store: s.store, config: s.config, confirm: async (plan) => plan.total === 131 })
+  const waits = []
+  const r = await runReset({ store: s.store, config: s.config, confirm: async (plan) => plan.total === 131, sleepFn: async (ms) => { waits.push(ms) } })
   assert.equal(r.done, true)
   assert.equal(r.deleted, 131)
   assert.equal(r.left, 0)
   const del = s.mem0.calls.filter((c) => c[0] === 'deleteAll')
   assert.deepEqual(del, [['deleteAll', { agentId: AGENT }]], 'exactly one delete-all, with only our agent id')
-  assert.ok(s.mem0.calls.some((c) => c[0] === 'event' && c[1].includes('evt-del-1')), 'its background event is followed')
+  assert.ok(!s.mem0.calls.some((c) => c[0] === 'event'), 'the background event is not polled (each poll is a request)')
+  assert.deepEqual(waits, [20000], 'one wait, then one check list')
+  assert.equal(r.event_id, 'evt-del-1')
+  assert.deepEqual(s.mem0.calls.map((c) => c[0]), ['getAll', 'getAll', 'deleteAll', 'getAll'], '2 list pages, 1 delete-all, 1 check list')
   assert.equal(s.mem0.calls.filter((c) => c[0] === 'delete').length, 0)
   assert.deepEqual([...s.mem0.memories.values()].map((m) => m.agentId), ['someone-else', 'someone-else'])
   assert.deepEqual(readdirSync(s.exportsDir), [])
@@ -133,9 +137,9 @@ test('countByType sorts by count; the CLI prints the counts and the Mem0 request
   assert.ok(out2.includes('Nothing deleted.'))
   assert.equal(s.mem0.memories.size, 133)
   const out3 = []
-  await resetCommand({ _: ['reset'] }, { store: s.store, config: s.config, print: (l) => out3.push(l), confirm: async () => 'yes' })
+  await resetCommand({ _: ['reset'] }, { store: s.store, config: s.config, print: (l) => out3.push(l), confirm: async () => 'yes', sleepFn: async () => {} })
   restore()
   assert.ok(out3.some((l) => /^Deleted 131 Mem0 memories \(left: 0\)/.test(l)))
-  assert.match(out3.at(-1), /^Mem0 requests: \d+ \(reads \d+ · writes 1\)$/)
+  assert.match(out3.at(-1), /^Mem0 requests: 4 \(reads 3 · writes 1\)$/)
   s.done()
 })

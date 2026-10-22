@@ -69,9 +69,10 @@ export async function planReset({ store, config }) {
 
 /**
  * The real reset. confirm(plan) must resolve true (the CLI asks for "yes"); otherwise nothing changes.
- * @returns {{ done: boolean, plan, deleted?: number, left?: number, removedLocal?: string[] }}
+ * @returns {{ done: boolean, plan, deleted?: number, left?: number, removedLocal?: string[], event_id?: string }}
+ * settleMs: how long to wait for Mem0's background delete before the one check list (default 20 s).
  */
-export async function runReset({ store, config, confirm }) {
+export async function runReset({ store, config, confirm, settleMs = 20000, sleepFn = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   if (store.dryRun) throw new ResetError('the store is in DRY_RUN mode: a reset needs a real store')
   if (!store.agentId || /[*]/.test(store.agentId)) throw new ResetError(`refusing to reset: MEM0_AGENT_ID "${store.agentId ?? ''}" is empty or a wildcard`)
   const lock = activeLock(config)
@@ -79,10 +80,13 @@ export async function runReset({ store, config, confirm }) {
   const plan = await planReset({ store, config })
   if (!(await confirm(plan))) return { done: false, plan }
   let deleted = 0
+  let eventId = null
   if (plan.total > 0) {
-    await store.deleteAllForAgent()
+    eventId = (await store.deleteAllForAgent()).event_id
     deleted = plan.total
   }
+  // Mem0 deletes in the background: wait once, then one check list (no polling: each poll is a request).
+  if (plan.total > 0) await sleepFn(settleMs)
   const left = plan.total > 0 ? (await store.listAgentMemories()).length : 0
   // Local leftovers: the exports folder and data/ except the usage file.
   const removedLocal = []
@@ -98,7 +102,7 @@ export async function runReset({ store, config, confirm }) {
   }
   // A running engine learns that the data changed (its index reports "may be out of date").
   markWrite(config)
-  return { done: true, plan, deleted, left, removedLocal }
+  return { done: true, plan, deleted, left, removedLocal, event_id: eventId }
 }
 
 /** Plain lines for the CLI. */
