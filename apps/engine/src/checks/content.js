@@ -3,6 +3,7 @@
 // Each result: { id, passed, severity: "hard" | "soft", value, detail }.
 
 import { BANNED_PHRASES, FIRST_PERSON_PHRASES, HARD_CLAIM_PATTERNS, SOFT_CLAIM_WORDS, LEGAL_FRAMING_PHRASES, findPhrases, phraseRegex } from './phrases.js'
+import { needsStartHere, START_HERE_RE } from '../timely/starthere.js'
 import { fleschKincaidGrade, sentences, words, sentenceStats } from './readability.js'
 import { normaliseCode } from '../writer/snippets.js'
 
@@ -302,6 +303,12 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
     const outlet = String(brief.news.outlet ?? '')
     const ok = /reported by/i.test(md) && outlet && md.toLowerCase().includes(outlet.toLowerCase())
     R('news_attribution', ok, 'hard', ok ? 1 : 0, ok ? 'ok' : `"reported by" and "${outlet}" must both appear`)
+  }
+
+  // The timely lane: a rapid-response post starts its body with the Start-here line (code puts it in).
+  if (needsStartHere(brief, config)) {
+    const ok = md.split('\n').some((l) => START_HERE_RE.test(l))
+    R('start_here_line', ok, 'hard', ok ? 1 : 0, ok ? 'ok' : 'the "New to M91? Start here: …" line is missing (needs an approved Starter post)')
   }
 
   // Code: only inserted snippets, never code the AI wrote (every post).

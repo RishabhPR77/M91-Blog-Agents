@@ -1,4 +1,6 @@
-// Picking the next post (Phase 12, Task 3): code only, no AI. A pinned topic that is due goes first. Otherwise the
+// Picking the next post (Phase 12, Task 3): code only, no AI. A pinned topic that is due goes first, then one timely
+// opportunity you chose with Write now (the timely lane: once the Starter has an approved post, at most
+// TIMELY_MAX_PER_WEEK per 7 days; it never uses up a slot). Otherwise the
 // lowest stage that is not finished, then its first planned slot whose needs are all done. A slot is done when it
 // is approved (its Markdown export is saved on approval) or skipped. Proposed slots are never picked.
 // Also the slot status updates of a run: drafting → in_review → approved, back to planned when the run fails,
@@ -7,6 +9,7 @@
 import { loadRoadmap, saveRoadmap } from './model.js'
 import { istDate } from '../util/time.js'
 import { log } from '../util/log.js'
+import { nextTimely, timelyTarget } from '../timely/model.js'
 
 const DONE = new Set(['approved', 'skipped'])
 
@@ -38,17 +41,22 @@ export function duePins(pins, { today }) {
 }
 
 /**
- * What the next run writes about: { kind: 'pinned', pin } | { kind: 'slot', slot, stage, roadmapRecord } |
- * { kind: 'none', reason }. Reads the pinned topics and the roadmap (from the engine's index when it runs).
+ * What the next run writes about: { kind: 'pinned', pin } | { kind: 'timely', opportunity } |
+ * { kind: 'slot', slot, stage, roadmapRecord } | { kind: 'none', reason }. A slot or none may carry timelyWaiting
+ * ({ title, reason }): a Write now card that waits. Reads the pinned topics, the timely cards and the roadmap
+ * (from the engine's index when it runs). config: needed for the timely lane (without it, the lane is off).
  */
-export async function pickTarget(store, { now = Date.now } = {}) {
+export async function pickTarget(store, { now = Date.now, config = null } = {}) {
   const today = istDate(new Date(now()))
   const pins = duePins(await store.getRecords({ type: 'pinned_topic' }), { today })
   if (pins.length) return { kind: 'pinned', pin: { pinned_id: pins[0].payload.pinned_id, topic: pins[0].payload.topic, notes: pins[0].payload.notes ?? '', record_id: pins[0].id } }
+  const timely = await nextTimely(store, { config, now })
+  if (timely.record) return timelyTarget(timely.record)
+  const timelyWaiting = timely.waiting ? { title: timely.waiting.payload?.title ?? '', opportunity_id: timely.waiting.payload?.opportunity_id ?? null, reason: timely.reason } : null
   const rec = await loadRoadmap(store)
   const picked = nextSlot(rec?.payload ?? null)
-  if (!picked.slot) return { kind: 'none', reason: picked.reason }
-  return { kind: 'slot', slot: picked.slot, stage: picked.stage, roadmapRecord: rec }
+  if (!picked.slot) return { kind: 'none', reason: picked.reason, ...(timelyWaiting && { timelyWaiting }) }
+  return { kind: 'slot', slot: picked.slot, stage: picked.stage, roadmapRecord: rec, ...(timelyWaiting && { timelyWaiting }) }
 }
 
 /**

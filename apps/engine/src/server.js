@@ -28,6 +28,8 @@ import { roadmapProblems } from './roadmap/checks.js'
 import { pickTarget } from './roadmap/pick.js'
 import { approveRoadmap, editSlot, moveSlot, setSkipped, decideProposed, RoadmapError } from './roadmap/actions.js'
 import { knowledgeMap } from './roadmap/knowledge.js'
+import { listOpportunities, nextTimely, applyAction, isExpired, OPEN_STATUSES, TimelyError } from './timely/model.js'
+import { istDate } from './util/time.js'
 import { previewExport, latestExport, ExportError } from './export/index.js'
 import { createDocstar } from './publisher/docstar.js'
 import { withMem0Count, mem0Requests } from './util/mem0count.js'
@@ -112,6 +114,8 @@ export function publicSettings(config) {
     },
     // Phase 12: the roadmap (runs follow it) and rapid response (off).
     roadmap: { enabled: Boolean(config.roadmap?.enabled), rapid_response_enabled: Boolean(config.scout?.rapidResponseEnabled) },
+    // The timely lane (on with RAPID_RESPONSE_ENABLED and the roadmap).
+    timely: config.timely && { enabled: Boolean(config.timely.enabled), check_on_run: config.timely.checkOnRun, window_days: config.timely.windowDays, max_per_week: config.timely.maxPerWeek },
     built_modes: [...BUILT_MODES],
     decision_modes: [...DECISION_MODES],
     publish_modes: [...PUBLISH_MODES]
@@ -390,7 +394,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     if (run.payload?.brief_id) ids.add(run.payload.brief_id)
     if (!ids.size) return []
     // One filtered (and cached) read per type, in parallel.
-    const types = ['m91_facts', 'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'source_pack', 'draft', 'review', 'block_doc', 'guide_doc', 'markdown_export']
+    const types = ['m91_facts', 'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'source_pack', 'draft', 'review', 'block_doc', 'guide_doc', 'markdown_export', 'timely_opportunity']
     const lists = await Promise.all(types.map((type) => store.getRecords({ type })))
     return lists.flat().filter((r) => ids.has(r.id) || ids.has(KEY_ID_OF(r.payload))).map(trimRecord)
   }
@@ -505,14 +509,59 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       return send(res, 200, { export: { ...exportSummary(rec), markdown: rec.payload.markdown, front_matter: rec.payload.front_matter, warnings: rec.payload.warnings ?? [] } })
     }
 
+    // The timely lane: the cards (newest first; a card past its window shows as expired before a run marks it), the
+    // open count, and a Write now card that waits with its reason. 0 Mem0 requests with the engine's index.
+    if (path === '/api/timely' && method === 'GET') {
+      const today = istDate(new Date(now()))
+      const windowDays = config?.timely?.windowDays ?? 7
+      const cards = (await listOpportunities(store)).map((r) => {
+        const status = isExpired(r, { today, windowDays }) ? 'expired' : r.status
+        const p = r.payload ?? {}
+        return {
+          record_id: r.id, opportunity_id: p.opportunity_id, status, title: p.title, what_happened: p.what_happened, source_url: p.source_url, outlet: p.outlet,
+          published_date: p.published_date, why_m91: p.why_m91, urgency: p.urgency, urgency_reason: p.urgency_reason, topic_group: p.topic_group ?? null,
+          found_at: p.found_at ?? null, brief_id: p.brief_id || null, slot_id: p.slot_id ?? null, written_at: p.written_at ?? null
+        }
+      }).sort((a, b) => String(b.published_date).localeCompare(String(a.published_date)) || String(b.found_at).localeCompare(String(a.found_at)))
+      const t = config?.timely?.enabled ? await nextTimely(store, { config, now }) : { record: null, waiting: null, reason: null }
+      return send(res, 200, {
+        enabled: Boolean(config?.timely?.enabled),
+        settings: config?.timely ? { window_days: config.timely.windowDays, max_per_week: config.timely.maxPerWeek, check_on_run: config.timely.checkOnRun } : null,
+        open: cards.filter((c) => OPEN_STATUSES.includes(c.status)).length,
+        next: t.record ? { opportunity_id: t.record.payload?.opportunity_id, title: t.record.payload?.title } : null,
+        waiting: t.waiting ? { opportunity_id: t.waiting.payload?.opportunity_id, title: t.waiting.payload?.title, reason: t.reason } : null,
+        opportunities: cards
+      })
+    }
+    // A card action: { action: "write_now" | "add_to_roadmap" (with stage 1–5) | "dismiss" }. No AI call.
+    if (seg[1] === 'timely' && seg[2] && seg.length === 3 && method === 'POST') {
+      if (!config?.timely?.enabled) throw new ApiError(409, 'timely_off', 'the timely lane is off (RAPID_RESPONSE_ENABLED=false, or the roadmap is off)')
+      if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: decide when it has finished')
+      const body = await readJson(req)
+      try {
+        const rec = await applyAction(store, decodeURIComponent(seg[2]), body.action, { stage: body.stage, now })
+        return send(res, 200, { opportunity: { record_id: rec.id, opportunity_id: rec.payload?.opportunity_id, status: rec.status, slot_id: rec.payload?.slot_id ?? null } })
+      } catch (error) {
+        if (error instanceof TimelyError) throw new ApiError(error.status, error.code, error.message)
+        throw error
+      }
+    }
+
     // Phase 12: the roadmap. GET it (with what is next and any problems); approve it; change slots. Every change
     // is checked by the roadmap rules and saves the one roadmap record (about 2 Mem0 requests). Generate: POST
     // /api/runs with mode "roadmap".
     if (seg[1] === 'roadmap') {
       if (path === '/api/roadmap' && method === 'GET') {
         const rec = await loadRoadmap(store)
-        const next = rec?.payload ? await pickTarget(store, { now }) : { kind: 'none', reason: 'there is no roadmap yet: generate it' }
-        const compactNext = next.kind === 'slot' ? { kind: 'slot', slot_id: next.slot.slot_id, title_idea: next.slot.title_idea, stage: next.stage } : next.kind === 'pinned' ? { kind: 'pinned', topic: next.pin.topic, pinned_id: next.pin.pinned_id } : { kind: 'none', reason: next.reason }
+        const next = rec?.payload ? await pickTarget(store, { now, config }) : { kind: 'none', reason: 'there is no roadmap yet: generate it' }
+        const compactNext = {
+          ...(next.kind === 'slot' ? { kind: 'slot', slot_id: next.slot.slot_id, title_idea: next.slot.title_idea, stage: next.stage }
+            : next.kind === 'pinned' ? { kind: 'pinned', topic: next.pin.topic, pinned_id: next.pin.pinned_id }
+              : next.kind === 'timely' ? { kind: 'timely', title: next.opportunity.title, opportunity_id: next.opportunity.opportunity_id, outlet: next.opportunity.outlet }
+                : { kind: 'none', reason: next.reason }),
+          // The timely lane: a Write now card that waits, and why.
+          ...(next.timelyWaiting && { timely_waiting: next.timelyWaiting })
+        }
         return send(res, 200, { roadmap: rec?.payload ?? null, record_id: rec?.id ?? null, next: compactNext, problems: rec?.payload ? roadmapProblems(rec.payload) : [] })
       }
       if (method === 'POST') {

@@ -18,6 +18,7 @@ import { saveFinalExport, latestExport } from './export/index.js'
 import { createDocstar, publishToDocstar } from './publisher/docstar.js'
 import { createPublisher } from './publisher/index.js'
 import { setSlotStatus } from './roadmap/pick.js'
+import { finishTimely } from './timely/model.js'
 import { knowledgeOf, saveKnowledge } from './roadmap/knowledge.js'
 import { loadRoadmap } from './roadmap/model.js'
 import { setLeadStatus } from './strategist/save.js'
@@ -169,6 +170,8 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
   if (briefRec?.id) await store.updateRecord(briefRec.id, undefined, { status: 'approved', approved_by: 'human', approved_at: at })
   // Phase 12: its roadmap slot is done (a later slot that needs it can be picked).
   if (config.roadmap?.enabled) await setSlotStatus(store, { slotId: briefRec?.payload?.slot_id ?? null, briefId }, 'approved')
+  // The timely lane: the card of this post (if any) is written.
+  const timely = config.timely?.enabled && briefRec?.payload?.post_type === 'rapid_response' ? await finishTimely(store, briefId, 'approved', { now }) : null
   const total = d.metadata?.review_total ?? null
 
   let promo = null
@@ -212,7 +215,7 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
       const st = rm?.stages.find((x) => x.slots.some((s) => s.slot_id === slotId)) ?? null
       const slot = st?.slots.find((s) => s.slot_id === slotId) ?? null
       const k = knowledgeOf({ briefId, brief: briefRec?.payload ?? {}, draft: d.payload ?? {}, slot, stage: st, exportInfo: exported ? { slug: exported.slug ?? null } : null })
-      await saveKnowledge(store, { ...k, approved_at: at })
+      await saveKnowledge(store, { ...k, approved_at: at, ...(timely?.ok && { kind: 'timely', opportunity_id: timely.opportunity_id }) })
     } catch (error) {
       warnings.push(`knowledge map not updated (the approval stands): ${error.message}`)
     }
@@ -321,6 +324,8 @@ export async function runRejectTopic({ briefId, params = {}, config, store }) {
   if (briefRec?.id) await store.updateRecord(briefRec.id, undefined, { status: 'rejected', rejected_at: at })
   // Phase 12: a rejected topic's slot is skipped (never picked again; slots that need it are not blocked).
   if (config.roadmap?.enabled) await setSlotStatus(store, { slotId: briefRec?.payload?.slot_id ?? null, briefId }, 'skipped')
+  // The timely lane: rejecting a timely post's topic dismisses its card.
+  if (config.timely?.enabled && briefRec?.payload?.post_type === 'rapid_response') await finishTimely(store, briefId, 'dismissed')
   const lead = briefRec?.payload?.lead
   const leadRec = await findLeadRecord(store, lead)
   if (leadRec) {

@@ -60,6 +60,26 @@ For each story:
 Never present a story as M91's own experience. Never guess details that the source does not state.
 Return at most {{stories_max}} stories, the most relevant first. Return an empty list if you find nothing real.`
 
+// The timely lane (news check): one web-search call. Code keeps only events dated inside the window whose source
+// loads, and drops the ones already known.
+export const TIMELY = `Task: find real, public events from the last {{window_days}} days (today is {{today}}) where M91 genuinely helps a reader act, for example:
+- an AI agent or automation took an action without a needed human approval, and it caused a problem,
+- an alert, approval or on-call page was missed or ignored, and it caused an outage, loss or incident,
+- a payment, refund, payout, deployment or data action went wrong because nobody was reached in time,
+- a new law, rule or official guidance about human oversight of AI or automated decisions,
+- news about Opsgenie (its end of support) or on-call and alerting tools that changes what teams must do.
+
+Allowed sources: news articles, published incident reports or postmortems, official company blogs and regulator pages. Never invent an event, a date or a detail the source does not state. Skip anything older than {{window_days}} days or without a clear date. Skip events already listed in KNOWN EVENTS.
+For each event:
+- "title": a short neutral title in your own words.
+- "what_happened": what happened, in at most 2 sentences, your own words (no quotes).
+- "source_url", "outlet" (the publication or site), "published_date" (YYYY-MM-DD, from the source).
+- "why_m91": one sentence on how M91 genuinely helps here, based only on the M91 FACTS in the message.
+- "urgency": "high" when readers need to act this week, "medium" when it matters this month, "low" otherwise; "urgency_reason": one sentence why.
+- "topic_group": 1 to 5.
+
+Return at most {{events_max}} events, the most relevant first. Return an empty list if you find nothing real where M91 genuinely helps.`
+
 export const TUTORIALS = `Task: propose up to 5 tutorial ideas that readers would search for, such as connecting M91 to Cursor, Claude Code, LangGraph, the OpenAI Agents SDK, an n8n or viaSocket workflow, or a payment-failure webhook.
 
 Use only the M91 FACTS (the "can" and "integrations" lists) and the M91 SKILL REPO text in the message. You may open only the repository URL given there. Do not use other web pages.
@@ -186,7 +206,9 @@ export function buildMessage(sections) {
     ['today', 'TODAY'], ['facts', 'M91 FACTS (summary)'], ['alreadyCovered', 'ALREADY COVERED'], ['competitors', 'COMPETITORS'],
     ['questions', 'QUESTIONS'], ['docs', 'M91 DOCS'], ['skillRepo', 'M91 SKILL REPO'], ['claims', 'CLAIMS'],
     // Phase 12: the focused Scout.
-    ['slot', 'POST TO RESEARCH'], ['roadmap', 'ROADMAP']
+    ['slot', 'POST TO RESEARCH'], ['roadmap', 'ROADMAP'],
+    // The timely lane: events already found or written about (the news check skips them).
+    ['knownEvents', 'KNOWN EVENTS']
   ]
   return order
     .filter(([key]) => sections[key] !== undefined && sections[key] !== null)

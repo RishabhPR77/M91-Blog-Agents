@@ -51,6 +51,7 @@ import { listPins, addPin, cancelPin, DATE_RE } from './pins.js'
 import { engineUrl, runViaEngine, engineApi } from './enginecall.js'
 import { usageStatus, setUsage } from './util/mem0usage.js'
 import { previewExport, exportDir } from './export/index.js'
+import { listOpportunities, applyAction } from './timely/model.js'
 
 /** --key=value, --key value, or a bare --flag (true). Anything else is positional. */
 export function parseArgs(argv) {
@@ -406,6 +407,33 @@ async function main() {
   if (args._[0] === 'test-await') {
     const r = await setAwaitingForTest(createStore({ config, dryRun: false }), config, { briefId: args['brief-id'], version: args.version ? Number(args.version) : undefined })
     console.log(`TEST: ${r.brief_id} v${r.version} (brief v${r.brief_version}) ${r.previous_status} → awaiting_human · score ${r.total ?? 'none'} · draft and brief marked test data`)
+    return
+  }
+
+  // The timely lane. --check: the news check (1 AI call, a run). --list: the cards. --write-now / --dismiss <id>,
+  // --add <id> --stage <1–5>: your decision on a card (no AI). Through the engine when it runs.
+  if (args._[0] === 'timely') {
+    const usage = 'usage: npm run timely -- --check | --list | --write-now <id> | --dismiss <id> | --add <id> --stage <1-5>'
+    if (args.check) {
+      const result = await startAndWait(config, { mode: 'timely_check' })
+      console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
+      for (const w of result.run?.warnings ?? []) console.log(`WARNING: ${w}`)
+      process.exitCode = result.status === 'succeeded' ? 0 : 1
+      return
+    }
+    const engine = await engineUrl(config)
+    const action = args['write-now'] ? ['write_now', args['write-now']] : args.dismiss ? ['dismiss', args.dismiss] : args.add ? ['add_to_roadmap', args.add] : null
+    if (action) {
+      if (typeof action[1] !== 'string') throw new Error(usage)
+      const body = { action: action[0], ...(action[0] === 'add_to_roadmap' && { stage: Number(args.stage) }) }
+      const out = engine ? (await engineApi.timelyAction(engine, action[1], body)).opportunity : await applyAction(store, action[1], body.action, { stage: body.stage })
+      console.log(`${action[1]}: ${out.status}${out.slot_id ?? out.payload?.slot_id ? ` (slot ${out.slot_id ?? out.payload.slot_id})` : ''}`)
+      return
+    }
+    if (!args.list) throw new Error(usage)
+    const cards = engine ? (await engineApi.timely(engine)).opportunities : (await listOpportunities(store)).map((r) => ({ ...r.payload, status: r.status }))
+    if (!cards.length) return console.log('No timely opportunities yet: npm run timely -- --check')
+    console.table(cards.map((c) => ({ id: c.opportunity_id, status: c.status, urgency: c.urgency, date: c.published_date, outlet: c.outlet, title: String(c.title).slice(0, 60) })))
     return
   }
 

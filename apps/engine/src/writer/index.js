@@ -14,6 +14,7 @@ import { writer_draft, draftSchemaErrors } from './schemas.js'
 import { buildWriterPrompt, repairTail, truncatedProblem } from './prompts.js'
 import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, citedDocsSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage } from './inputs.js'
 import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets, SNIPPET_LIST_MAX_LINES } from './snippets.js'
+import { needsStartHere, starterPost, withStartHere } from '../timely/starthere.js'
 import { draftsOf, nextDraftVersion, saveDraft, draftVersion, isEarlierDraft } from './save.js'
 import { saveRunLog } from '../util/runlog.js'
 
@@ -278,6 +279,9 @@ export async function runWriter(params = {}, deps = {}) {
     return res
   }
 
+  // The timely lane: a rapid-response post starts with a line pointing new readers to the Starter post.
+  const starter = needsStartHere(brief, config) ? await starterPost(store) : null
+  if (needsStartHere(brief, config) && !starter) warnings.push('timely post: no approved Starter post yet, so no Start-here line (the check start_here_line fails)')
   const maxWords = Math.floor(0.8 * (brief.word_target?.max ?? config.content.targetWordsMax))
   let answer = await callModel(mode)
   let repairs = 0
@@ -297,6 +301,8 @@ export async function runWriter(params = {}, deps = {}) {
     const replaced = replaceSnippetTokens(draft.post_markdown, snippets)
     autoFixes.push(...replaced.widened)
     draft.post_markdown = replaced.markdown
+    // The timely lane: the Start-here line is put in by code (exact), before the checks.
+    if (starter) draft.post_markdown = withStartHere(draft.post_markdown, starter)
     snippetsUsed = replaced.used
     snippetInserts = replaced.inserts
     checks = await check(draft, replaced)

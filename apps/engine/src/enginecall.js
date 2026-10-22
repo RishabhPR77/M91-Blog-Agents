@@ -64,6 +64,9 @@ export const engineApi = {
   addPin: (base, pin, { fetch = globalThis.fetch } = {}) => call(base, '/api/pinned', { method: 'POST', body: pin, fetch }),
   cancelPin: (base, pinnedId, { fetch = globalThis.fetch } = {}) => call(base, `/api/pinned/${encodeURIComponent(pinnedId)}`, { method: 'DELETE', fetch }),
   deleteLesson: (base, id, { fetch = globalThis.fetch } = {}) => call(base, `/api/lessons/${encodeURIComponent(id)}`, { method: 'DELETE', fetch }),
+  // The timely lane: the cards, and one action on a card (no AI).
+  timely: (base, { fetch = globalThis.fetch } = {}) => call(base, '/api/timely', { fetch }),
+  timelyAction: (base, id, body, { fetch = globalThis.fetch } = {}) => call(base, `/api/timely/${encodeURIComponent(id)}`, { method: 'POST', body, fetch }),
   // Phase 11: the Markdown export of a reviewed draft, built by the engine (read from its index; nothing saved).
   markdown: (base, briefId, version, { fetch = globalThis.fetch } = {}) => call(base, `/api/approvals/${encodeURIComponent(briefId)}/markdown${version ? `?version=${version}` : ''}`, { fetch })
 }

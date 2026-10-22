@@ -54,7 +54,8 @@
     "mem0:usage": "node --env-file=../../.env src/cli.js mem0-usage",
     "reset:all": "node --env-file=../../.env src/cli.js reset",
     "roadmap": "node --env-file=../../.env src/cli.js roadmap",
-    "export": "node --env-file=../../.env src/cli.js export"
+    "export": "node --env-file=../../.env src/cli.js export",
+    "timely": "node --env-file=../../.env src/cli.js timely"
   },
   "dependencies": {
     "@m91/content": "0.1.0",

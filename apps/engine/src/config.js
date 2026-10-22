@@ -40,8 +40,10 @@ const DEFAULTS = {
   PROMO_AI_SERVICE: 'openai', PROMO_AI_MODEL: 'gpt-5-mini', PROMO_DELIVERY: 'sync',
   // Phase 12: the Roadmap Planner (one call plans the learning path; one repair when the code checks fail).
   PLANNER_AI_SERVICE: 'openai', PLANNER_AI_MODEL: 'gpt-5.6-luna', PLANNER_DELIVERY: 'sync', PLANNER_MAX_REPAIRS: '1',
-  // Phase 12: runs follow the approved roadmap (no news / rapid-response posts).
-  ROADMAP_ENABLED: 'true', RAPID_RESPONSE_ENABLED: 'false',
+  // Phase 12: runs follow the approved roadmap. Timely lane: RAPID_RESPONSE_ENABLED=true means "news checks find
+  // timely opportunities, the person decides"; a timely post is written only after Write now.
+  ROADMAP_ENABLED: 'true', RAPID_RESPONSE_ENABLED: 'true',
+  TIMELY_CHECK_ON_RUN: 'true', TIMELY_WINDOW_DAYS: '7', TIMELY_MAX_PER_WEEK: '1',
   MEM0_AGENT_ID: 'm91-blog',
   // Phase 9 A5: the Mem0 quota guard (an estimate kept in apps/engine/data/mem0-usage.json)
   MEM0_MONTHLY_LIMIT: '1000', MEM0_MONTHLY_ADD_LIMIT: '10000', MEM0_WARN_PCT: '80', MEM0_STOP_PCT: '95',
@@ -301,6 +303,13 @@ export function loadConfig(env = process.env) {
     },
     // Phase 12: each run writes the next slot of the approved roadmap (pinned topics first).
     roadmap: { enabled: bool('ROADMAP_ENABLED') },
+    // The timely lane, next to the roadmap (on only when both RAPID_RESPONSE_ENABLED and ROADMAP_ENABLED are true).
+    timely: {
+      enabled: bool('RAPID_RESPONSE_ENABLED') && bool('ROADMAP_ENABLED'),
+      checkOnRun: bool('TIMELY_CHECK_ON_RUN'),
+      windowDays: int('TIMELY_WINDOW_DAYS', { min: 1, max: 60 }),
+      maxPerWeek: int('TIMELY_MAX_PER_WEEK', { min: 0, max: 7 })
+    },
     promo: {
       ...agent('promo'),
       // Phase 10: off by default (the code and tests stay; approving never runs it unless this is true)

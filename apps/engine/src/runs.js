@@ -38,8 +38,8 @@ import { runWriter } from './writer/index.js'
 import { loadBrief } from './writer/inputs.js'
 import { addToTimeline } from './timeline.js'
 
-export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export', 'roadmap'])
-export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export', 'roadmap'])
+export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export', 'roadmap', 'timely_check'])
+export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export', 'roadmap', 'timely_check'])
 // The Publisher's modes (Phase 7): code only, no AI calls.
 export const PUBLISH_MODES = Object.freeze(['publish', 'unpublish', 'set_index', 'rebuild_blog'])
 // Which publish modes each PUBLISH_TARGET supports (Phase 11). none: no publishing at all (the export is the output).
@@ -140,7 +140,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (usage.level === 'stop' && !QUOTA_EXEMPT_MODES.includes(mode)) throw new RunError('mem0_quota', stopMessage(usage), 429)
     // Phase 12: a pipeline run needs an approved roadmap with a slot ready (or a pinned topic due), before any AI call.
     if (mode === 'full' && config.roadmap?.enabled) {
-      const t = await pickTarget(readStore(configForRun(config, { dryRun, params })), { now })
+      const t = await pickTarget(readStore(configForRun(config, { dryRun, params })), { now, config })
       if (t.kind === 'none') throw new RunError(/Approve the roadmap first|no roadmap yet/.test(t.reason) ? 'roadmap_not_approved' : 'nothing_to_write', t.reason, 409)
     }
     if (mode === 'writer') await checkWriterParams(params, configForRun(config, { dryRun, params }))
@@ -148,6 +148,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (mode === 'promo') await checkPromoParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'designer') await checkDesignerParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'export') await checkExportParams(params, configForRun(config, { dryRun, params }))
+    if (mode === 'timely_check' && !config.timely?.enabled) throw new RunError('timely_off', 'the timely lane is off (RAPID_RESPONSE_ENABLED=false, or the roadmap is off)', 409)
     if (PUBLISH_MODES.includes(mode)) await checkPublishParams(mode, params, configForRun(config, { dryRun, params }))
     if (DECISION_MODES.includes(mode)) {
       const runConfig0 = configForRun(config, { dryRun, params })
@@ -339,6 +340,23 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       return { status, brief_id: r.briefId, summary: r.error ?? r.summary ?? `pipeline ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
     }
     const agents = agentsFactory?.(runConfig, { store, notifier })
+    if (mode === 'timely_check') {
+      // The timely lane's news check on demand: 1 AI call; the cards wait for your decision (nothing is written).
+      emit('step.started', { agent: 'scout', step: 'scout' })
+      try {
+        const out = agents?.scout
+          ? (await agents.scout({ runId, scoutMode: 'timely', config: runConfig })).output
+          : await runScout({ mode: 'timely', runId }, { config: runConfig, store, notifier })
+        emit('step.finished', { agent: 'scout', step: 'scout' })
+        const sum = summariseOutput('scout', out)
+        if (sum) emit('step.output', { agent: 'scout', step: 'scout', ...sum })
+        const c = out.counts ?? {}
+        return { status: 'succeeded', summary: `news check: ${c.kept ?? 0} new timely opportunit${c.kept === 1 ? 'y' : 'ies'} (${c.returned ?? 0} found, ${c.dropped ?? 0} dropped${c.expired ? `, ${c.expired} expired` : ''})`, warnings: out.warnings, output: { opportunity_ids: (out.opportunities ?? []).map((o) => o.opportunity_id), dropped: out.dropped ?? [] } }
+      } catch (error) {
+        stepEnded('scout', error, signal)
+        throw error
+      }
+    }
     if (mode === 'scout') {
       emit('step.started', { agent: 'scout', step: 'scout' })
       try {

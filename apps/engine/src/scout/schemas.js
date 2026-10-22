@@ -68,6 +68,25 @@ export const scout_stories = {
   })
 }
 
+// The timely lane's news check: real events from the last TIMELY_WINDOW_DAYS where M91 genuinely helps.
+export const scout_timely = {
+  name: 'scout_timely',
+  strict: true,
+  schema: obj({
+    events: arr(obj({
+      title: str,
+      what_happened: str,
+      source_url: str,
+      outlet: str,
+      published_date: str,
+      why_m91: str,
+      urgency: { type: 'string', enum: ['low', 'medium', 'high'] },
+      urgency_reason: str,
+      topic_group: GROUP
+    }))
+  })
+}
+
 export const scout_tutorials = {
   name: 'scout_tutorials',
   strict: true,
@@ -156,4 +175,4 @@ export const scout_slot_sources = {
   })
 }
 
-export const SCHEMAS = Object.freeze({ scout_m91_facts, scout_questions, scout_stories, scout_tutorials, scout_clusters, scout_style, scout_sources, scout_slot_questions, scout_slot_sources })
+export const SCHEMAS = Object.freeze({ scout_m91_facts, scout_questions, scout_stories, scout_tutorials, scout_clusters, scout_style, scout_sources, scout_slot_questions, scout_slot_sources, scout_timely })

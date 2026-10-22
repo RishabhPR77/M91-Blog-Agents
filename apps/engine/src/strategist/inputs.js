@@ -84,18 +84,21 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
   // Phase 12: a roadmap slot (or a due pinned topic) is the only lead of the run.
   const slotTarget = target?.kind === 'slot' ? target : null
   const pinTarget = target?.kind === 'pinned' ? target : null
-  const forTarget = (r) => (slotTarget ? r.payload?.slot_id === slotTarget.slot.slot_id : pinTarget ? r.payload?.pinned_id === pinTarget.pin.pinned_id : true)
+  // The timely lane: a card you chose with Write now; its story lead (made by the Scout) is the run's only lead.
+  const timelyTarget = target?.kind === 'timely' ? target : null
+  const forTarget = (r) => (slotTarget ? r.payload?.slot_id === slotTarget.slot.slot_id : pinTarget ? r.payload?.pinned_id === pinTarget.pin.pinned_id : timelyTarget ? r.payload?.opportunity_id === timelyTarget.opportunity.opportunity_id : true)
 
   // Pinned topics due.
   const pinnedDue = (await records('pinned_topic'))
-    .filter((r) => !slotTarget && (!pinTarget || r.payload?.pinned_id === pinTarget.pin.pinned_id))
+    .filter((r) => !slotTarget && !timelyTarget && (!pinTarget || r.payload?.pinned_id === pinTarget.pin.pinned_id))
     .filter((r) => usable(r) && String(r.payload?.target_date) <= today)
     .sort((a, b) => (a.payload.priority === 'high' ? -1 : 0) - (b.payload.priority === 'high' ? -1 : 0) || String(a.payload.target_date).localeCompare(String(b.payload.target_date)))
 
   // Stories: rapid-response window recomputed from the published date.
-  const stories = target ? [] : (await records('story_lead')).filter(usable)
+  const stories = target ? (timelyTarget ? (await records('story_lead')).filter(usable).filter(forTarget) : []) : (await records('story_lead')).filter(usable)
   // Phase 12: RAPID_RESPONSE_ENABLED=false turns the rapid-response path off (recent stories are ordinary stories).
-  const isRapid = (r) => sc.rapidResponseEnabled !== false && storyDateRule(r.payload?.published_date, { today, lookbackDays: sc.storyLookbackDays, rapidDays: sc.rapidResponseDays }).rapid
+  // A timely card's story is rapid by definition (its card is inside TIMELY_WINDOW_DAYS).
+  const isRapid = (r) => (timelyTarget && forTarget(r)) || (sc.rapidResponseEnabled !== false && storyDateRule(r.payload?.published_date, { today, lookbackDays: sc.storyLookbackDays, rapidDays: sc.rapidResponseDays }).rapid)
   const rapidStories = stories.filter(isRapid)
   const otherStories = stories.filter((r) => !isRapid(r)).sort((a, b) => byDateDesc(a.payload?.published_date, b.payload?.published_date)).slice(0, 10)
 
@@ -103,7 +106,7 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
   const topIds = (scoutResult?.top_clusters ?? []).map((c) => c.cluster_id)
   const clusters = (await records('question_cluster'))
     .filter(usable)
-    .filter((r) => !target || (slotTarget && forTarget(r)))
+    .filter((r) => !target || ((slotTarget || timelyTarget) && forTarget(r)))
     .sort((a, b) => {
       const ia = topIds.indexOf(a.payload?.cluster_id)
       const ib = topIds.indexOf(b.payload?.cluster_id)
@@ -197,7 +200,9 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     allowedUrls: allowed,
     leadCount: leadIndex.size,
     // Phase 12
-    target: slotTarget ? { slot_id: slotTarget.slot.slot_id, title_idea: slotTarget.slot.title_idea, question: slotTarget.slot.question, teaches: slotTarget.slot.teaches ?? [], needs: slotTarget.slot.needs ?? [], stage: slotTarget.stage } : pinTarget ? { pinned_id: pinTarget.pin.pinned_id, topic: pinTarget.pin.topic } : null,
+    target: slotTarget ? { slot_id: slotTarget.slot.slot_id, title_idea: slotTarget.slot.title_idea, question: slotTarget.slot.question, teaches: slotTarget.slot.teaches ?? [], needs: slotTarget.slot.needs ?? [], stage: slotTarget.stage } : pinTarget ? { pinned_id: pinTarget.pin.pinned_id, topic: pinTarget.pin.topic }
+      : timelyTarget ? (({ opportunity_id, title, what_happened, outlet, published_date, source_url, why_m91, urgency }) => ({ timely: true, opportunity_id, title, what_happened, outlet, published_date, source_url, why_m91, urgency }))(timelyTarget.opportunity)
+      : null,
     knowledge: knowledgeForPrompt(knowledge),
     slotSources
   }
@@ -211,7 +216,7 @@ export function buildStrategistMessage(inputs, tail = '', max = MESSAGE_MAX) {
   const take = { other: 10, covered: 60, clusters: 8, tutorials: 5 }
   const build = () => [
     '--- TODAY ---', inputs.today,
-    ...(inputs.target ? ['--- POST TO PLAN (from the roadmap) ---', json(inputs.target), '--- KNOWLEDGE MAP (what the reader already learned, newest first) ---', listOrNone(inputs.knowledge ?? []), '--- SOURCES FOR THIS POST ---', listOrNone(inputs.slotSources ?? [])] : []),
+    ...(inputs.target ? [inputs.target.timely ? '--- POST TO PLAN (a timely post about a real event) ---' : '--- POST TO PLAN (from the roadmap) ---', json(inputs.target), '--- KNOWLEDGE MAP (what the reader already learned, newest first) ---', listOrNone(inputs.knowledge ?? []), '--- SOURCES FOR THIS POST ---', listOrNone(inputs.slotSources ?? [])] : []),
     '--- PINNED TOPICS DUE ---', listOrNone(inputs.pinnedDue),
     '--- RAPID-RESPONSE STORIES ---', listOrNone(inputs.rapidStories),
     '--- OTHER STORIES ---', listOrNone(inputs.otherStories.slice(0, take.other)),

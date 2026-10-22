@@ -15,6 +15,7 @@ import { runPromo } from './promo/index.js'
 import { runExperience, isInteractive } from './experience/index.js'
 import { runPlanner } from './planner/index.js'
 import { pickTarget, setSlotStatus } from './roadmap/pick.js'
+import { markWriting, releaseWriting } from './timely/model.js'
 import { loadBrief } from './writer/inputs.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { draftVersion, draftBriefVersion } from './writer/save.js'
@@ -48,7 +49,10 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
         // Phase 12: with a roadmap target, the focused Scout researches only that post.
         : ctx.scoutMode === 'slot'
           ? await runScout({ mode: 'slot', runId: ctx.runId, briefId: ctx.briefId, target: ctx.target }, deps)
-          : await runScout({ mode: 'research', runId: ctx.runId }, deps)
+          // The timely lane: the news check (1 call) proposes cards; it never picks what to write.
+          : ctx.scoutMode === 'timely'
+            ? await runScout({ mode: 'timely', runId: ctx.runId }, deps)
+            : await runScout({ mode: 'research', runId: ctx.runId }, deps)
       return { model: config.scout.model, output }
     },
     async writer(ctx) {
@@ -113,6 +117,13 @@ export function summariseOutput(agent, out) {
     return {
       message: `${c.clusters_new ?? 0} new clusters (${c.clusters_merged ?? 0} merged), ${c.stories ?? 0} stories, ${c.tutorials ?? 0} tutorials${out.reused ? ' (reused research)' : ''}`,
       data: { cluster_ids: out.cluster_ids, story_ids: out.story_ids, tutorial_ids: out.tutorial_ids, style_profile_id: out.style_profile_id, calls_used: out.calls_used, warnings: out.warnings?.length ?? 0 }
+    }
+  }
+  if (agent === 'scout' && out.mode === 'timely') {
+    const c = out.counts ?? {}
+    return {
+      message: `News check: ${c.kept ?? 0} new timely opportunit${c.kept === 1 ? 'y' : 'ies'} (${c.returned ?? 0} found, ${c.dropped ?? 0} dropped${c.expired ? `, ${c.expired} expired` : ''})`,
+      data: { opportunity_ids: (out.opportunities ?? []).map((o) => o.opportunity_id), dropped: out.dropped ?? [], expired: c.expired ?? 0 }
     }
   }
   if (agent === 'scout' && out.mode === 'sources') {
@@ -373,8 +384,20 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
       }
     } else {
       if (config.roadmap?.enabled) {
-        // Phase 12: a pinned topic that is due, else the next slot of the approved roadmap. Nothing to write: no AI call.
-        target = await pickTarget(store, { now })
+        // The timely lane: check the news first (TIMELY_CHECK_ON_RUN). It only proposes cards for the person; a
+        // failed check is a warning and the run goes on.
+        if (config.timely?.enabled && config.timely.checkOnRun) {
+          scoutMode = 'timely'
+          try {
+            await step('scout', ctx())
+          } catch (error) {
+            if (isCancel(error, signal)) throw error
+            warnings.push(`news check failed (the run goes on): ${error.message}`)
+          }
+        }
+        // Phase 12: a pinned topic that is due, then a timely card you chose with Write now, else the next slot of
+        // the approved roadmap. Nothing to write: no further AI call.
+        target = await pickTarget(store, { now, config })
         if (target.kind === 'none') {
           emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: target.reason, data: {} })
           return { briefId, state: 'skipped', reason: target.reason, error: target.reason, steps, warnings }
@@ -382,7 +405,12 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
         if (target.kind === 'slot') {
           await setSlotStatus(store, { slotId: target.slot.slot_id }, 'drafting', { setBriefId: briefId, now })
           emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Next up: stage ${target.stage.number} (${target.stage.name}) · ${target.slot.slot_id} ${target.slot.title_idea}`, data: { slot_id: target.slot.slot_id, stage: target.stage.number } })
+        } else if (target.kind === 'timely') {
+          // A timely post never uses up a slot; the card holds the brief id while the post is written.
+          await markWriting(store, target.opportunity.record_id, briefId, { now })
+          emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Timely post first: ${target.opportunity.title} (reported by ${target.opportunity.outlet})`, data: { opportunity_id: target.opportunity.opportunity_id } })
         } else emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Pinned topic first: ${target.pin.topic}`, data: { pinned_id: target.pin.pinned_id } })
+        if (target.timelyWaiting) emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Timely card waits: ${target.timelyWaiting.title} — ${target.timelyWaiting.reason}`, data: { opportunity_id: target.timelyWaiting.opportunity_id } })
       }
       await research()
       await plan()
@@ -471,6 +499,7 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     if (error instanceof CancelledError || signal?.aborted) {
       state = 'cancelled'
       if (target?.kind === 'slot') await setSlotStatus(store, { slotId: target.slot.slot_id }, 'planned', { setBriefId: '', now })
+      if (target?.kind === 'timely') await releaseWriting(store, target.opportunity.record_id)
       await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'cancelled', error: null })
       log.info('pipeline cancelled', { runId, briefId })
       return { runId, briefId, state, version, counters, steps }
@@ -478,6 +507,8 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     if (state !== 'failed') state = 'failed'
     // Phase 12: the slot is free again (a new run picks it).
     if (target?.kind === 'slot') await setSlotStatus(store, { slotId: target.slot.slot_id }, 'planned', { setBriefId: '', now })
+    // The timely card waits again (still write_now) for the next run.
+    if (target?.kind === 'timely') await releaseWriting(store, target.opportunity.record_id)
     await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'failed', error: error.message })
     log.error('pipeline failed', { briefId, error, counters })
     if (error.routing) await failReview(error)

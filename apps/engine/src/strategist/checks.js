@@ -188,14 +188,19 @@ export async function findProblems(b, { config, inputs, store, excludeBriefId = 
   else if (lead.kind !== b.lead.kind) P(`lead.kind is '${b.lead.kind}' but '${b.lead.id}' is a ${lead.kind}`)
   if (KIND_FOR_TYPE[b.post_type] !== b.lead.kind) P(`post_type '${b.post_type}' needs a lead of kind '${KIND_FOR_TYPE[b.post_type]}', not '${b.lead.kind}'`)
   if (inputs.pinnedDue.length && b.post_type !== 'pinned') P(`a pinned topic is due (${inputs.pinnedDue[0].pinned_id}) but was not picked`)
+  if (inputs.target?.timely && b.post_type !== 'rapid_response') P('a timely post must have post_type "rapid_response"')
+  if (inputs.target?.timely && b.slot_id) P('slot_id must be "" for a timely post (it is not a roadmap slot)')
   if (inputs.blockedGroup != null && b.topic_group === inputs.blockedGroup) P(`topic_group ${b.topic_group} is blocked (both of the 2 most recent briefs used it)`)
   if (lead?.kind === 'cluster' && lead.record.payload.update_candidate && !st.allowUpdateBriefs) P(`cluster '${b.lead.id}' is marked update_candidate and ALLOW_UPDATE_BRIEFS is false`)
 
   // Rapid response: recomputed from the story record.
   if (b.post_type === 'rapid_response' && lead?.kind === 'story') {
     const s = lead.record.payload
-    const rule = storyDateRule(s.published_date, { today: inputs.today, lookbackDays: config.scout.storyLookbackDays, rapidDays: config.scout.rapidResponseDays })
-    if (!rule.rapid) P(`story '${b.lead.id}' (published ${s.published_date}) is not within RAPID_RESPONSE_DAYS (${config.scout.rapidResponseDays})`)
+    // The timely lane: a card's story counts within TIMELY_WINDOW_DAYS (the window the card was found in).
+    const timely = Boolean(inputs.target?.timely)
+    const days = timely ? config.timely?.windowDays ?? config.scout.rapidResponseDays : config.scout.rapidResponseDays
+    const rule = storyDateRule(s.published_date, { today: inputs.today, lookbackDays: Math.max(config.scout.storyLookbackDays, days), rapidDays: days })
+    if (!rule.rapid) P(`story '${b.lead.id}' (published ${s.published_date}) is not within ${timely ? 'TIMELY_WINDOW_DAYS' : 'RAPID_RESPONSE_DAYS'} (${days})`)
     const n = b.news
     if (!n.is_news_based || !n.outlet || !n.published_date || !n.claim_in_own_words || !n.source_url) P('news must be filled for a rapid-response post (outlet, published_date, claim_in_own_words, source_url)')
     else if (urlKey(n.source_url) !== urlKey(s.source_url)) P(`news.source_url must be the story's source URL ${s.source_url}`)

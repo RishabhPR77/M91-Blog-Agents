@@ -5,15 +5,16 @@ import { log } from '../util/log.js'
 import { istDate, istIso } from '../util/time.js'
 import { newBriefId, newRecordId, newScoutThreadId } from '../util/ids.js'
 import { createViaSocketClient, AiError, TruncatedError } from '../viasocket.js'
-import { SCOUT_BASE, FACTS, QUESTIONS, STORIES, TUTORIALS, CLUSTERS, STYLE, SOURCES, SLOT_QUESTIONS, SLOT_SOURCES, SCHEMA_RETRY_NOTE, TOPIC_GROUPS, MESSAGE_MAX, buildPrompt, fitMessage } from './prompts.js'
+import { SCOUT_BASE, FACTS, QUESTIONS, STORIES, TIMELY, TUTORIALS, CLUSTERS, STYLE, SOURCES, SLOT_QUESTIONS, SLOT_SOURCES, SCHEMA_RETRY_NOTE, TOPIC_GROUPS, MESSAGE_MAX, buildPrompt, fitMessage } from './prompts.js'
 import { SCHEMAS, scout_m91_facts_inline } from './schemas.js'
-import { limiter, validateAgainst, createUrlChecker, normaliseUrl, isKeptStatus, protectFields, removeLongQuotes, storyDateRule, freshnessFromDates } from './checks.js'
+import { limiter, validateAgainst, createUrlChecker, normaliseUrl, isKeptStatus, protectFields, removeLongQuotes, storyDateRule, freshnessFromDates, daysAgo } from './checks.js'
 import { buildDocsBundle, fetchSkillReadme, DocsError } from './docs.js'
 import { classifyCluster, mergeClusterPayload, storedStoryUrls, isDuplicateTutorial } from './dedupe.js'
 import { rankClusters } from './rank.js'
 import { emit, scoutStepName, throwIfCancelled, CancelledError } from '../events.js'
 import { saveRunLog } from '../util/runlog.js'
-import { dedupeSettings } from '../dedupe.js'
+import { dedupeSettings, similarity } from '../dedupe.js'
+import { expireOld, listOpportunities } from '../timely/model.js'
 import { loadRoadmap, saveRoadmap, allSlots } from '../roadmap/model.js'
 import { roadmapProblems } from '../roadmap/checks.js'
 
@@ -30,6 +31,8 @@ class BudgetError extends Error {}
 const FATAL_KINDS = ['config', 'token', 'billing']
 /** Phase 9 B3: the stories call asks for at most this many (a long list made it hit the 300 s timeout). */
 export const STORIES_MAX = 5
+/** The timely lane: the news check asks for at most this many events. */
+export const TIMELY_MAX = 5
 const urlKey = (u) => String(u).trim().replace(/\/+$/, '').toLowerCase()
 const daysBetweenIso = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000
 
@@ -171,6 +174,8 @@ export async function runScout(params = {}, deps = {}) {
   }
 
   if (params.mode === 'sources') return sourcesMode()
+  // The timely lane: one news-check call; saves timely_opportunity cards for the person to decide on.
+  if (params.mode === 'timely') return timelyMode()
   // Phase 12: one roadmap slot (or a due pinned topic) only: facts, its questions, its sources (+ tutorial steps in stage 2).
   if (params.mode === 'slot') return slotMode()
   // Phase 12: the facts step alone (the Roadmap Planner's input); today's record is reused.
@@ -180,6 +185,71 @@ export async function runScout(params = {}, deps = {}) {
   }
   if (params.mode !== 'research') throw new ScoutError(`unknown Scout mode "${params.mode}"`)
   return researchMode()
+
+  // ======================= timely mode (the news check) =======================
+
+  /**
+   * One web-search call for real events of the last TIMELY_WINDOW_DAYS where M91 genuinely helps. Code keeps an
+   * event only when its date is inside the window, its source loads, and it is not already known (same source
+   * URL as a card — a timely post keeps its card — or a title close to a card's or an approved post's). Reads:
+   * the cards, the newest facts and the knowledge map (the engine's index serves the cards). Each kept
+   * event becomes a "proposed" timely_opportunity. Cards past their window expire first. The newest M91 facts
+   * are used as they are (a facts call only when there are none at all).
+   */
+  async function timelyMode() {
+    const windowDays = config.timely?.windowDays ?? 7
+    const expired = await expireOld(store, { config, now })
+    const current = (await store.getRecords({ type: 'm91_facts', status: 'current' })).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]
+    const facts = current?.payload ?? (await getFacts()).payload
+    const cards = await listOpportunities(store)
+    const knownUrls = new Set(cards.map((c) => urlKey(c.payload?.source_url ?? '')))
+    knownUrls.delete('')
+    const knownTitles = [
+      ...cards.map((c) => ({ title: c.payload?.title ?? '', what: 'a timely card' })),
+      ...(await store.getRecords({ type: 'knowledge' })).map((k) => ({ title: k.payload?.title ?? '', what: 'an approved post' }))
+    ].filter((t) => t.title)
+    const threshold = dedupeSettings(config).threshold
+    const knownList = cards.filter((c) => c.status !== 'expired').map((c) => `- ${c.payload?.title} (${c.payload?.source_url})`).slice(0, 30).join('\n') || 'none'
+
+    const res = await callAi('timely', {
+      task: TIMELY,
+      values: { window_days: windowDays, events_max: TIMELY_MAX },
+      sections: { facts: summariseFacts(facts), knownEvents: knownList },
+      schema: SCHEMAS.scout_timely,
+      delivery: sc.researchDelivery,
+      fewer: { values: { events_max: 2 }, note: 'Your last answer was cut off. Return at most 2 events.' },
+      timeoutMs: sc.storiesTimeoutMs
+    })
+    const returned = res.value.events.slice(0, TIMELY_MAX)
+    if (res.value.events.length > TIMELY_MAX) warnings.push(`timely: ${res.value.events.length} events returned, kept the first ${TIMELY_MAX}`)
+    const kept = []
+    const dropped = []
+    for (const e of returned) {
+      const drop = (reason) => dropped.push({ title: e.title, reason })
+      const age = daysAgo(e.published_date, today)
+      if (age === null) { drop('no clear date'); continue }
+      if (age < 0) { drop(`dated in the future (${e.published_date})`); continue }
+      if (age > windowDays) { drop(`${age} days old (window ${windowDays})`); continue }
+      const live = await liveUrl(e.source_url)
+      if (!live) { drop('the source does not load'); continue }
+      if (knownUrls.has(urlKey(live.url))) { drop('already known (same source)'); continue }
+      const close = knownTitles.find((t) => similarity(e.title, t.title) >= threshold)
+      if (close) { drop(`close to ${close.what}: "${close.title}"`); continue }
+      const quotes = protectFields(e, ['what_happened', 'why_m91', 'urgency_reason'], ['title'])
+      if (quotes) warnings.push(`timely: removed ${quotes} long quote(s) from "${e.title}"`)
+      const payload = {
+        opportunity_id: newRecordId('O', new Date(now())), title: e.title, what_happened: e.what_happened, source_url: live.url, outlet: e.outlet,
+        published_date: e.published_date, why_m91: e.why_m91, urgency: e.urgency, urgency_reason: e.urgency_reason, topic_group: e.topic_group,
+        url_status: live.status, found_at: istIso(new Date(now())), found_by_run: runId, brief_id: ''
+      }
+      const rec = await store.createRecord({ type: 'timely_opportunity', briefId: null, payload, status: 'proposed', topicGroup: e.topic_group, date: today })
+      kept.push({ ...payload, record_id: rec.id })
+      knownUrls.add(urlKey(live.url))
+      knownTitles.push({ title: e.title, what: 'a timely card' })
+    }
+    await runLog(res.meta, { returned: returned.length, kept: kept.length, dropped: dropped.length, details: dropped })
+    return { mode: 'timely', run_id: runId, opportunities: kept, dropped, expired, counts: { returned: returned.length, kept: kept.length, dropped: dropped.length, expired }, calls_used: callsUsed, warnings, calls }
+  }
 
   // ======================= slot mode (Phase 12) =======================
 
@@ -192,8 +262,12 @@ export async function runScout(params = {}, deps = {}) {
    */
   async function slotMode() {
     const t = params.target
-    if (!t || (t.kind !== 'slot' && t.kind !== 'pinned')) throw new ScoutError('slot mode needs a target (a roadmap slot or a pinned topic)')
-    const slot = t.kind === 'slot' ? t.slot : { slot_id: null, title_idea: t.pin.topic, question: /\?$/.test(t.pin.topic) ? t.pin.topic : `${t.pin.topic}?`, teaches: [], needs: [] }
+    if (!t || !['slot', 'pinned', 'timely'].includes(t.kind)) throw new ScoutError('slot mode needs a target (a roadmap slot, a pinned topic or a timely opportunity)')
+    // The timely lane: the post is about one real event (the card you chose with Write now).
+    const opp = t.kind === 'timely' ? t.opportunity : null
+    const slot = t.kind === 'slot' ? t.slot
+      : opp ? { slot_id: null, title_idea: opp.title, question: `What does "${opp.title}" mean for teams that need a person to decide in time?`, teaches: [], needs: [] }
+      : { slot_id: null, title_idea: t.pin.topic, question: /\?$/.test(t.pin.topic) ? t.pin.topic : `${t.pin.topic}?`, teaches: [], needs: [] }
     const stage = t.kind === 'slot' ? t.stage : null
     const factsResult = await getFacts()
     const facts = factsResult.payload
@@ -202,8 +276,9 @@ export async function runScout(params = {}, deps = {}) {
       `Question: ${slot.question}`,
       `Working title: ${slot.title_idea}`,
       slot.teaches?.length ? `Teaches: ${slot.teaches.join(', ')}` : null,
-      stage ? `Stage: ${stage.number} ${stage.name} (${stage.level}): ${stage.goal}` : 'A pinned topic (outside the roadmap)',
-      t.kind === 'pinned' && t.pin.notes ? `Notes: ${t.pin.notes}` : null
+      stage ? `Stage: ${stage.number} ${stage.name} (${stage.level}): ${stage.goal}` : opp ? 'A timely post about a real event (outside the roadmap)' : 'A pinned topic (outside the roadmap)',
+      t.kind === 'pinned' && t.pin.notes ? `Notes: ${t.pin.notes}` : null,
+      opp ? `Event: ${opp.what_happened} Reported by ${opp.outlet} on ${opp.published_date}: ${opp.source_url}\nWhy M91 helps: ${opp.why_m91}` : null
     ].filter(Boolean).join('\n')
     const roadmapRec = await loadRoadmap(store)
     const roadmapText = roadmapRec?.payload ? roadmapRec.payload.stages.map((st) => `Stage ${st.number} ${st.name}: ${st.slots.map((s) => s.title_idea).join(' · ')}`).join('\n') : '(no roadmap)'
@@ -229,7 +304,8 @@ export async function runScout(params = {}, deps = {}) {
     const clusterPayload = {
       cluster_id: newRecordId('C', new Date(now())), main_question: qRes.value.main_question || slot.question, related_questions: related.map((q) => q.question),
       questions: related, demand: qRes.value.demand, slot_id: slot.slot_id, stage: stage?.number ?? null, pinned_id: t.kind === 'pinned' ? t.pin.pinned_id : null,
-      title_idea: slot.title_idea, teaches: slot.teaches ?? [], m91_fit: { score: 5, reason: t.kind === 'slot' ? 'a slot of the approved roadmap' : 'a pinned topic' }
+      opportunity_id: opp?.opportunity_id ?? null,
+      title_idea: slot.title_idea, teaches: slot.teaches ?? [], m91_fit: { score: 5, reason: t.kind === 'slot' ? 'a slot of the approved roadmap' : opp ? 'a timely opportunity you chose' : 'a pinned topic' }
     }
     const clusterRec = await store.createRecord({ type: 'question_cluster', briefId: null, payload: clusterPayload, status: 'open', date: today })
 
@@ -250,8 +326,26 @@ export async function runScout(params = {}, deps = {}) {
       results.push({ url: live.url, publisher: s.publisher, verdict: 'supports', note: s.what_it_covers, kind: s.kind, url_status: live.status })
     }
     if (sRes) await runLog(sRes.meta, { returned: sRes.value.sources.length, kept: results.length, dropped: sRes.value.sources.length - results.length })
+    // A timely post's own event source always comes first (it was checked when the card was found; checked again here).
+    if (opp && !results.some((x) => urlKey(x.url) === urlKey(opp.source_url))) {
+      const live = await liveUrl(opp.source_url)
+      if (live) results.unshift({ url: live.url, publisher: opp.outlet, verdict: 'supports', note: opp.what_happened, kind: 'news', url_status: live.status })
+      else warnings.push(`timely: the event's source no longer loads (${opp.source_url})`)
+    }
     const packPayload = { brief_id: params.briefId ?? runId, version: null, slot_id: slot.slot_id, claims: [{ claim: slot.question, results, verdict: results.length ? 'supported' : 'unverified' }] }
     const packRec = await store.createRecord({ type: 'source_pack', briefId: params.briefId ?? runId, payload: packPayload, status: 'current', date: today })
+
+    // The timely lane: the card becomes the story lead the Strategist plans the rapid-response post from (no AI).
+    let storyId = null
+    if (opp) {
+      const story = {
+        story_id: newRecordId('S', new Date(now())), title: opp.title, summary: opp.what_happened, why_it_matters: opp.why_m91, source_url: opp.source_url,
+        source_name: opp.outlet, published_date: opp.published_date, attribution_line: `reported by ${opp.outlet}`, topic_group: opp.topic_group,
+        url_status: opp.url_status ?? 200, within_rapid_response_window: true, opportunity_id: opp.opportunity_id
+      }
+      await store.createRecord({ type: 'story_lead', briefId: null, payload: story, status: 'open', topicGroup: opp.topic_group, date: today })
+      storyId = story.story_id
+    }
 
     // 3. Stage 2 (First steps): tutorial steps, only from the M91 docs and the skill repository.
     const tutorialIds = []
@@ -298,7 +392,7 @@ export async function runScout(params = {}, deps = {}) {
     }
 
     return {
-      mode: 'slot', run_id: runId, target: { kind: t.kind, slot_id: slot.slot_id, stage: stage?.number ?? null },
+      mode: 'slot', run_id: runId, target: { kind: t.kind, slot_id: slot.slot_id, stage: stage?.number ?? null, opportunity_id: opp?.opportunity_id ?? null }, story_id: storyId,
       facts_record_id: factsResult.id, facts_reused: factsResult.reused, cluster_id: clusterPayload.cluster_id, cluster_record_id: clusterRec.id,
       cluster_ids: [clusterPayload.cluster_id], source_pack_id: packRec.id, sources: results.length, tutorial_ids: tutorialIds, proposed_slot_ids: proposed,
       top_clusters: [{ cluster_id: clusterPayload.cluster_id, main_question: clusterPayload.main_question }],
