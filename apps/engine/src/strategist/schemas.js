@@ -40,3 +40,17 @@ export const strategist_brief = {
     internal_links: arr(obj({ url: str, anchor_text: str, why: str }))
   })
 }
+
+/**
+ * Phase 12: the brief of one roadmap slot. The same fields, plus slot_id (exactly the slot planned) and
+ * terms_to_define (the technical words this post explains the first time; the knowledge map keeps them).
+ */
+export const strategist_brief_slot = {
+  name: 'strategist_brief_slot',
+  strict: true,
+  schema: {
+    ...strategist_brief.schema,
+    required: [...strategist_brief.schema.required, 'slot_id', 'terms_to_define'],
+    properties: { ...strategist_brief.schema.properties, slot_id: str, terms_to_define: arr(str) }
+  }
+}

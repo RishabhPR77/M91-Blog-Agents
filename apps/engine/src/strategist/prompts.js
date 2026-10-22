@@ -110,9 +110,42 @@ export function rebriefTail(currentBrief, version, feedback) {
 export const TRUNCATED_PROBLEM = 'Your previous answer was cut off: return the same brief with shorter points (at most 3 per section).'
 
 /** Fills the PLAN prompt from config + computed inputs. */
+/** Phase 12: one roadmap post. It replaces HOW TO PICK THE LEAD and TOPIC GROUP BALANCE for the run. */
+export const ROADMAP_RULES = `
+
+=== THIS RUN: ONE POST OF THE ROADMAP (this section overrides HOW TO PICK THE LEAD and TOPIC GROUP BALANCE) ===
+The reader follows a learning path, stage by stage. There is no lead to choose: plan the post in POST TO PLAN.
+- lead: the one QUESTION CLUSTER in the message (kind "cluster"), or the PINNED TOPIC when there is one. post_type: "question" ("tutorial" only if a TUTORIAL LEAD is given and you use it; "pinned" for a pinned topic).
+- slot_id: exactly the slot_id in POST TO PLAN ("" for a pinned topic).
+- The reader's level is the stage's level in POST TO PLAN. Plan for that level: a beginner knows nothing about M91 yet.
+- KNOWLEDGE MAP is what the reader already learned in earlier posts. Never re-explain those concepts. When this post needs one, add a note_for_writer "see the earlier guide: <title>", and an internal_links item when that post has a URL in PUBLISHED POSTS.
+- why_today: one or two sentences on how this post builds on the previous one (name it), or why it is the place to start.
+- terms_to_define: the technical words this post must explain in plain words the first time it uses them (none the KNOWLEDGE MAP already defined). At most 8.
+- One question per outline section; the answer comes first in every section. No history, background or side topics unless POST TO PLAN asks for them.
+- Use SOURCES FOR THIS POST and M91 FACTS for sources. Choose the topic group that fits the post.`
+
 export function buildPlanPrompt(config, inputs) {
   const st = config.strategist
-  return fill(PLAN, {
+  const roadmap = inputs.target ? ROADMAP_RULES : ''
+  return roadmap ? fill(PLAN, {
+    rapid_response_days: config.scout.rapidResponseDays,
+    update_rule: st.allowUpdateBriefs ? UPDATE_RULE_ON : UPDATE_RULE_OFF,
+    blocked_group: inputs.blockedGroup ?? 'none (no group is blocked)',
+    least_used_groups: inputs.leastUsedGroups.join(', '),
+    title_max_chars: st.titleMaxChars,
+    keyword_max_words: st.keywordMaxWords,
+    default_tone: config.content.defaultTone,
+    outline_min: st.outlineMinSections,
+    outline_max: st.outlineMaxSections,
+    min_question_headings: st.minQuestionHeadings,
+    cta_url: config.m91.ctaUrl ?? '(no CTA URL configured)',
+    words_min: config.content.targetWordsMin,
+    words_max: config.content.targetWordsMax,
+    intro_grade: config.content.readingGradeIntroMax,
+    post_grade: config.content.readingGradePostMax,
+    lessons_rule: inputs.lessons.length ? LESSONS_RULE : '',
+    today: inputs.today
+  }) + roadmap : fill(PLAN, {
     rapid_response_days: config.scout.rapidResponseDays,
     update_rule: st.allowUpdateBriefs ? UPDATE_RULE_ON : UPDATE_RULE_OFF,
     blocked_group: inputs.blockedGroup ?? 'none (no group is blocked)',

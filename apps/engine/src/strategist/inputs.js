@@ -1,6 +1,7 @@
 // Inputs for the Strategist, gathered by code from Mem0 (Phase 3 brief, section 6). Never by the AI.
 
 import { istDate } from '../util/time.js'
+import { knowledgeMap, compactKnowledge } from '../roadmap/knowledge.js'
 import { storyDateRule } from '../scout/checks.js'
 import { MESSAGE_MAX } from '../scout/prompts.js'
 
@@ -60,7 +61,7 @@ const compactPinned = (p) => ({ pinned_id: p.pinned_id, topic: p.topic, target_d
  * Builds the Strategist's inputs. `forBriefId` (re-brief) keeps the leads that brief already uses and
  * leaves that brief out of ALREADY COVERED and RECENT BRIEFS.
  */
-export async function buildInputs({ config, store, scoutResult, now = Date.now, forBriefId = null }) {
+export async function buildInputs({ config, store, scoutResult, now = Date.now, forBriefId = null, target = null }) {
   const today = istDate(new Date(now()))
   const sc = config.scout
   const st = config.strategist
@@ -80,13 +81,19 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
   if (!factsRec) throw new InputsError(`No m91_facts record for today (${today}). Run the Scout first (npm run scout, or npm run strategist -- --with-scout).`)
   const facts = { can: factsRec.payload.can ?? [], cannot: factsRec.payload.cannot ?? [], integrations: factsRec.payload.integrations ?? [] }
 
+  // Phase 12: a roadmap slot (or a due pinned topic) is the only lead of the run.
+  const slotTarget = target?.kind === 'slot' ? target : null
+  const pinTarget = target?.kind === 'pinned' ? target : null
+  const forTarget = (r) => (slotTarget ? r.payload?.slot_id === slotTarget.slot.slot_id : pinTarget ? r.payload?.pinned_id === pinTarget.pin.pinned_id : true)
+
   // Pinned topics due.
   const pinnedDue = (await records('pinned_topic'))
+    .filter((r) => !slotTarget && (!pinTarget || r.payload?.pinned_id === pinTarget.pin.pinned_id))
     .filter((r) => usable(r) && String(r.payload?.target_date) <= today)
     .sort((a, b) => (a.payload.priority === 'high' ? -1 : 0) - (b.payload.priority === 'high' ? -1 : 0) || String(a.payload.target_date).localeCompare(String(b.payload.target_date)))
 
   // Stories: rapid-response window recomputed from the published date.
-  const stories = (await records('story_lead')).filter(usable)
+  const stories = target ? [] : (await records('story_lead')).filter(usable)
   // Phase 12: RAPID_RESPONSE_ENABLED=false turns the rapid-response path off (recent stories are ordinary stories).
   const isRapid = (r) => sc.rapidResponseEnabled !== false && storyDateRule(r.payload?.published_date, { today, lookbackDays: sc.storyLookbackDays, rapidDays: sc.rapidResponseDays }).rapid
   const rapidStories = stories.filter(isRapid)
@@ -96,6 +103,7 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
   const topIds = (scoutResult?.top_clusters ?? []).map((c) => c.cluster_id)
   const clusters = (await records('question_cluster'))
     .filter(usable)
+    .filter((r) => !target || (slotTarget && forTarget(r)))
     .sort((a, b) => {
       const ia = topIds.indexOf(a.payload?.cluster_id)
       const ib = topIds.indexOf(b.payload?.cluster_id)
@@ -103,7 +111,7 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     })
     .slice(0, 8)
 
-  const tutorials = (await records('tutorial_lead')).filter(usable).slice(0, 5)
+  const tutorials = (await records('tutorial_lead')).filter(usable).filter((r) => !target || (slotTarget && forTarget(r))).slice(0, 5)
 
   // Style notes: newest current profile per topic group within STYLE_REUSE_DAYS.
   const styleNotes = []
@@ -156,7 +164,16 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
   for (const r of tutorials) for (const s of [...(r.payload.steps_outline ?? []), ...(r.payload.supporting_facts ?? [])]) allowed.add(urlKey(s.source_url))
   allowed.delete('')
 
-  const blocked = blockedGroup(recentBriefs)
+  // Phase 12: the knowledge map (what the reader already learned) and the slot's own sources.
+  const knowledge = target ? await knowledgeMap(store) : []
+  const slotSources = []
+  if (target && forBriefId === null && scoutResult?.source_pack_id) {
+    const pack = await store.getRecord(scoutResult.source_pack_id)
+    for (const c of pack?.payload?.claims ?? []) for (const r of c.results ?? []) if (r.verdict === 'supports') slotSources.push({ url: r.url, publisher: r.publisher, what_it_covers: r.note })
+  }
+  for (const s of slotSources) allowed.add(urlKey(s.url))
+  // The roadmap decides the topic, not the group balance.
+  const blocked = target ? null : blockedGroup(recentBriefs)
   return {
     today,
     factsRecordId: factsRec.id,
@@ -178,7 +195,11 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     competitors: sc.competitors,
     leadIndex,
     allowedUrls: allowed,
-    leadCount: leadIndex.size
+    leadCount: leadIndex.size,
+    // Phase 12
+    target: slotTarget ? { slot_id: slotTarget.slot.slot_id, title_idea: slotTarget.slot.title_idea, question: slotTarget.slot.question, teaches: slotTarget.slot.teaches ?? [], needs: slotTarget.slot.needs ?? [], stage: slotTarget.stage } : pinTarget ? { pinned_id: pinTarget.pin.pinned_id, topic: pinTarget.pin.topic } : null,
+    knowledge: knowledge.map(compactKnowledge),
+    slotSources
   }
 }
 
@@ -190,6 +211,7 @@ export function buildStrategistMessage(inputs, tail = '', max = MESSAGE_MAX) {
   const take = { other: 10, covered: 60, clusters: 8, tutorials: 5 }
   const build = () => [
     '--- TODAY ---', inputs.today,
+    ...(inputs.target ? ['--- POST TO PLAN (from the roadmap) ---', json(inputs.target), '--- KNOWLEDGE MAP (what the reader already learned, oldest first) ---', listOrNone(inputs.knowledge ?? []), '--- SOURCES FOR THIS POST ---', listOrNone(inputs.slotSources ?? [])] : []),
     '--- PINNED TOPICS DUE ---', listOrNone(inputs.pinnedDue),
     '--- RAPID-RESPONSE STORIES ---', listOrNone(inputs.rapidStories),
     '--- OTHER STORIES ---', listOrNone(inputs.otherStories.slice(0, take.other)),

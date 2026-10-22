@@ -84,8 +84,8 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
     },
     async strategist(ctx) {
       const output = ctx.strategistMode === 'rebrief'
-        ? await runStrategist({ mode: 'rebrief', runId: ctx.runId, briefId: ctx.briefId, briefVersion: ctx.briefVersion, feedback: strategistFeedback(ctx.review) }, deps)
-        : await runStrategist({ mode: 'plan', runId: ctx.runId, briefId: ctx.briefId, scoutResult: ctx.leads }, deps)
+        ? await runStrategist({ mode: 'rebrief', runId: ctx.runId, briefId: ctx.briefId, briefVersion: ctx.briefVersion, feedback: strategistFeedback(ctx.review), target: ctx.target && ctx.target.kind !== 'none' ? ctx.target : null }, deps)
+        : await runStrategist({ mode: 'plan', runId: ctx.runId, briefId: ctx.briefId, scoutResult: ctx.leads, target: ctx.target && ctx.target.kind !== 'none' ? ctx.target : null }, deps)
       return { model: config.strategist.model, output }
     }
   }

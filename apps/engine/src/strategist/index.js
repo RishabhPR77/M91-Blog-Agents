@@ -5,7 +5,7 @@ import { log } from '../util/log.js'
 import { istIso } from '../util/time.js'
 import { newBriefId, newStrategistThreadId } from '../util/ids.js'
 import { createViaSocketClient, TruncatedError } from '../viasocket.js'
-import { strategist_brief } from './schemas.js'
+import { strategist_brief, strategist_brief_slot } from './schemas.js'
 import { buildPlanPrompt, repairTail, rebriefTail, TRUNCATED_PROBLEM } from './prompts.js'
 import { buildInputs, buildStrategistMessage, InputsError } from './inputs.js'
 import { validateBrief, autoFix, findProblems } from './checks.js'
@@ -57,7 +57,7 @@ export async function runStrategist(params = {}, deps = {}) {
 
   let inputs
   try {
-    inputs = await buildInputs({ config, store, scoutResult: params.scoutResult, now, forBriefId: mode === 'rebrief' ? briefId : null })
+    inputs = await buildInputs({ config, store, scoutResult: params.scoutResult, now, forBriefId: mode === 'rebrief' ? briefId : null, target: params.target ?? null })
   } catch (error) {
     if (error instanceof InputsError) throw new StrategistError(error.message)
     throw error
@@ -93,7 +93,7 @@ export async function runStrategist(params = {}, deps = {}) {
     const started = now()
     let res = null
     try {
-      res = await aiSend({ agent: 'strategist', prompt, message, jsonSchema: strategist_brief, threadId: newStrategistThreadId(runId, callName), retries: config.viasocket.maxRetries })
+      res = await aiSend({ agent: 'strategist', prompt, message, jsonSchema: inputs.target ? strategist_brief_slot : strategist_brief, threadId: newStrategistThreadId(runId, callName), retries: config.viasocket.maxRetries })
     } catch (error) {
       if (error instanceof CancelledError) throw error
       const meta = { call: callName, model: st.model, delivery: st.delivery, ms: now() - started }
@@ -110,7 +110,7 @@ export async function runStrategist(params = {}, deps = {}) {
     }
     if (res) {
       if (res.recoveredFromHistory) warnings.push(`${callName}: sync call hit the gateway timeout (502); the answer was read from the thread history`)
-      const v = validateBrief(res.content)
+      const v = validateBrief(res.content, { slot: Boolean(inputs.target) })
       let fixes = []
       if (v.errors.length) problems = v.errors
       else {

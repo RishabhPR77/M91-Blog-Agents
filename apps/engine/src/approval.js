@@ -18,6 +18,8 @@ import { saveFinalExport, latestExport } from './export/index.js'
 import { createDocstar, publishToDocstar } from './publisher/docstar.js'
 import { createPublisher } from './publisher/index.js'
 import { setSlotStatus } from './roadmap/pick.js'
+import { knowledgeOf, saveKnowledge } from './roadmap/knowledge.js'
+import { loadRoadmap } from './roadmap/model.js'
 import { setLeadStatus } from './strategist/save.js'
 
 export const FEEDBACK_MIN_CHARS = 5
@@ -200,6 +202,20 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
   } catch (error) {
     if (isCancel(error)) throw error
     warnings.push(`Markdown export failed (the approval stands; run npm run export -- --brief-id=${briefId} --save): ${error.message}`)
+  }
+
+  // Phase 12: the knowledge map gets this post (what it taught), so later posts link to it instead of re-explaining.
+  if (config.roadmap?.enabled) {
+    try {
+      const rm = (await loadRoadmap(store))?.payload
+      const slotId = briefRec?.payload?.slot_id || rm?.stages.flatMap((st) => st.slots).find((s) => s.brief_id === briefId)?.slot_id || null
+      const st = rm?.stages.find((x) => x.slots.some((s) => s.slot_id === slotId)) ?? null
+      const slot = st?.slots.find((s) => s.slot_id === slotId) ?? null
+      const k = knowledgeOf({ briefId, brief: briefRec?.payload ?? {}, draft: d.payload ?? {}, slot, stage: st, exportInfo: exported ? { slug: exported.slug ?? null } : null })
+      await saveKnowledge(store, { ...k, approved_at: at })
+    } catch (error) {
+      warnings.push(`knowledge map not updated (the approval stands): ${error.message}`)
+    }
   }
 
   // Where the approved post goes (PUBLISH_TARGET): none (the export is the output), the blog (embarko) or Docstar.
