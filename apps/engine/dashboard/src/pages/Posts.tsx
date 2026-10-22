@@ -11,11 +11,27 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Card, EmptyState, PageHeader } from '../components/Page'
 import { StatusBadge } from '../components/StatusBadge'
 import { fmtDateTime } from '../format'
+import { flagsOf } from '../config/flags'
 import { COSTS } from '../config/costs'
 
 type Pending = { mode: PublishMode; post: PostItem; params: Record<string, unknown>; title: string; text: string; danger?: boolean; calls?: string }
 
+/** The blog is used only with PUBLISH_TARGET=embarko; otherwise this page says so and loads nothing. */
 export default function Posts() {
+  const settings = useSettings()
+  if (settings.isPending) return <p className="text-sm text-slate-500">Loading…</p>
+  if (!flagsOf(settings.data).blogOn) {
+    return (
+      <>
+        <PageHeader title="Posts" />
+        <EmptyState>There is no blog to manage: the output is the Markdown export (PUBLISH_TARGET={settings.data?.publish?.target ?? 'none'}). See <Link className="underline" to="/exports">Exports</Link>.</EmptyState>
+      </>
+    )
+  }
+  return <BlogPosts />
+}
+
+function BlogPosts() {
   const posts = usePosts()
   const settings = useSettings()
   const pub = usePublishRun()

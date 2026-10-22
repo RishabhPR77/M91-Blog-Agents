@@ -35,7 +35,9 @@ const page = () => renderApp(<Routes><Route path="/approvals/:briefId" element={
 
 describe('flags and costs', () => {
   it('older engines behave as Phase 10; the fallback turns the designer and the blog off', () => {
-    expect(flagsOf(undefined)).toEqual({ experienceOn: true, target: 'embarko', blogOn: true, docstarConfigured: false })
+    // Settings still loading: nothing blog-related (Embarko is unused). An older engine without the publish field: the blog.
+    expect(flagsOf(undefined)).toEqual({ experienceOn: true, target: 'none', blogOn: false, docstarConfigured: false })
+    expect(flagsOf({ ...OFF, publish: undefined, designer: undefined } as never)).toEqual({ experienceOn: true, target: 'embarko', blogOn: true, docstarConfigured: false })
     expect(flagsOf(OFF as never)).toEqual({ experienceOn: false, target: 'none', blogOn: false, docstarConfigured: false })
     expect(COSTS.export.normal).toBe('0')
     expect(COSTS.full_plain.normal).not.toBe(COSTS.full.normal)

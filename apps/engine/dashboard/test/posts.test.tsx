@@ -115,7 +115,7 @@ describe('Control: Publish and Rebuild blog', () => {
 
   it('Publish needs an approved draft; it starts without the low-cost params and shows 0 AI calls', async () => {
     const calls = setup(settings())
-    const card = screen.getByTestId('run-card-Publish')
+    const card = await screen.findByTestId('run-card-Publish')
     await waitFor(() => expect(within(card).getByRole('button')).toHaveAttribute('title', 'Pick an approved draft'))
     expect(within(card).getByTestId('cost')).toHaveTextContent('Expected AI calls: 0 normal · 0 low-cost')
     await userEvent.selectOptions(await within(card).findByRole('combobox', { name: 'Approved draft to publish' }), '261019-1055-BZ89')
@@ -129,7 +129,7 @@ describe('Control: Publish and Rebuild blog', () => {
 
   it('Rebuild blog is blocked for a live run without the token, allowed as a dry run', async () => {
     setup(settings({ deploy_token_set: false }, { dry_run: false }))
-    const card = screen.getByTestId('run-card-Rebuild blog')
+    const card = await screen.findByTestId('run-card-Rebuild blog')
     await waitFor(() => expect(within(card).getByRole('button')).toHaveAttribute('title', 'Deploy token not set (dry run only)'))
     await userEvent.click(screen.getByRole('checkbox', { name: 'Dry run' }))
     await waitFor(() => expect(within(card).getByRole('button')).toBeEnabled())

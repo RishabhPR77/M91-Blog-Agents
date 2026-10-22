@@ -2,6 +2,7 @@
 import { useSettings } from '../api/queries'
 import { FieldView } from '../components/FieldView'
 import { Card, PageHeader } from '../components/Page'
+import { flagsOf } from '../config/flags'
 
 const yes = (b: boolean | undefined) => (b === undefined ? 'not reported' : b ? 'on' : 'off')
 
@@ -10,6 +11,10 @@ export default function Settings() {
   if (s.isPending) return <p className="text-sm text-slate-500">Loading…</p>
   if (!s.data) return <p className="text-sm text-red-600">Could not load the settings.</p>
   const d = s.data
+  const { blogOn } = flagsOf(d)
+  // The blog's run modes are not listed while the blog is not the publish target.
+  const BLOG_MODES = ['publish', 'unpublish', 'set_index', 'rebuild_blog']
+  const modes = d.publish?.target === 'none' ? d.built_modes?.filter((m) => !BLOG_MODES.includes(m)) : d.built_modes
   return (
     <>
       <PageHeader title="Settings" subtitle={<>Change these in <code>.env</code> and restart the engine. Secrets are never shown here.</>} />
@@ -20,7 +25,7 @@ export default function Settings() {
             <dt className="text-slate-500">Auto-publish</dt><dd>{yes(d.runtime.auto_publish)}</dd>
             <dt className="text-slate-500">Log level</dt><dd>{d.runtime.log_level}</dd>
             <dt className="text-slate-500">Engine version</dt><dd>{d.version}</dd>
-            <dt className="text-slate-500">Built run modes</dt><dd>{d.built_modes?.join(', ') ?? 'not reported (restart the engine)'}</dd>
+            <dt className="text-slate-500">Built run modes</dt><dd data-testid="setting-built-modes">{modes?.join(', ') ?? 'not reported (restart the engine)'}</dd>
           </dl>
         </Card>
         <Card title="Approval">
@@ -41,17 +46,19 @@ export default function Settings() {
             </dl>
           ) : <p className="text-sm text-slate-500">Not reported by this engine (it predates Phase 11: restart it).</p>}
         </Card>
-        <Card title="Blog and publishing">
-          {d.blog ? (
-            <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
-              <dt className="text-slate-500">Auto-publish on approve</dt><dd data-testid="setting-auto-publish">{yes(d.blog.auto_publish)}</dd>
-              <dt className="text-slate-500">Blog app (Embarko)</dt><dd className="font-mono text-xs">{d.blog.app_name}</dd>
-              <dt className="text-slate-500">Blog URL</dt><dd><a className="text-sky-700 hover:underline dark:text-sky-300" href={d.blog.base_url} target="_blank" rel="noreferrer">{d.blog.base_url}</a></dd>
-              <dt className="text-slate-500">noindex for the first</dt><dd>{d.blog.noindex_first_n_posts} posts</dd>
-              <dt className="text-slate-500">Deploy token set</dt><dd data-testid="setting-deploy-token">{d.blog.deploy_token_set ? 'yes' : 'no (only dry runs can publish)'}</dd>
-            </dl>
-          ) : <p className="text-sm text-slate-500">No blog settings from this engine (it predates Phase 7: restart it).</p>}
-        </Card>
+        {blogOn && (
+          <Card title="Blog and publishing">
+            {d.blog ? (
+              <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
+                <dt className="text-slate-500">Auto-publish on approve</dt><dd data-testid="setting-auto-publish">{yes(d.blog.auto_publish)}</dd>
+                <dt className="text-slate-500">Blog app (Embarko)</dt><dd className="font-mono text-xs">{d.blog.app_name}</dd>
+                <dt className="text-slate-500">Blog URL</dt><dd><a className="text-sky-700 hover:underline dark:text-sky-300" href={d.blog.base_url} target="_blank" rel="noreferrer">{d.blog.base_url}</a></dd>
+                <dt className="text-slate-500">noindex for the first</dt><dd>{d.blog.noindex_first_n_posts} posts</dd>
+                <dt className="text-slate-500">Deploy token set</dt><dd data-testid="setting-deploy-token">{d.blog.deploy_token_set ? 'yes' : 'no (only dry runs can publish)'}</dd>
+              </dl>
+            ) : <p className="text-sm text-slate-500">No blog settings from this engine (it predates Phase 7: restart it).</p>}
+          </Card>
+        )}
         <Card title="Interactive guides">
           {d.designer ? (
             <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
