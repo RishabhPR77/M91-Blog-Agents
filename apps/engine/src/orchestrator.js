@@ -13,6 +13,7 @@ import { runWriter } from './writer/index.js'
 import { runReviewer } from './reviewer/index.js'
 import { runPromo } from './promo/index.js'
 import { runExperience, isInteractive } from './experience/index.js'
+import { runPlanner } from './planner/index.js'
 import { loadBrief } from './writer/inputs.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { draftVersion, draftBriefVersion } from './writer/save.js'
@@ -35,6 +36,11 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
   const deps = { config, store, notifier, ...(agentDeps ?? scoutDeps) }
   return {
     ...stubAgents,
+    // Phase 12: the Roadmap Planner (roadmap mode).
+    async planner(ctx) {
+      const output = await runPlanner({ runId: ctx.runId }, deps)
+      return { model: output.calls.at(-1)?.model ?? config.planner.model, output }
+    },
     async scout(ctx) {
       const output = ctx.scoutMode === 'sources'
         ? await runScout({ mode: 'sources', briefId: ctx.briefId, version: ctx.version, claims: ctx.routeClaims ?? ctx.review?.claims ?? [], reviewerNote: ctx.review?.summary }, deps)

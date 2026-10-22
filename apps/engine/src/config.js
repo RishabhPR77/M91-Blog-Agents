@@ -38,6 +38,8 @@ const DEFAULTS = {
   WRITER_AI_SERVICE: 'gemini', WRITER_AI_MODEL: 'gemini-2.5-flash', WRITER_DELIVERY: 'rtlayer',
   REVIEWER_AI_SERVICE: 'openai', REVIEWER_AI_MODEL: 'gpt-5.5', REVIEWER_DELIVERY: 'rtlayer',
   PROMO_AI_SERVICE: 'openai', PROMO_AI_MODEL: 'gpt-5-mini', PROMO_DELIVERY: 'sync',
+  // Phase 12: the Roadmap Planner (one call plans the learning path; one repair when the code checks fail).
+  PLANNER_AI_SERVICE: 'openai', PLANNER_AI_MODEL: 'gpt-5.6-luna', PLANNER_DELIVERY: 'sync', PLANNER_MAX_REPAIRS: '1',
   MEM0_AGENT_ID: 'm91-blog',
   // Phase 9 A5: the Mem0 quota guard (an estimate kept in apps/engine/data/mem0-usage.json)
   MEM0_MONTHLY_LIMIT: '1000', MEM0_MONTHLY_ADD_LIMIT: '10000', MEM0_WARN_PCT: '80', MEM0_STOP_PCT: '95',
@@ -288,6 +290,10 @@ export function loadConfig(env = process.env) {
       maxSourceChecks: int('REVIEWER_MAX_SOURCE_CHECKS', { max: 20 }),
       feedbackMaxItems: int('REVIEW_FEEDBACK_MAX_ITEMS', { min: 1, max: 30 }),
       lessonsPerReviewMax: int('LESSONS_PER_REVIEW_MAX', { max: 10 })
+    },
+    planner: {
+      ...agent('planner'),
+      maxRepairs: int('PLANNER_MAX_REPAIRS', { max: 3 })
     },
     promo: {
       ...agent('promo'),

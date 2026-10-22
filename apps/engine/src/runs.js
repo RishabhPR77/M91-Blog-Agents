@@ -31,13 +31,14 @@ import { createPublisher, publishPreflight, PublishError } from './publisher/ind
 import { draftsOf } from './writer/save.js'
 import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopic, runApprovalReview } from './approval.js'
 import { runScout } from './scout/index.js'
+import { runPlanner } from './planner/index.js'
 import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
 import { loadBrief } from './writer/inputs.js'
 import { addToTimeline } from './timeline.js'
 
-export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export'])
-export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export'])
+export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export', 'roadmap'])
+export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export', 'roadmap'])
 // The Publisher's modes (Phase 7): code only, no AI calls.
 export const PUBLISH_MODES = Object.freeze(['publish', 'unpublish', 'set_index', 'rebuild_blog'])
 // Which publish modes each PUBLISH_TARGET supports (Phase 11). none: no publishing at all (the export is the output).
@@ -45,7 +46,7 @@ export const TARGET_MODES = Object.freeze({ none: [], embarko: ['publish', 'unpu
 // The human's decisions on a draft that waits at awaiting_human (Phase 5.5).
 export const DECISION_MODES = Object.freeze(['approve', 'human_revise', 'reject_topic', 'approval_review'])
 export const TRIGGERS = Object.freeze(['manual', 'cron', 'api', 'cli'])
-const TOP_STEPS = ['scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer', 'promo', 'export', 'publisher']
+const TOP_STEPS = ['planner', 'scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer', 'promo', 'export', 'publisher']
 
 export class RunError extends Error {
   constructor(code, message, status = 400) {
@@ -369,6 +370,20 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       const r = await runPipeline({ config: runConfig, store, notifier, agents: fullAgents, now, runId, briefId: params.brief_id, lock: false, signal, resume: { version: params.version, briefVersion: params.brief_version } })
       const status = r.state === 'awaiting_human' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
       return { status, brief_id: params.brief_id, summary: r.error ?? r.summary ?? `review loop ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
+    }
+    if (mode === 'roadmap') {
+      // Phase 12: the Roadmap Planner (1 AI call, plus the Scout's facts step when there are no M91 facts yet).
+      // The roadmap is saved as a draft: the person approves it in the dashboard.
+      emit('step.started', { agent: 'planner', step: 'planner' })
+      try {
+        const out = agents?.planner ? (await agents.planner({ runId, config: runConfig })).output : await runPlanner({ runId }, { config: runConfig, store, now })
+        emit('step.finished', { agent: 'planner', step: 'planner' })
+        emit('step.output', { agent: 'planner', step: 'planner', message: out.summary_line, data: { record_id: out.record_id, slots: out.slots, repairs_used: out.repairs_used, facts_reused: out.facts_reused } })
+        return { status: 'succeeded', summary: out.summary_line, warnings: out.warnings, output: out }
+      } catch (error) {
+        stepEnded('planner', error, signal)
+        throw error
+      }
     }
     if (mode === 'export') {
       // Phase 11: the Markdown export of a reviewed draft (0 AI calls). save: also the final export (record + file).

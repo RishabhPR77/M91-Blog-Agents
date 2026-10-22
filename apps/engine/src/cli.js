@@ -129,6 +129,16 @@ export function printDesigner(d, print = console.log) {
   if (d.error) print(`NO GUIDE: ${d.error}`)
 }
 
+/** The roadmap, stage by stage: each slot with its status, question, what it teaches and what it needs. */
+export function printRoadmap(roadmap, print = console.log) {
+  print(`--- Roadmap · ${roadmap.status}${roadmap.approved_at ? ` (approved ${roadmap.approved_at.slice(0, 10)})` : ''} · ${roadmap.model_used ?? ''} ---`)
+  for (const st of roadmap.stages) {
+    print(`Stage ${st.number}: ${st.name} (${st.level})`)
+    for (const s of st.slots) print(`  ${s.slot_id.padEnd(5)} [${s.status}] ${s.title_idea}\n         ${s.question} · teaches: ${s.teaches.join(', ')}${s.needs.length ? ` · needs: ${s.needs.join(', ')}` : ''}${s.brief_id ? ` · brief ${s.brief_id}` : ''}`)
+  }
+  if (roadmap.notes) print(`Notes: ${roadmap.notes}`)
+}
+
 /** A review in full: gates and areas with evidence, total, feedback with quote_found, sources, lessons. */
 export function printReview(r, print = console.log) {
   print(`--- review of ${r.brief_id} v${r.version} (brief v${r.brief_version}) · ${r.model_used} · ${r.ms} ms · repairs ${r.repairs_used} · record ${r.record_id} ---`)
@@ -472,6 +482,26 @@ async function main() {
     console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
     for (const w of result.run?.warnings ?? []) console.log(`WARNING: ${w}`)
     process.exitCode = result.status === 'succeeded' ? 0 : 1
+    return
+  }
+
+  // Phase 12: npm run roadmap -- --generate (1 AI call, +1 for the M91 facts when there are none) | --show | --approve
+  if (args._[0] === 'roadmap') {
+    if (args.generate) {
+      const result = await startAndWait(config, { mode: 'roadmap' })
+      if (result.output?.roadmap) printRoadmap(result.output.roadmap)
+      console.log(`${result.status}: ${result.run?.result_summary ?? result.output?.summary_line ?? result.error ?? ''}`)
+      process.exitCode = result.status === 'succeeded' ? 0 : 1
+      return
+    }
+    const { withMem0Count, mem0Requests } = await import('./util/mem0count.js')
+    const { loadRoadmap } = await import('./roadmap/model.js')
+    const { approveRoadmap } = await import('./roadmap/actions.js')
+    const { counts, result } = withMem0Count(async () => (args.approve ? approveRoadmap(store) : loadRoadmap(store)))
+    const rec = await result
+    if (!rec?.payload) console.log('No roadmap yet: npm run roadmap -- --generate')
+    else printRoadmap(rec.payload)
+    console.log(`Mem0 requests: ${mem0Requests(counts)}`)
     return
   }
 

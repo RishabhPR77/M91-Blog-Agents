@@ -169,6 +169,11 @@ export async function runScout(params = {}, deps = {}) {
   }
 
   if (params.mode === 'sources') return sourcesMode()
+  // Phase 12: the facts step alone (the Roadmap Planner's input); today's record is reused.
+  if (params.mode === 'facts') {
+    const f = await getFacts()
+    return { mode: 'facts', facts_record_id: f.id, facts: f.payload, reused: f.reused, calls_used: callsUsed, warnings, calls }
+  }
   if (params.mode !== 'research') throw new ScoutError(`unknown Scout mode "${params.mode}"`)
   return researchMode()
 

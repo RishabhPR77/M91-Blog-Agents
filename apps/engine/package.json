@@ -53,6 +53,7 @@
     "blog:sync": "node --env-file=../../.env src/cli.js blog-sync",
     "mem0:usage": "node --env-file=../../.env src/cli.js mem0-usage",
     "reset:all": "node --env-file=../../.env src/cli.js reset",
+    "roadmap": "node --env-file=../../.env src/cli.js roadmap",
     "export": "node --env-file=../../.env src/cli.js export"
   },
   "dependencies": {
