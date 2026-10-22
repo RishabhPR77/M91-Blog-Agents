@@ -182,7 +182,7 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
       if (!res.ok) throw new StoreError(`Mem0 event lookup failed with HTTP ${res.status}`)
       const event = await res.json()
       if (event.status === 'SUCCEEDED') return event
-      if (event.status === 'FAILED') throw new StoreError('Mem0 add event FAILED', { eventId })
+      if (event.status === 'FAILED') throw new StoreError('Mem0 event FAILED', { eventId })
       await sleepFn(eventPollMs)
     }
     throw new StoreError(`Mem0 add event not finished after ${eventTimeoutMs} ms`, { eventId })
@@ -378,7 +378,32 @@ export function createStore({ config = getConfig(), clientFactory = defaultClien
     wrote({ op: 'delete', id })
   }
 
-  return { dryRun, writeKey, createRecord, updateRecord, getRecord, getRecords, getOne, searchSimilar, addLesson, deleteRecord }
+  /**
+   * Phase 12 (reset:all): every memory under this agent id, any type (one paged list, 100 per page, no cache).
+   * Raw memories, so records without our metadata (or of an unknown type) are counted too.
+   */
+  async function listAgentMemories() {
+    return fetchAll({ agent_id: agentId })
+  }
+
+  /**
+   * Phase 12 (reset:all): deletes every memory of this agent id with one request (Mem0 runs it in the
+   * background; its event is followed when it returns one). Never another agent, user, app or project:
+   * only agent_id is sent, and an empty or wildcard agent id is refused.
+   */
+  async function deleteAllForAgent() {
+    if (!agentId || /[*]/.test(agentId)) throw new StoreError(`refusing to delete: MEM0_AGENT_ID "${agentId}" is empty or a wildcard`)
+    const c = await client()
+    const res = await net(() => c.deleteAll({ agentId }), 'delete')
+    const eventId = res?.event_id ?? res?.eventId ?? null
+    if (eventId) await waitForEvent(eventId)
+    forgetLists()
+    cache.records.clear()
+    wrote({ op: 'delete_all' })
+    return { message: res?.message ?? null, event_id: eventId }
+  }
+
+  return { dryRun, writeKey, agentId, createRecord, updateRecord, getRecord, getRecords, getOne, searchSimilar, addLesson, deleteRecord, listAgentMemories, deleteAllForAgent }
 }
 
 let defaultStore

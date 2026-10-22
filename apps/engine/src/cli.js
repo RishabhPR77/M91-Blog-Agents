@@ -176,6 +176,46 @@ async function ask(question) {
   }
 }
 
+/**
+ * npm run reset:all -- [--dry-run]  (Phase 12): counts every Mem0 memory under MEM0_AGENT_ID by type and the
+ * local leftovers; without --dry-run, asks for "yes", then deletes them (Mem0's delete-all for our agent id
+ * only) and clears exports/ and data/ (keeping data/mem0-usage.json). Prints the Mem0 requests it used.
+ */
+export async function resetCommand(args, { store, config, confirm = ask, print = console.log }) {
+  const { planReset, runReset, planLines } = await import('./reset.js')
+  const { withMem0Count, mem0Requests } = await import('./util/mem0count.js')
+  const { counts, result } = withMem0Count(async () => {
+    if (args['dry-run']) {
+      const plan = await planReset({ store, config })
+      for (const l of planLines(plan)) print(l)
+      print('Dry run: nothing was deleted.')
+      return plan
+    }
+    return runReset({
+      store, config,
+      confirm: async (plan) => {
+        for (const l of planLines(plan)) print(l)
+        if (plan.total === 0 && !plan.local.exports.files && !plan.local.data.entries.length) {
+          print('Nothing to delete.')
+          return false
+        }
+        return (await confirm(`Type "yes" to delete these ${plan.total} Mem0 memories and the local files listed: `)) === 'yes'
+      }
+    })
+  })
+  const r = await result
+  if (!args['dry-run']) {
+    if (!r.done) print('Nothing deleted.')
+    else {
+      print(`Deleted ${r.deleted} Mem0 memories (left: ${r.left}). Local: ${r.removedLocal.length ? r.removedLocal.join(', ') : 'nothing'}.`)
+      if (r.left) print(`WARNING: ${r.left} memories are still listed: Mem0 deletes in the background; run the dry run again in a minute.`)
+      print('A running engine now says its data may be out of date: click Refresh from Mem0 in the dashboard.')
+    }
+  }
+  print(`Mem0 requests: ${mem0Requests(counts)} (reads ${counts.reads} · writes ${counts.writes})`)
+  return r
+}
+
 /** npm run cleanup -- --list | --delete <memory_id …> | --delete-listed */
 export async function cleanupCommand(args, { store, confirm = ask, print = console.log, table = console.table }) {
   const show = (list) => {
@@ -248,6 +288,8 @@ async function main() {
     return
   }
 
+  // Phase 12: the fresh start. It deletes for real even when DRY_RUN=true, after "yes".
+  if (args._[0] === 'reset') return resetCommand(args, { store: createStore({ config, dryRun: false }), config })
   // Clean-up deletes for real even when DRY_RUN=true: it only removes ids you list or confirm.
   if (args._[0] === 'cleanup') return cleanupCommand(args, { store: createStore({ config, dryRun: false }) })
   if (args._[0] === 'lessons') return lessonsCommand(args, { store: createStore({ config, dryRun: false }), engine: typeof args.delete === 'string' ? await engineUrl(config) : null })

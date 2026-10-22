@@ -52,6 +52,7 @@
     "rebuild-blog": "node --env-file=../../.env src/cli.js rebuild-blog",
     "blog:sync": "node --env-file=../../.env src/cli.js blog-sync",
     "mem0:usage": "node --env-file=../../.env src/cli.js mem0-usage",
+    "reset:all": "node --env-file=../../.env src/cli.js reset",
     "export": "node --env-file=../../.env src/cli.js export"
   },
   "dependencies": {
