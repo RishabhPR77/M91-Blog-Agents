@@ -32,6 +32,7 @@ import { draftsOf } from './writer/save.js'
 import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopic, runApprovalReview } from './approval.js'
 import { runScout } from './scout/index.js'
 import { runPlanner } from './planner/index.js'
+import { pickTarget } from './roadmap/pick.js'
 import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
 import { loadBrief } from './writer/inputs.js'
@@ -137,6 +138,11 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     // Phase 9 A5: at MEM0_STOP_PCT new runs are refused; approving or publishing a waiting draft still runs.
     const usage = usageStatus(config, { now })
     if (usage.level === 'stop' && !QUOTA_EXEMPT_MODES.includes(mode)) throw new RunError('mem0_quota', stopMessage(usage), 429)
+    // Phase 12: a pipeline run needs an approved roadmap with a slot ready (or a pinned topic due), before any AI call.
+    if (mode === 'full' && config.roadmap?.enabled) {
+      const t = await pickTarget(readStore(configForRun(config, { dryRun, params })), { now })
+      if (t.kind === 'none') throw new RunError(/Approve the roadmap first|no roadmap yet/.test(t.reason) ? 'roadmap_not_approved' : 'nothing_to_write', t.reason, 409)
+    }
     if (mode === 'writer') await checkWriterParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'reviewer') await checkReviewerParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'promo') await checkPromoParams(params, configForRun(config, { dryRun, params }))

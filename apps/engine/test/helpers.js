@@ -36,6 +36,9 @@ export function fakeEnv(overrides = {}) {
     // Phase 10 behaviour in the existing tests (the defaults are the Phase 11 fallback: designer off, no publish).
     EXPERIENCE_ENABLED: 'true',
     PUBLISH_TARGET: 'embarko',
+    // Phase 12: the existing tests run without the roadmap and with rapid response (Phase 12 tests turn them on/off).
+    ROADMAP_ENABLED: 'false',
+    RAPID_RESPONSE_ENABLED: 'true',
     ...overrides
   }
 }

@@ -87,7 +87,8 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
 
   // Stories: rapid-response window recomputed from the published date.
   const stories = (await records('story_lead')).filter(usable)
-  const isRapid = (r) => storyDateRule(r.payload?.published_date, { today, lookbackDays: sc.storyLookbackDays, rapidDays: sc.rapidResponseDays }).rapid
+  // Phase 12: RAPID_RESPONSE_ENABLED=false turns the rapid-response path off (recent stories are ordinary stories).
+  const isRapid = (r) => sc.rapidResponseEnabled !== false && storyDateRule(r.payload?.published_date, { today, lookbackDays: sc.storyLookbackDays, rapidDays: sc.rapidResponseDays }).rapid
   const rapidStories = stories.filter(isRapid)
   const otherStories = stories.filter((r) => !isRapid(r)).sort((a, b) => byDateDesc(a.payload?.published_date, b.payload?.published_date)).slice(0, 10)
 

@@ -14,6 +14,7 @@ import { runReviewer } from './reviewer/index.js'
 import { runPromo } from './promo/index.js'
 import { runExperience, isInteractive } from './experience/index.js'
 import { runPlanner } from './planner/index.js'
+import { pickTarget, setSlotStatus } from './roadmap/pick.js'
 import { loadBrief } from './writer/inputs.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { draftVersion, draftBriefVersion } from './writer/save.js'
@@ -246,7 +247,9 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   let best = null
   let reviews = 0
   const warnings = []
-  const ctx = () => ({ runId, briefId, version, round: counters.rounds, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, writerMode, routeFeedback, routeClaims, guideDoc, designFeedback, config })
+  // Phase 12: what this run writes about (a roadmap slot or a pinned topic); null without the roadmap.
+  let target = null
+  const ctx = () => ({ runId, briefId, version, round: counters.rounds, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, writerMode, routeFeedback, routeClaims, guideDoc, designFeedback, target, config })
 
   const setState = (to) => {
     state = assertTransition(state, to)
@@ -366,6 +369,18 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
         designFeedback = resume.feedback ?? []
       }
     } else {
+      if (config.roadmap?.enabled) {
+        // Phase 12: a pinned topic that is due, else the next slot of the approved roadmap. Nothing to write: no AI call.
+        target = await pickTarget(store, { now })
+        if (target.kind === 'none') {
+          emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: target.reason, data: {} })
+          return { briefId, state: 'skipped', reason: target.reason, error: target.reason, steps, warnings }
+        }
+        if (target.kind === 'slot') {
+          await setSlotStatus(store, { slotId: target.slot.slot_id }, 'drafting', { setBriefId: briefId, now })
+          emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Next up: stage ${target.stage.number} (${target.stage.name}) · ${target.slot.slot_id} ${target.slot.title_idea}`, data: { slot_id: target.slot.slot_id, stage: target.stage.number } })
+        } else emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Pinned topic first: ${target.pin.topic}`, data: { pinned_id: target.pin.pinned_id } })
+      }
       await research()
       await plan()
     }
@@ -445,17 +460,21 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     }
 
     const summary = await awaitHuman()
+    if (target?.kind === 'slot') await setSlotStatus(store, { slotId: target.slot.slot_id }, 'in_review', { now })
     await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'awaiting_human', error: null })
     return { briefId, state, version, counters, steps, summary, warnings }
   } catch (error) {
     // Once a run is cancelled, a later error (e.g. a network failure mid-step) still ends it as cancelled: no failure alert.
     if (error instanceof CancelledError || signal?.aborted) {
       state = 'cancelled'
+      if (target?.kind === 'slot') await setSlotStatus(store, { slotId: target.slot.slot_id }, 'planned', { setBriefId: '', now })
       await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'cancelled', error: null })
       log.info('pipeline cancelled', { runId, briefId })
       return { runId, briefId, state, version, counters, steps }
     }
     if (state !== 'failed') state = 'failed'
+    // Phase 12: the slot is free again (a new run picks it).
+    if (target?.kind === 'slot') await setSlotStatus(store, { slotId: target.slot.slot_id }, 'planned', { setBriefId: '', now })
     await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'failed', error: error.message })
     log.error('pipeline failed', { briefId, error, counters })
     if (error.routing) await failReview(error)

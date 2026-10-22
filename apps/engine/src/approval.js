@@ -17,6 +17,7 @@ import { guideText } from './experience/review.js'
 import { saveFinalExport, latestExport } from './export/index.js'
 import { createDocstar, publishToDocstar } from './publisher/docstar.js'
 import { createPublisher } from './publisher/index.js'
+import { setSlotStatus } from './roadmap/pick.js'
 import { setLeadStatus } from './strategist/save.js'
 
 export const FEEDBACK_MIN_CHARS = 5
@@ -164,6 +165,8 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
   if (unreviewed) warnings.push(`v${version} approved without a Reviewer pass (${params.force_unreviewed === true ? 'force_unreviewed' : 'REREVIEW_AFTER_HUMAN=false'})`)
   await store.updateRecord(d.id, undefined, { status: 'approved', approved_by: 'human', approved_at: at, approved_unreviewed: unreviewed })
   if (briefRec?.id) await store.updateRecord(briefRec.id, undefined, { status: 'approved', approved_by: 'human', approved_at: at })
+  // Phase 12: its roadmap slot is done (a later slot that needs it can be picked).
+  if (config.roadmap?.enabled) await setSlotStatus(store, { slotId: briefRec?.payload?.slot_id ?? null, briefId }, 'approved')
   const total = d.metadata?.review_total ?? null
 
   let promo = null
@@ -300,6 +303,8 @@ export async function runRejectTopic({ briefId, params = {}, config, store }) {
   const at = istIso(new Date())
   await store.updateRecord(d.id, undefined, { status: 'rejected', rejected_at: at })
   if (briefRec?.id) await store.updateRecord(briefRec.id, undefined, { status: 'rejected', rejected_at: at })
+  // Phase 12: a rejected topic's slot is skipped (never picked again; slots that need it are not blocked).
+  if (config.roadmap?.enabled) await setSlotStatus(store, { slotId: briefRec?.payload?.slot_id ?? null, briefId }, 'skipped')
   const lead = briefRec?.payload?.lead
   const leadRec = await findLeadRecord(store, lead)
   if (leadRec) {

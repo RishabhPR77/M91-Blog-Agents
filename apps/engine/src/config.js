@@ -40,6 +40,8 @@ const DEFAULTS = {
   PROMO_AI_SERVICE: 'openai', PROMO_AI_MODEL: 'gpt-5-mini', PROMO_DELIVERY: 'sync',
   // Phase 12: the Roadmap Planner (one call plans the learning path; one repair when the code checks fail).
   PLANNER_AI_SERVICE: 'openai', PLANNER_AI_MODEL: 'gpt-5.6-luna', PLANNER_DELIVERY: 'sync', PLANNER_MAX_REPAIRS: '1',
+  // Phase 12: runs follow the approved roadmap (no news / rapid-response posts).
+  ROADMAP_ENABLED: 'true', RAPID_RESPONSE_ENABLED: 'false',
   MEM0_AGENT_ID: 'm91-blog',
   // Phase 9 A5: the Mem0 quota guard (an estimate kept in apps/engine/data/mem0-usage.json)
   MEM0_MONTHLY_LIMIT: '1000', MEM0_MONTHLY_ADD_LIMIT: '10000', MEM0_WARN_PCT: '80', MEM0_STOP_PCT: '95',
@@ -254,6 +256,8 @@ export function loadConfig(env = process.env) {
       concurrency: int('SCOUT_CONCURRENCY', { min: 1, max: 10 }),
       questionsTimeoutMs: int('SCOUT_QUESTIONS_TIMEOUT_MS', { min: 1000 }),
       rapidResponseDays: int('RAPID_RESPONSE_DAYS', { min: 0 }),
+      // Phase 12: news / rapid-response posts are off.
+      rapidResponseEnabled: bool('RAPID_RESPONSE_ENABLED'),
       styleReuseDays: int('STYLE_REUSE_DAYS'),
       docsMaxPages: int('DOCS_MAX_PAGES', { min: 1 }),
       docsMaxChars: int('DOCS_MAX_CHARS', { min: 1000, max: 48000 }),
@@ -295,6 +299,8 @@ export function loadConfig(env = process.env) {
       ...agent('planner'),
       maxRepairs: int('PLANNER_MAX_REPAIRS', { max: 3 })
     },
+    // Phase 12: each run writes the next slot of the approved roadmap (pinned topics first).
+    roadmap: { enabled: bool('ROADMAP_ENABLED') },
     promo: {
       ...agent('promo'),
       // Phase 10: off by default (the code and tests stay; approving never runs it unless this is true)
