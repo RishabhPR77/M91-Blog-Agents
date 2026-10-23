@@ -62,5 +62,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   console.log('  The ones that matter most to keep the same as local: MEM0_AGENT_ID (the Mem0 data it reads and writes), TIMEZONE,')
   console.log('  the *_AI_SERVICE / *_AI_MODEL pairs, MEM0_MONTHLY_LIMIT, MEM0_MONTHLY_ADD_LIMIT.\n')
   console.log('Do not set: PORT, DATA_DIR, APP_NAME, APP_VERSION (Embarko sets them), DASHBOARD_AUTH / DASHBOARD_PASSWORD (hosted always uses the admin login).')
-  console.log('ADMIN_PASSWORD_HASH comes from `npm run admin:hash`. Keep PUBLISH_TARGET=none.')
+  console.log('ADMIN_PASSWORD_HASH comes from `npm run admin:hash`. PUBLISH_TARGET: none or docstar (embarko is not sent).')
 }

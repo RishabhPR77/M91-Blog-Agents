@@ -4,7 +4,7 @@
 //
 // What is sent: the names `npm run embarko:env` lists (required, needed, only-if-set and optional) that have a value
 // in .env. Never sent: PORT, DATA_DIR, APP_NAME, APP_VERSION (Embarko sets them), the local-only keys (DASHBOARD_AUTH,
-// DASHBOARD_PASSWORD, EMBARKO_DEPLOY_TOKEN, ENGINE_DATA_DIR, EXPORT_DIR, ...), and PUBLISH_TARGET unless it is "none".
+// DASHBOARD_PASSWORD, EMBARKO_DEPLOY_TOKEN, ENGINE_DATA_DIR, EXPORT_DIR, ...), and PUBLISH_TARGET=embarko (the old blog build cannot run there; none and docstar are sent).
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { envNames } from './embarko-env.mjs'
@@ -19,8 +19,8 @@ export function planSync(env, names = envNames()) {
   for (const key of wanted) {
     const value = env[key]?.trim()
     if (!value) continue
-    if (key === 'PUBLISH_TARGET' && value !== 'none') {
-      skipped.push(`${key} (not "none": blog publishing stays off on Embarko)`)
+    if (key === 'PUBLISH_TARGET' && value === 'embarko') {
+      skipped.push(`${key} (the old blog target: it stays off on Embarko; none and docstar are sent)`)
       continue
     }
     send[key] = value

@@ -278,9 +278,10 @@ test('env sync plan: only the listed settings that have a value; local-only and 
   const plan = planSync(syncEnv)
   assert.deepEqual(Object.keys(plan.send).sort(), ['ADMIN_PASSWORD_HASH', 'ADMIN_USERNAME', 'M91_CTA_URL', 'MEM0_AGENT_ID', 'MEM0_API_KEY', 'PIPELINE_TRIGGER_KEY', 'VIASOCKET_EMBED_SECRET', 'VIASOCKET_ORG_ID', 'VIASOCKET_PROJECT_ID'])
   for (const never of ['PORT', 'DATA_DIR', 'APP_NAME', 'DASHBOARD_AUTH', 'DASHBOARD_PASSWORD', 'EMBARKO_DEPLOY_TOKEN', 'ENGINE_DATA_DIR', 'EXPORT_DIR', 'PATH', 'HOME', 'MEM0_ORG_ID']) assert.ok(!(never in plan.send), never)
-  assert.deepEqual(plan.skipped, ['PUBLISH_TARGET (not "none": blog publishing stays off on Embarko)'])
+  assert.deepEqual(plan.skipped, ['PUBLISH_TARGET (the old blog target: it stays off on Embarko; none and docstar are sent)'])
   assert.deepEqual(plan.missingRequired.sort(), ['M91_ALERT_WEBHOOK_URL', 'SLACK_POST_WEBHOOK_URL', 'WEBHOOK_SHARED_KEY'])
   assert.equal(planSync({ ...syncEnv, PUBLISH_TARGET: 'none' }).send.PUBLISH_TARGET, 'none')
+  assert.equal(planSync({ ...syncEnv, PUBLISH_TARGET: 'docstar' }).send.PUBLISH_TARGET, 'docstar', 'Docstar publishing works from Embarko')
 })
 
 test('env sync: nothing is sent without --yes; with it the values go to Embarko, and no printed line holds a value', async () => {
