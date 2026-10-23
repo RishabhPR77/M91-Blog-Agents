@@ -309,10 +309,12 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
         // Phase 11: Docstar (answers "not configured" until the DOCSTAR_* keys are set; nothing is sent).
         const docstar = createDocstar({ config: runConfig })
         const out = await runStep('publisher', async () => {
-          const rec = await latestExport(store, params.brief_id ?? '')
-          if (mode === 'publish') return publishToDocstar({ store, docstar, exportRecord: rec })
-          const r = await docstar.unpublishPage({ page_id: rec?.payload?.docstar_page_id ?? null, slug: params.slug })
-          return { status: r.status, summary: r.ok ? `Docstar page unpublished: ${params.slug}` : `Docstar: ${r.message ?? r.error ?? r.status}`, warnings: r.ok ? [] : [r.message ?? r.status] }
+          // publish names the brief; unpublish names the post's slug (its export carries the Docstar page id).
+          const rec = params.brief_id ? await latestExport(store, params.brief_id) : (await store.getRecords({ type: 'markdown_export' })).find((r) => r.payload?.slug === params.slug) ?? null
+          if (mode === 'publish') return publishToDocstar({ store, docstar, exportRecord: rec, draft: params.draft === true })
+          const r = await docstar.unpublishPage({ page_id: rec?.payload?.docstar_page_id ?? null })
+          if (r.ok && rec) await store.updateRecord(rec.id, { ...rec.payload, docstar_state: 'draft', docstar_unpublished_at: new Date().toISOString() }, { status: 'final' }, { known: rec })
+          return { status: r.status, summary: r.ok ? `Docstar page unpublished (back to draft, nothing deleted): ${params.slug}` : `Docstar: ${r.message ?? r.error ?? r.status}`, warnings: r.ok ? [] : [r.message ?? r.error ?? r.status] }
         })
         return { status: 'succeeded', brief_id: params.brief_id ?? null, summary: out.summary, warnings: out.warnings }
       }
@@ -550,6 +552,8 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (!TARGET_MODES[target].includes(mode)) throw new RunError('not_supported', `${mode} is not available with PUBLISH_TARGET=${target}`, 409)
     if (target === 'docstar') {
       if (mode === 'publish' && !(await latestExport(readStore(runConfig), params.brief_id))) throw new RunError('no_export', `brief ${params.brief_id} has no final Markdown export: approve it first`, 409)
+      if (mode === 'publish' && params.draft !== undefined && typeof params.draft !== 'boolean') throw new RunError('bad_params', 'params.draft must be true or false')
+      if (mode === 'unpublish' && (typeof params.slug !== 'string' || !params.slug.trim())) throw new RunError('bad_params', 'unpublish needs params.slug')
       return
     }
     // (reads below go through the index when the engine has one)

@@ -97,7 +97,7 @@ const DEFAULTS = {
   // Phase 11 (fallback plan): the Experience Designer is off and nothing is published; the reviewed draft becomes a
   // Markdown file (apps/engine/exports unless EXPORT_DIR is set). Docstar is filled in once its keys exist.
   EXPERIENCE_ENABLED: 'false', PUBLISH_TARGET: 'none', EXPORT_DIR: '',
-  DOCSTAR_API_URL: '', DOCSTAR_API_KEY: '', DOCSTAR_COLLECTION_ID: '',
+  DOCSTAR_API_URL: '', DOCSTAR_API_KEY: '', DOCSTAR_COLLECTION_ID: '', DOCSTAR_ORG_ID: '',
   BLOG_APP_NAME: 'm91-blog', BLOG_BASE_URL: 'https://m91-blog.embarko.app', NOINDEX_FIRST_N_POSTS: '10',
   // Phase 3: Strategist
   STRATEGIST_MAX_REPAIRS: '1', RECENT_BRIEFS_WINDOW: '10', TITLE_MAX_CHARS: '70', KEYWORD_MAX_WORDS: '6', OUTLINE_MIN_SECTIONS: '4',
@@ -439,7 +439,8 @@ export function loadConfig(env = process.env) {
     docstar: {
       apiUrl: url('DOCSTAR_API_URL')?.replace(/\/+$/, ''),
       apiKey: str('DOCSTAR_API_KEY'),
-      collectionId: str('DOCSTAR_COLLECTION_ID')
+      collectionId: str('DOCSTAR_COLLECTION_ID'),
+      orgId: str('DOCSTAR_ORG_ID')
     },
     // Blog + Embarko, used from Phase 7. The deploy token is optional until then.
     blog: {

@@ -79,19 +79,36 @@ From docstar.io/help:
   title and slug as fields.
 - **API tokens:** they start with `hm_` and go in `Authorization: Bearer <token>`. Each token covers one
   workspace.
-- **Page endpoints:** the REST paths and field names for creating, updating and publishing pages are not in
-  the public docs. The docs point to the MCP server and to an API reference that needs an account.
+- **Page endpoints:** not in the public docs on 2026-10-21. Since then Docstar publishes its API reference at
+  developers.docstar.io; the step below uses it (2026-10-23).
 
 ## The Docstar step (`src/publisher/docstar.js`)
 
-- **Interface:** `createPage({ title, slug, markdown })`, `updatePage({ page_id, … })` and
+- **Interface:** `createPage({ title, slug, markdown, … })`, `updatePage({ page_id, … })` and
   `unpublishPage({ page_id })`.
-- **Without the three `DOCSTAR_*` keys:** every call answers `{ ok: false, status: "not_configured" }`, and
-  nothing is sent.
-- **With the keys but no transport:** the calls answer `not_implemented`. To finish it, write the transport
-  (one function per operation) once Docstar's page API is known. Nothing else changes.
-- **Page id:** once Docstar answers ok, the page id is saved on the `markdown_export` record, so the next send
-  updates the page.
+- **Settings:** `DOCSTAR_API_URL=https://api.docstar.io`, `DOCSTAR_API_KEY` (`hm_…`, a secret),
+  `DOCSTAR_COLLECTION_ID` and `DOCSTAR_ORG_ID` (the workspace id; `POST /proxy/decode-token` answers it). Without
+  all four, every call answers `{ ok: false, status: "not_configured" }` and nothing is sent.
+- **Docstar's API** (developers.docstar.io, read 2026-10-23), `Authorization: Bearer hm_…`:
+
+  | Step | Request |
+  | --- | --- |
+  | the collection's top page | `GET /orgs/:orgId/collections/:collectionId` → `pages.rootParentId` |
+  | create (a draft) | `POST /orgs/:orgId/pages/:rootParentId` `{ name, urlName, state: 1 }` |
+  | the body | `POST /orgs/:orgId/pages/:pageId/ydoc` `{ content }` (Markdown); if Docstar says the page has no editor document yet, `PUT /orgs/:orgId/pages/:pageId` `{ contents }` |
+  | SEO | `PATCH /orgs/:orgId/pages/:pageId/meta` `{ data: { title, description, tags } }` |
+  | publish / unpublish | `PATCH /orgs/:orgId/pages/:pageId/state` `{ state: 2 }` (answers `publicUrl`) / `{ state: 1 }` (back to draft) |
+  | rename (update) | `PUT /orgs/:orgId/pages/:pageId` `{ name }` (the slug stays, so links keep working) |
+
+- **Create:** 5 requests (top page, create, body, SEO, publish). **Update:** 4 (rename, body, SEO, publish; any
+  edit moves a Docstar page back to draft, so it is published again). **Unpublish:** 1; nothing is deleted.
+- **Body:** the export without its front matter and without the first `# Title` (Docstar shows the page name).
+- **Draft only:** `npm run publish -- --brief-id=<id> --draft` (or `params.draft: true`) creates or updates the
+  page without publishing it, e.g. to check a first post in Docstar.
+- **Page id:** saved on the `markdown_export` record (`docstar_page_id`, `docstar_url`, `docstar_state`), so the
+  next send updates the page. If a step fails after the page was made, the id is still saved: the next try
+  updates that page instead of making a duplicate.
+- **Errors:** the key is masked (`hm_s…`) and the org id left out of every message.
 
 ## PUBLISH_TARGET
 
@@ -136,7 +153,7 @@ per draft version.
   - approve with `none`;
   - `PUBLISH_TARGET` rules;
   - export mode;
-  - Docstar (not configured, not implemented, and a fake transport that never leaks the token);
+  - Docstar (not configured, a fake transport that never leaks the token; the real requests in `test/export/docstar.test.js`);
   - the designer off;
   - the API.
 

@@ -13,7 +13,7 @@ import { setSink } from '../../src/util/log.js'
 import { createServer } from '../../src/server.js'
 import { buildMarkdownExport, frontMatter, stripHtml } from '../../src/export/markdown.js'
 import { previewExport, saveFinalExport, exportableDraft } from '../../src/export/index.js'
-import { createDocstar, publishToDocstar, bodyOf } from '../../src/publisher/docstar.js'
+import { createDocstar, publishToDocstar, bodyOf, docstarBody } from '../../src/publisher/docstar.js'
 import { memoryStore, fakeNotifier, fakeConfig, mockReviewer } from '../helpers.js'
 import { NOW, BRIEF_ID, config, brief, draftAnswer, fakeAi, okChecker } from '../writer/fixtures.js'
 
@@ -145,7 +145,7 @@ test('PUBLISH_TARGET decides the publish modes: none refuses all (409), docstar 
   const r = await runWith(ds, 'publish')
   restore()
   assert.equal(r.status, 'succeeded')
-  assert.match(r.run.result_summary, /^Docstar: Docstar is not configured: set DOCSTAR_API_URL, DOCSTAR_API_KEY, DOCSTAR_COLLECTION_ID in \.env/)
+  assert.match(r.run.result_summary, /^Docstar: Docstar is not configured: set DOCSTAR_API_URL, DOCSTAR_API_KEY, DOCSTAR_COLLECTION_ID, DOCSTAR_ORG_ID in \.env/)
 })
 
 test('export mode: preview (nothing saved) or --save (record + file); 0 AI calls', async () => {
@@ -164,16 +164,13 @@ test('export mode: preview (nothing saved) or --save (record + file); 0 AI calls
 
 // ---------- Docstar ----------
 
-test('Docstar: "not configured" until the three keys are set; configured, it waits for the real transport', async () => {
+test('Docstar: "not configured" until the four keys are set (nothing sent)', async () => {
   const off = createDocstar({ config: fakeConfig() })
   assert.equal(off.configured, false)
-  assert.deepEqual(off.missing, ['DOCSTAR_API_URL', 'DOCSTAR_API_KEY', 'DOCSTAR_COLLECTION_ID'])
+  assert.deepEqual(off.missing, ['DOCSTAR_API_URL', 'DOCSTAR_API_KEY', 'DOCSTAR_COLLECTION_ID', 'DOCSTAR_ORG_ID'])
   for (const op of ['createPage', 'updatePage', 'unpublishPage']) assert.equal((await off[op]({})).status, 'not_configured', op)
-  const on = createDocstar({ config: fakeConfig({ DOCSTAR_API_URL: 'https://docstar.example/api', DOCSTAR_API_KEY: 'hm_secret_token', DOCSTAR_COLLECTION_ID: 'col-1' }) })
+  const on = createDocstar({ config: fakeConfig({ DOCSTAR_API_URL: 'https://docstar.example/api', DOCSTAR_API_KEY: 'hm_secret_token', DOCSTAR_COLLECTION_ID: 'col-1', DOCSTAR_ORG_ID: '123' }), fetch: async () => { throw new Error('no network in tests') } })
   assert.equal(on.configured, true)
-  const r = await on.createPage({ title: 't', slug: 's', markdown: 'm' })
-  assert.equal(r.status, 'not_implemented')
-  assert.match(r.message, /fill in the transport/)
 })
 
 test('Docstar with a fake transport: create, update and unpublish get the right input; the token never leaks', async () => {
@@ -183,7 +180,7 @@ test('Docstar with a fake transport: create, update and unpublish get the right 
     async updatePage(ctx, input) { calls.push(['update', ctx, input]); return { ok: true, status: 'updated', page_id: input.page_id } },
     async unpublishPage(ctx, input) { calls.push(['unpublish', ctx, input]); throw new Error('failed with hm_secret_token') }
   }
-  const cfg = fakeConfig({ DOCSTAR_API_URL: 'https://docstar.example/api', DOCSTAR_API_KEY: 'hm_secret_token', DOCSTAR_COLLECTION_ID: 'col-1' })
+  const cfg = fakeConfig({ DOCSTAR_API_URL: 'https://docstar.example/api', DOCSTAR_API_KEY: 'hm_secret_token', DOCSTAR_COLLECTION_ID: 'col-1', DOCSTAR_ORG_ID: '123' })
   const docstar = createDocstar({ config: cfg, transport })
   const { store } = await seed({ status: 'approved' })
   await saveFinalExport({ store, config: config(), briefId: BRIEF_ID, now })
@@ -193,8 +190,9 @@ test('Docstar with a fake transport: create, update and unpublish get the right 
   assert.equal(calls[0][0], 'create')
   assert.deepEqual(calls[0][1].headers, { Authorization: 'Bearer hm_secret_token', 'Content-Type': 'application/json' })
   assert.equal(calls[0][1].collectionId, 'col-1')
-  assert.ok(calls[0][2].markdown.startsWith('# '), 'Docstar gets the file without its front matter')
-  assert.equal(calls[0][2].markdown, bodyOf(rec.payload.markdown))
+  assert.ok(!calls[0][2].markdown.startsWith('---') && !calls[0][2].markdown.startsWith('# '), 'Docstar gets the file without its front matter and its H1 (the page name is the title)')
+  assert.equal(calls[0][2].markdown, docstarBody(rec.payload.markdown))
+  assert.ok(bodyOf(rec.payload.markdown).startsWith('# '))
   const saved = recordsOf(store, 'markdown_export')[0]
   assert.equal(saved.payload.docstar_page_id, 'p1')
   await publishToDocstar({ store, docstar, exportRecord: saved })
@@ -270,4 +268,22 @@ test('API: the Markdown preview (JSON, .md, download), the exports list and file
     assert.equal(s.designer.enabled, false)
     assert.ok(s.built_modes.includes('export'))
   })
+})
+
+test('Docstar runs: params.draft must be true or false; unpublish needs a slug and finds the page by the export\'s slug', async () => {
+  const restore = quiet()
+  const { store } = await seed({ status: 'approved' })
+  await saveFinalExport({ store, config: config(), briefId: BRIEF_ID, now })
+  const ds = manager(store, { PUBLISH_TARGET: 'docstar' })
+  await assert.rejects(ds.startRun({ mode: 'publish', params: { brief_id: BRIEF_ID, draft: 'yes' } }), (e) => e.code === 'bad_params' && /params\.draft/.test(e.message))
+  await assert.rejects(ds.startRun({ mode: 'unpublish', params: {} }), (e) => e.code === 'bad_params' && /needs params\.slug/.test(e.message))
+  // Not configured: the draft publish and the unpublish both run and send nothing.
+  const d = await runWith(ds, 'publish', { draft: true })
+  assert.equal(d.status, 'succeeded')
+  assert.match(d.run.result_summary, /^Docstar: Docstar is not configured/)
+  const slug = recordsOf(store, 'markdown_export')[0].payload.slug
+  const u = await runWith(ds, 'unpublish', { slug, brief_id: undefined })
+  restore()
+  assert.equal(u.status, 'succeeded')
+  assert.match(u.run.result_summary, /^Docstar: Docstar is not configured/)
 })

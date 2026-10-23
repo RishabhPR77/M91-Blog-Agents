@@ -120,8 +120,15 @@ a few Mem0 requests per post).
 
 - **none** (the fallback plan): nothing is published; the Markdown export is the output. Publish, Rebuild
   blog and the page preview are hidden.
-- **docstar**: **Send to Docstar** (on Control) sends the saved export. Until the `DOCSTAR_*` keys are set,
-  it answers "not configured" and sends nothing.
+- **docstar**: **Send to Docstar** (on Control) sends the saved export and publishes it in the **M91 Blogs**
+  collection; a second send updates the same page. Until the four `DOCSTAR_*` keys are set, it answers "not
+  configured" and sends nothing. To check a post in Docstar before it goes public, run this in `apps/engine`:
+
+```bash
+npm run publish -- --brief-id=<brief id> --draft
+```
+
+  **Unpublish** takes the page back to draft (nothing is deleted).
 - **embarko**: the Phase 7 blog. Open the approved draft in **Approvals**: the **Publishing** card has a
   **Publish** button (also on **Control** and **Posts**). It uses no AI calls, and the blog is rebuilt,
   deployed and checked. The first 10 posts are hidden from search engines; change that on **Posts**, where

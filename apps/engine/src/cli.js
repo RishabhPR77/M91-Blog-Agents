@@ -14,7 +14,7 @@
 // npm run promo -- --brief-id=<id> [--version=<n>]
 // npm run designer -- --brief-id=<id> [--version=<n>]   the Experience Designer alone, on a waiting, approved or published draft (1–2 AI calls)
 // npm run test:await -- --brief-id=<id> [--version=<n>]   TEST-ONLY, needs ALLOW_TEST_COMMANDS=true
-// npm run publish -- --brief-id=<id> · unpublish -- --slug=<slug> · set-index -- --slug=<slug> --noindex=true|false · rebuild-blog
+// npm run publish -- --brief-id=<id> [--draft] · unpublish -- --slug=<slug> · set-index -- --slug=<slug> --noindex=true|false · rebuild-blog
 // npm run blog:sync   (published posts from Mem0 → apps/blog/src/content/posts; no build, no deploy)
 // npm run approvals -- --list
 // npm run approve -- --brief-id=<id> [--force-unreviewed]
@@ -471,12 +471,14 @@ async function main() {
   // Phase 7: the Publisher (no AI calls). Each runs as a normal run: lock, events, run record.
   if (['publish', 'unpublish', 'set-index', 'rebuild-blog'].includes(args._[0])) {
     const mode = { publish: 'publish', unpublish: 'unpublish', 'set-index': 'set_index', 'rebuild-blog': 'rebuild_blog' }[args._[0]]
-    const usage = { publish: '--brief-id=<id>', unpublish: '--slug=<slug>', set_index: '--slug=<slug> --noindex=true|false', rebuild_blog: '' }[mode]
+    const usage = { publish: '--brief-id=<id> [--draft]', unpublish: '--slug=<slug>', set_index: '--slug=<slug> --noindex=true|false', rebuild_blog: '' }[mode]
     const params = {}
     if (mode === 'publish') params.brief_id = args['brief-id']
     if (mode === 'unpublish' || mode === 'set_index') params.slug = args.slug
     if (mode === 'set_index') params.noindex = args.noindex === 'true' ? true : args.noindex === 'false' ? false : undefined
     if (Object.values(params).some((v) => v === undefined || v === true)) throw new Error(`usage: npm run ${args._[0]} -- ${usage}`)
+    // PUBLISH_TARGET=docstar: --draft sends the page as a draft only (nothing public), e.g. for a first test.
+    if (mode === 'publish' && args.draft) params.draft = true
     const result = await startAndWait(config, { mode, params })
     console.table((result.run?.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, summary: String(s.summary).slice(0, 90), error: s.error ? String(s.error).slice(0, 60) : '' })))
     console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)

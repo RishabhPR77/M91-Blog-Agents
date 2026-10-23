@@ -106,7 +106,7 @@ test('Phase 11 keys: designer off and no publishing by default; Docstar empty un
   const c = loadConfig(env)
   assert.equal(c.designer.enabled, false)
   assert.equal(c.publish.target, 'none')
-  assert.deepEqual(c.docstar, { apiUrl: undefined, apiKey: '', collectionId: '' })
+  assert.deepEqual(c.docstar, { apiUrl: undefined, apiKey: '', collectionId: '', orgId: '' })
   const d = loadConfig(fakeEnv({ DOCSTAR_API_URL: 'https://api.docstar.example/', DOCSTAR_API_KEY: 'hm_secret', DOCSTAR_COLLECTION_ID: 'col1' }))
   assert.equal(d.docstar.apiUrl, 'https://api.docstar.example')
   const { SECRET_KEYS } = await import('../src/config.js')
