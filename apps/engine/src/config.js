@@ -1,6 +1,9 @@
 // Loads and validates process.env into one frozen config object.
 // Error messages name keys only — never values.
 
+import { join } from 'node:path'
+import { isValidHash } from './util/adminhash.js'
+
 export const SERVICES = Object.freeze(['openai', 'anthropic', 'gemini'])
 export const DELIVERIES = Object.freeze(['sync', 'rtlayer'])
 export const LOG_LEVELS = Object.freeze(['debug', 'info', 'warn', 'error'])
@@ -20,6 +23,7 @@ export const SECRET_KEYS = Object.freeze([
   'WEBHOOK_SHARED_KEY',
   'PIPELINE_TRIGGER_KEY',
   'DASHBOARD_PASSWORD',
+  'ADMIN_PASSWORD_HASH',
   'EMBARKO_DEPLOY_TOKEN',
   'SLACK_POST_WEBHOOK_URL',
   'M91_ALERT_WEBHOOK_URL',
@@ -222,7 +226,19 @@ export function loadConfig(env = process.env) {
     }
     return { fallbackService: service, fallbackModel: model }
   }
-  const dashboardAuth = bool('DASHBOARD_AUTH')
+  // Hosted on Embarko (it sets APP_NAME and DATA_DIR): the dashboard login is forced on and needs the admin ID and
+  // password hash; DASHBOARD_PASSWORD is ignored there. Local runs keep DASHBOARD_AUTH as it is.
+  const hosted = Boolean(env.APP_NAME?.trim() && env.DATA_DIR?.trim())
+  const hostedDir = hosted ? env.DATA_DIR.trim() : null
+  const dashboardAuthSetting = bool('DASHBOARD_AUTH')
+  const dashboardAuth = hosted ? true : dashboardAuthSetting
+  const adminUsername = str('ADMIN_USERNAME')
+  const adminHash = str('ADMIN_PASSWORD_HASH')
+  if (adminHash !== undefined && !isValidHash(adminHash)) problems.push('ADMIN_PASSWORD_HASH: not a hash made by "npm run admin:hash"')
+  if ((adminUsername === undefined) !== (adminHash === undefined)) problems.push('ADMIN_USERNAME and ADMIN_PASSWORD_HASH: set both or neither')
+  if (adminUsername !== undefined && adminUsername.length < 3) problems.push('ADMIN_USERNAME: at least 3 characters')
+  if (hosted && adminUsername === undefined) problems.push('ADMIN_USERNAME and ADMIN_PASSWORD_HASH: required when hosted (the dashboard login is always on there)')
+  const adminLogin = adminUsername !== undefined && adminHash !== undefined && isValidHash(adminHash) ? { username: adminUsername, passwordHash: adminHash } : null
   const timezone = str('TIMEZONE', { required: true })
   if (timezone) {
     try {
@@ -386,7 +402,8 @@ export function loadConfig(env = process.env) {
       triggerKey: str('PIPELINE_TRIGGER_KEY'),
       logLevel: oneOf('LOG_LEVEL', LOG_LEVELS),
       // Empty: apps/engine/data (gitignored). Holds the run lock and the Mem0 usage file; never content.
-      dataDir: str('ENGINE_DATA_DIR') || null,
+      // Hosted: a folder under DATA_DIR (the only disk Embarko keeps across redeploys).
+      dataDir: str('ENGINE_DATA_DIR') || (hostedDir ? join(hostedDir, 'engine') : null),
       runLockStaleMin: int('RUN_LOCK_STALE_MIN', { min: 1, max: 1440 })
     },
     server: {
@@ -396,7 +413,10 @@ export function loadConfig(env = process.env) {
       // Used by the Phase 6 dashboard dev server (it proxies /api to PORT).
       port: int('DASHBOARD_PORT', { min: 1, max: 65535 }),
       auth: dashboardAuth,
-      password: str('DASHBOARD_PASSWORD', { required: dashboardAuth === true })
+      // admin: the ID + password login (always when hosted); else the single dashboard password (local use).
+      admin: adminLogin,
+      password: hosted || adminLogin ? undefined : str('DASHBOARD_PASSWORD', { required: dashboardAuth === true }),
+      hosted
     },
     // Phase 10: the Experience Designer turns each draft into an interactive guide (it writes short interface
     // text only; the post's own text and code are placed by code). It runs before the Reviewer.
@@ -411,7 +431,7 @@ export function loadConfig(env = process.env) {
     // Phase 11: the publish target, the Markdown export and Docstar (the API key is a secret; empty until known)
     publish: {
       target: oneOf('PUBLISH_TARGET', PUBLISH_TARGETS),
-      exportDir: str('EXPORT_DIR')
+      exportDir: str('EXPORT_DIR') || (hostedDir ? join(hostedDir, 'exports') : undefined)
     },
     docstar: {
       apiUrl: url('DOCSTAR_API_URL')?.replace(/\/+$/, ''),

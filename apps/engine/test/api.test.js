@@ -42,11 +42,15 @@ async function withApi({ env = {}, agents = {}, keepAliveMs } = {}, fn) {
 
 test('GET /api/health needs no auth', async () => {
   await withApi({ env: { DASHBOARD_AUTH: 'true', DASHBOARD_PASSWORD: 'fake-dashboard-pass' } }, async ({ call }) => {
+    // No session: only that the engine is up and how to log in (the version and run state need the login).
     const r = await call('GET', '/api/health')
     assert.equal(r.status, 200)
-    assert.equal(r.json.ok, true)
-    assert.equal(r.json.run_in_progress, false)
-    assert.ok(r.json.version)
+    assert.deepEqual(r.json, { ok: true, login: 'password' })
+    const session = (await call('POST', '/api/login', { password: 'fake-dashboard-pass' })).headers.get('set-cookie').split(';')[0]
+    const full = await call('GET', '/api/health', undefined, { cookie: session })
+    assert.equal(full.json.ok, true)
+    assert.equal(full.json.run_in_progress, false)
+    assert.ok(full.json.version)
   })
 })
 

@@ -177,6 +177,74 @@ to see the current estimate.
 **"Data may be out of date":** a command was run outside the dashboard and changed the data. Click **Refresh
 from Mem0** (about 7 Mem0 requests).
 
+## On Embarko: log in, redeploy, roll back
+
+The engine and dashboard can run on Embarko as the app **m91-engine** (https://m91-engine.embarko.app once it is
+deployed). The details and limits are in [EMBARKO_HOSTING.md](EMBARKO_HOSTING.md). Commands below run in
+`apps/engine`, and none of them shows a secret.
+
+**Log in.** Open the address. Every page asks for the **Admin ID** and **Password** first; only the login page
+is open. After 12 hours, or after **Log out**, you log in again. A wrong ID and a wrong password get the same
+message. After 5 wrong tries from one place in a minute, or 20 wrong tries from anywhere in 10 minutes, logging in
+waits a little.
+
+**Make the admin ID and password (first time, or if you forget the password):**
+
+```bash
+npm run admin:hash
+```
+
+It asks for the password twice (hidden) and prints one line, `ADMIN_PASSWORD_HASH=…`. The password itself is
+never stored. Put that line and `ADMIN_USERNAME=<your ID>` in Embarko's environment settings, then apply:
+
+```bash
+npm run embarko -- apply-env --yes
+```
+
+**Which settings Embarko needs:** `npm run embarko:env` prints the names (never values), in four groups. You type
+the values in Embarko's **App setup** page. Do not set `PORT`, `DATA_DIR`, `APP_NAME` or `APP_VERSION`: Embarko does.
+
+**Redeploy** (after a code change; do it when the header does not say **Run in progress**, because a redeploy
+stops the engine and ends a run that is still going):
+
+```bash
+npm run package:embarko
+npm run deploy:embarko -- --yes
+```
+
+The first command only packages and checks (nothing is uploaded). The second uploads, waits for the build and
+prints the address. The upload never contains `.env`, `data/`, `exports/`, `node_modules` or the Dockerfile; if
+anything secret-looking is found, it stops before uploading. After a deploy, wait for the engine to start (the
+header says **Engine online**), then log in. Every start loads the engine's lists from Mem0 (about 7 Mem0
+retrievals), so avoid redeploying many times in a row.
+
+**Is it up?**
+
+```bash
+npm run embarko -- status
+npm run embarko -- logs
+```
+
+**Roll back** (when a new version is broken and you do not know why yet):
+
+```bash
+npm run embarko -- deployments
+npm run embarko -- rollback --yes
+```
+
+`rollback` puts the previous good version back without rebuilding (add a deployment id from the list to go
+further back; Embarko keeps the last 5). It keeps today's settings and data. Anything added after that version
+(the admin login, if you go back before it) is gone until you redeploy a fixed version. Roll back, then fix and
+redeploy.
+
+**What a restart or redeploy loses.** Only the folder Embarko keeps (`DATA_DIR`) survives, and the engine puts
+its files there: the Mem0 usage counter, the run lock, the exported Markdown files and the refresh marker survive.
+Lost: the logins (you log in again), a run that was in progress, and nothing else. The exported posts are also in
+Mem0. Embarko does not back up `DATA_DIR`.
+
+**One engine at a time.** Both this engine and a local one use the same Mem0 account, and the run lock is a local
+file, so they cannot see each other's runs. Run from one place; if you use the hosted one, stop the local one.
+
 ## Start again from zero
 
 `npm run reset:all -- --dry-run` shows what would be deleted (1 Mem0 request). `npm run reset:all` deletes

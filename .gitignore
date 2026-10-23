@@ -32,3 +32,6 @@ Thumbs.db
 
 # Local preview servers for the Browser pane (machine-specific)
 .claude/launch.json
+
+# The folder uploaded to Embarko (built by npm run package:embarko)
+.embarko-stage/

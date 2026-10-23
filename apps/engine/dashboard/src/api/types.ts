@@ -6,7 +6,8 @@ export type IndexStatus = { loaded_at: string | null; types: string[]; records: 
 /** The Mem0 quota guard's estimate for this month (Phase 9 A5). The Mem0 console has the exact figure. */
 export type Mem0Usage = { month: string; used: number; limit: number; pct: number; level: 'ok' | 'warn' | 'stop'; warn_pct: number; stop_pct: number; resets_on: string; limited?: 'retrievals' | 'adds' | null; adds?: { used: number; limit: number; pct: number; level: 'ok' | 'warn' | 'stop' } }
 
-export type Health = { ok: boolean; version: string; run_in_progress: boolean; index?: IndexStatus; mem0_usage?: Mem0Usage }
+/** `login`: how the engine logs people in (the only thing a caller without a session is told): off, password, or the admin ID + password. */
+export type Health = { ok: boolean; login?: 'off' | 'password' | 'admin'; version: string; run_in_progress: boolean; index?: IndexStatus; mem0_usage?: Mem0Usage }
 
 export type AgentModel = { service?: string; model?: string; delivery?: string; research_delivery?: string }
 

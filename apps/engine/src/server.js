@@ -35,6 +35,7 @@ import { createDocstar } from './publisher/docstar.js'
 import { withMem0Count, mem0Requests } from './util/mem0count.js'
 import { createEngineIndex } from './engineindex.js'
 import { usageStatus, stopMessage } from './util/mem0usage.js'
+import { verifyPassword, sameText } from './util/adminhash.js'
 
 const VERSION = (() => {
   try {
@@ -223,6 +224,9 @@ export async function serveDashboard(req, res, url, dir) {
   return true
 }
 
+// Served without a session while the login is on: the login page, the built script and style files, root icons.
+export const PUBLIC_PAGE_RE = /^\/(login\/?|assets\/.+|[\w.-]+\.(svg|ico|png|webmanifest))$/
+
 const parseCookies = (header = '') => Object.fromEntries(header.split(';').map((c) => c.trim().split('=')).filter(([k, v]) => k && v).map(([k, v]) => [k, decodeURIComponent(v)]))
 
 /**
@@ -240,8 +244,28 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
   manager?.useIndex?.(store)
   const auth = Boolean(config?.dashboard?.auth)
   const password = config?.dashboard?.password ?? ''
+  // The admin ID + password login (always on when hosted); without it, the single dashboard password.
+  const admin = config?.dashboard?.admin ?? null
+  const hosted = Boolean(config?.dashboard?.hosted)
+  const loginMode = !auth ? 'off' : admin ? 'admin' : 'password'
   const sessions = new Map() // token → expires at
+  const MAX_SESSIONS = 50
   const loginTries = new Map() // ip → [timestamps]
+  const failures = [] // timestamps of failed logins from anyone (a cap that spoofed addresses cannot get around)
+  const LOGIN_PER_IP = 5 // per minute
+  const LOGIN_FAILURES_MAX = 20 // per 10 minutes, all addresses together
+  // One password check at a time: each scrypt check uses about 32 MB, and the hosted app has 256 MB.
+  let verifying = Promise.resolve()
+  const verifyOne = (fn) => (verifying = verifying.then(fn, fn))
+  /** The caller's address. Behind Embarko's proxy it is the last X-Forwarded-For entry (the one the proxy added). */
+  const clientIp = (req) => {
+    if (hosted) {
+      const last = String(req.headers['x-forwarded-for'] ?? '').split(',').map((s) => s.trim()).filter(Boolean).pop()
+      if (last) return last
+    }
+    return req.socket.remoteAddress ?? 'unknown'
+  }
+  const cookieTail = (req) => (hosted || req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '')
   const streams = new Set()
 
   const send = (res, status, body, headers = {}) => {
@@ -406,28 +430,46 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
 
     // Health never touches Mem0: the index's age and whether another process changed Mem0 since it loaded.
     if (method === 'GET' && path === '/api/health') {
+      // With the login on, a caller without a session learns only that the engine is up and how to log in.
+      if (auth && !authed(req)) return send(res, 200, { ok: true, login: loginMode })
       const u = config ? usageStatus(config, { now }) : null
-      return send(res, 200, { ok: true, version: VERSION, run_in_progress: isRunning(), ...(store?.isIndex && { index: store.status() }), ...(u && { mem0_usage: { month: u.month, used: u.used, limit: u.limit, pct: u.pct, level: u.level, limited: u.limited, adds: u.adds, warn_pct: u.warn_pct, stop_pct: u.stop_pct, resets_on: u.resets_on, total: u.total } }) })
+      return send(res, 200, { ok: true, ...(auth && { login: loginMode }), version: VERSION, run_in_progress: isRunning(), ...(store?.isIndex && { index: store.status() }), ...(u && { mem0_usage: { month: u.month, used: u.used, limit: u.limit, pct: u.pct, level: u.level, limited: u.limited, adds: u.adds, warn_pct: u.warn_pct, stop_pct: u.stop_pct, resets_on: u.resets_on, total: u.total } }) })
     }
 
     if (path === '/api/login' && method === 'POST') {
       if (!auth) return fail(res, 400, 'auth_off', 'login is not needed: DASHBOARD_AUTH is false')
-      const ip = req.socket.remoteAddress ?? 'unknown'
-      const recent = (loginTries.get(ip) ?? []).filter((t) => now() - t < 60000)
-      if (recent.length >= 5) return fail(res, 429, 'too_many_attempts', 'too many login attempts; wait a minute')
-      recent.push(now())
+      const ip = clientIp(req)
+      const t = now()
+      const tooMany = () => send(res, 429, { error: { code: 'too_many_attempts', message: 'too many login attempts; wait a minute' } }, { 'retry-after': '60' })
+      const recent = (loginTries.get(ip) ?? []).filter((x) => t - x < 60000)
+      while (failures.length && t - failures[0] > 600000) failures.shift()
+      if (recent.length >= LOGIN_PER_IP || failures.length >= LOGIN_FAILURES_MAX) return tooMany()
+      recent.push(t)
       loginTries.set(ip, recent)
+      for (const [k, v] of loginTries) if (v.every((x) => t - x >= 60000)) loginTries.delete(k)
       const body = await readJson(req)
-      if (!keysMatch(body.password, password)) return fail(res, 401, 'bad_password', 'wrong password')
+      let ok
+      if (admin) {
+        // Both are always checked, so a wrong ID takes as long as a wrong password and says the same thing.
+        const given = typeof body.password === 'string' && body.password.length <= 1024 ? body.password : ''
+        const idOk = sameText(body.username, admin.username)
+        const pwOk = await verifyOne(() => verifyPassword(given, admin.passwordHash))
+        ok = idOk && pwOk && given !== ''
+      } else ok = keysMatch(body.password, password)
+      if (!ok) {
+        failures.push(t)
+        return admin ? fail(res, 401, 'bad_credentials', 'wrong ID or password') : fail(res, 401, 'bad_password', 'wrong password')
+      }
       const token = randomBytes(32).toString('hex')
-      sessions.set(token, now() + sessionMs)
-      const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''
-      return send(res, 200, { ok: true }, { 'set-cookie': `m91_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(sessionMs / 1000)}${secure}` })
+      for (const [k, exp] of sessions) if (exp <= t) sessions.delete(k)
+      while (sessions.size >= MAX_SESSIONS) sessions.delete(sessions.keys().next().value)
+      sessions.set(token, t + sessionMs)
+      return send(res, 200, { ok: true }, { 'set-cookie': `m91_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(sessionMs / 1000)}${cookieTail(req)}` })
     }
     if (path === '/api/logout' && method === 'POST') {
       const token = parseCookies(req.headers.cookie).m91_session
       if (token) sessions.delete(token)
-      return send(res, 200, { ok: true }, { 'set-cookie': 'm91_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' })
+      return send(res, 200, { ok: true }, { 'set-cookie': `m91_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${cookieTail(req)}` })
     }
 
     if (!authed(req)) return fail(res, 401, 'unauthorized', 'log in first (POST /api/login)')
@@ -767,8 +809,9 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
   async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost')
     try {
+      if (hosted) res.setHeader('strict-transport-security', 'max-age=31536000; includeSubDomains')
       if (url.pathname.startsWith('/api/')) return await api(req, res, url)
-      if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true, running: isRunning() })
+      if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, auth ? { ok: true } : { ok: true, running: isRunning() })
       if (url.pathname === '/run') {
         if (req.method !== 'POST') return send(res, 405, { error: 'method not allowed' })
         if (!keysMatch(req.headers['x-trigger-key'], triggerKey)) return send(res, 401, { error: 'unauthorized' })
@@ -785,6 +828,13 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         return send(res, 202, { accepted: true })
       }
       if (url.pathname.startsWith('/preview/') && (await servePreview(req, res, url))) return
+      // With the login on, every page needs the session. Only the login page and the dashboard's script and style
+      // files (no data in them) are served without it; anything else goes to /login.
+      if (auth && !authed(req) && !PUBLIC_PAGE_RE.test(url.pathname)) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return fail(res, 401, 'unauthorized', 'log in first')
+        res.writeHead(302, { location: `/login?next=${encodeURIComponent(url.pathname + url.search)}`, 'cache-control': 'no-store' })
+        return res.end()
+      }
       if (dashboardDir && (await serveDashboard(req, res, url, dashboardDir))) return
       return send(res, 404, { error: 'not found' })
     } catch (error) {
@@ -842,7 +892,7 @@ async function main() {
   }
   const port = config.server?.port ?? (Number(process.env.PORT) || 8080)
   // Without dashboard auth the API is for this machine only.
-  const host = config.dashboard?.auth ? '0.0.0.0' : '127.0.0.1'
+  const host = config.dashboard?.auth || config.dashboard?.hosted ? '0.0.0.0' : '127.0.0.1'
   server.listen(port, host, () => log.info('server listening', { host, port, dryRun: config.runtime.dryRun, dashboardAuth: Boolean(config.dashboard?.auth) }))
 }
 

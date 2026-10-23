@@ -253,3 +253,10 @@ itself a docs page). The agents still **read** the docs for facts (Scout facts, 
   outside source. Its ALLOWED URLS follow the Writer's.
 - **Re-export:** `npm run export -- --all-approved` exports every approved post again under these rules (record
   replaced, file rewritten). It makes 0 AI calls and a few Mem0 requests per post.
+
+## Hosting on Embarko (admin login)
+
+The engine and dashboard can run on Embarko as `m91-engine`, behind an admin ID + password login that is forced
+on there. See [EMBARKO_HOSTING.md](EMBARKO_HOSTING.md) for the limits found in Embarko's docs and the design, and the
+runbook for how to log in, redeploy and roll back. New settings: `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH`.
+

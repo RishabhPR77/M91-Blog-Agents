@@ -55,7 +55,12 @@
     "reset:all": "node --env-file=../../.env src/cli.js reset",
     "roadmap": "node --env-file=../../.env src/cli.js roadmap",
     "export": "node --env-file=../../.env src/cli.js export",
-    "timely": "node --env-file=../../.env src/cli.js timely"
+    "timely": "node --env-file=../../.env src/cli.js timely",
+    "admin:hash": "node scripts/admin-hash.mjs",
+    "package:embarko": "node scripts/package-embarko.mjs",
+    "deploy:embarko": "node --env-file=../../.env scripts/deploy-embarko.mjs",
+    "embarko:env": "node scripts/embarko-env.mjs",
+    "embarko": "node --env-file=../../.env scripts/embarko-api.mjs"
   },
   "dependencies": {
     "@m91/content": "0.1.0",
