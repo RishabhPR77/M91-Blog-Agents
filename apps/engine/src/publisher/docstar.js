@@ -40,21 +40,32 @@ async function request(ctx, method, path, body) {
 
 const org = (ctx) => `/orgs/${encodeURIComponent(ctx.orgId)}`
 
-/** The collection's invisible top page: new posts are created under it. */
+/**
+ * The collection's invisible top page: new posts are created under it. Only the list of collections carries it
+ * ("pages.rootParentId"); the single-collection answer does not (seen 2026-10-23).
+ */
 export async function rootParentId(ctx) {
-  const c = await request(ctx, 'GET', `${org(ctx)}/collections/${encodeURIComponent(ctx.collectionId)}`)
-  const col = Array.isArray(c) ? c[0] : c
-  const id = col?.['pages.rootParentId'] ?? col?.pages?.rootParentId ?? col?.rootParentId
-  if (!id) throw new DocstarError(`collection ${ctx.collectionId} has no rootParentId (is DOCSTAR_COLLECTION_ID right?)`)
+  const list = await request(ctx, 'GET', `${org(ctx)}/collections`)
+  const items = Array.isArray(list) ? list : list?.collections ?? list?.data ?? []
+  const col = items.find((c) => c?.id === ctx.collectionId)
+  if (!col) throw new DocstarError(`collection ${ctx.collectionId} is not in this workspace (is DOCSTAR_COLLECTION_ID right?)`)
+  const id = col['pages.rootParentId'] ?? col.pages?.rootParentId ?? col.rootParentId
+  if (!id) throw new DocstarError(`collection ${ctx.collectionId} has no rootParentId`)
   return id
 }
 
 /**
- * Writes the body. The realtime editor endpoint first; when it reports that the page has no document yet (Docstar
- * answers that with HTTP 200 and no success flag), the page's Markdown "contents" instead.
+ * Writes the body. The realtime editor endpoint first; when the page has no editor document yet, the page's Markdown
+ * "contents" instead. Docstar's docs say that case answers HTTP 200 without a success flag; a new page actually
+ * answers HTTP 404 "Document not found in store" (seen 2026-10-23). Both fall back.
  */
 async function writeBody(ctx, pageId, markdown) {
-  const r = await request(ctx, 'POST', `${org(ctx)}/pages/${pageId}/ydoc`, { content: markdown })
+  let r = null
+  try {
+    r = await request(ctx, 'POST', `${org(ctx)}/pages/${pageId}/ydoc`, { content: markdown })
+  } catch (error) {
+    if (error?.httpStatus !== 404) throw error
+  }
   if (r?.success === true) return 'ydoc'
   await request(ctx, 'PUT', `${org(ctx)}/pages/${pageId}`, { contents: markdown })
   return 'contents'

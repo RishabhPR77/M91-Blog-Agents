@@ -13,7 +13,7 @@ const cfg = fakeConfig({ DOCSTAR_API_URL: 'https://api.docstar.example/', DOCSTA
 function fakeDocstar(over = {}) {
   const calls = []
   const answers = {
-    'GET /orgs/42/collections/COL000000001': { status: 200, body: [{ id: 'COL000000001', name: 'Test Blog', 'pages.rootParentId': 'ROOT00000001' }] },
+    'GET /orgs/42/collections': { status: 200, body: [{ id: 'OTHER0000001', name: 'Other', 'pages.rootParentId': 'ROOTOTHER001' }, { id: 'COL000000001', name: 'Test Blog', 'pages.rootParentId': 'ROOT00000001' }] },
     'POST /orgs/42/pages/ROOT00000001': { status: 200, body: { page: { id: 'PAGE00000001', state: 1 }, publicUrl: null } },
     'POST /orgs/42/pages/PAGE00000001/ydoc': { status: 200, body: { success: true } },
     'PUT /orgs/42/pages/PAGE00000001': { status: 200, body: { id: 'PAGE00000001', state: 1 } },
@@ -53,7 +53,7 @@ test('create: collection root, page as draft, body, SEO, publish; the page id an
   assert.equal(r.status, 'published')
   assert.match(r.summary, /^Docstar page created and published: https:\/\/m91\.docstar\.example\//)
   assert.deepEqual(calls.map((c) => c.key), [
-    'GET /orgs/42/collections/COL000000001',
+    'GET /orgs/42/collections',
     'POST /orgs/42/pages/ROOT00000001',
     'POST /orgs/42/pages/PAGE00000001/ydoc',
     'PATCH /orgs/42/pages/PAGE00000001/meta',
@@ -99,6 +99,13 @@ test('body: when the editor document does not exist yet, the Markdown goes into 
   const r = await DOCSTAR_TRANSPORT.createPage({ apiUrl: 'https://api.docstar.example', orgId: '42', collectionId: 'COL000000001', headers: { Authorization: `Bearer ${KEY}` }, fetch }, { title: 'T', slug: 'tee', markdown: 'Body', seo_title: 'T', draft: true })
   assert.deepEqual(r.steps, ['create', 'contents', 'meta'])
   assert.deepEqual(calls.find((c) => c.key === 'PUT /orgs/42/pages/PAGE00000001').body, { contents: 'Body' })
+  // What Docstar really answers for a new page: HTTP 404 "Document not found in store". Same fallback.
+  const real = fakeDocstar({ 'POST /orgs/42/pages/PAGE00000001/ydoc': { status: 404, body: { message: 'Document not found in store' } } })
+  const r2 = await DOCSTAR_TRANSPORT.createPage({ apiUrl: 'https://api.docstar.example', orgId: '42', collectionId: 'COL000000001', headers: { Authorization: `Bearer ${KEY}` }, fetch: real.fetch }, { title: 'T', slug: 'tee', markdown: 'Body', seo_title: 'T', draft: true })
+  assert.deepEqual(r2.steps, ['create', 'contents', 'meta'])
+  // Any other error still stops the publish.
+  const other = fakeDocstar({ 'POST /orgs/42/pages/PAGE00000001/ydoc': { status: 500, body: { message: 'boom' } } })
+  await assert.rejects(DOCSTAR_TRANSPORT.createPage({ apiUrl: 'https://api.docstar.example', orgId: '42', collectionId: 'COL000000001', headers: {}, fetch: other.fetch }, { title: 'T', slug: 'tee', markdown: 'Body', draft: true }), /HTTP 500 \(boom\)/)
 })
 
 test('unpublish: back to draft (state 1), nothing deleted; no page id → no_page', async () => {
@@ -123,10 +130,10 @@ test('errors: a failed publish after the page was made keeps the page id (next t
   assert.equal(saved.payload.docstar_page_id, 'PAGE00000001')
   assert.equal(saved.status, 'final')
   // A wrong collection id: a clear message, nothing created.
-  const bad = fakeDocstar({ 'GET /orgs/42/collections/COL000000001': { status: 200, body: [{ id: 'x' }] } })
+  const bad = fakeDocstar({ 'GET /orgs/42/collections': { status: 200, body: [{ id: 'x', 'pages.rootParentId': 'R' }] } })
   const b = await createDocstar({ config: cfg, fetch: bad.fetch }).createPage({ title: 'T', slug: 'tee', markdown: 'x' })
   assert.equal(b.status, 'error')
-  assert.match(b.error, /has no rootParentId \(is DOCSTAR_COLLECTION_ID right\?\)/)
+  assert.match(b.error, /is not in this workspace \(is DOCSTAR_COLLECTION_ID right\?\)/)
   assert.equal(bad.calls.length, 1)
 })
 
