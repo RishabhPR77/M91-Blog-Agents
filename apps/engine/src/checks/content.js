@@ -205,13 +205,17 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
   const postGrade = fleschKincaidGrade(p.prose)
   const introText = [...(p.tldr ?? []), p.firstParagraph].join('. ')
   const introGrade = fleschKincaidGrade(introText)
-  // Phase 12: the post's grade is hard at READING_GRADE_POST_MAX (READING_GRADE_HARD_MARGIN 0), the intro's at
-  // READING_GRADE_INTRO_MAX; a sentence over SENTENCE_HARD_MAX_WORDS and a paragraph over PARAGRAPH_MAX_SENTENCES
-  // are hard too (the Writer's repair call fixes them).
-  const hardGrade = c.readingGradePostMax + (c.readingGradeHardMargin ?? 2)
+  // The targets (READING_GRADE_POST_MAX 7, READING_GRADE_INTRO_MAX 6) are soft: the Reviewer sees them and scores
+  // simplicity by them. The hard limits are the targets plus READING_GRADE_HARD_MARGIN (1): post 8, intro 7. A sentence
+  // over SENTENCE_HARD_MAX_WORDS and a paragraph over PARAGRAPH_MAX_SENTENCES are hard too (the Writer's repair call
+  // fixes them).
+  const margin = c.readingGradeHardMargin ?? 1
+  const hardGrade = c.readingGradePostMax + margin
+  const hardIntro = c.readingGradeIntroMax + margin
   R('reading_post_hard', postGrade !== null && postGrade <= hardGrade, 'hard', postGrade, `hard limit grade ${hardGrade}`)
   R('reading_post', postGrade !== null && postGrade <= c.readingGradePostMax, 'soft', postGrade, `target grade ${c.readingGradePostMax}`)
-  R('reading_intro', introGrade !== null && introGrade <= c.readingGradeIntroMax, c.strictIntro === false ? 'soft' : 'hard', introGrade, `TL;DR + first paragraph, limit grade ${c.readingGradeIntroMax}`)
+  R('reading_intro', introGrade !== null && introGrade <= hardIntro, c.strictIntro === false ? 'soft' : 'hard', introGrade, `TL;DR + first paragraph, hard limit grade ${hardIntro}`)
+  R('reading_intro_target', introGrade !== null && introGrade <= c.readingGradeIntroMax, 'soft', introGrade, `TL;DR + first paragraph, target grade ${c.readingGradeIntroMax}`)
   const softMax = c.sentenceMaxWords ?? 20
   const sentenceHard = c.sentenceHardMaxWords ?? 25
   const lens = sentences(p.prose).map((x) => ({ text: x, n: words(x).length }))

@@ -16,6 +16,7 @@ import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSource
 import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets, SNIPPET_LIST_MAX_LINES } from './snippets.js'
 import { needsStartHere, starterPost, withStartHere } from '../timely/starthere.js'
 import { stripDocsLinks, isDocsFix } from '../util/m91links.js'
+import { linkNewsSource } from './newslink.js'
 import { draftsOf, nextDraftVersion, saveDraft, draftVersion, isEarlierDraft } from './save.js'
 import { saveRunLog } from '../util/runlog.js'
 
@@ -85,6 +86,10 @@ export function autoFixDraft(draft, { config, brief }) {
       fixes.push(`rewrote http://${host} links to https`)
     }
   }
+  // A story or news post links its outside source where it first names it (the Reviewer fails an unlinked news claim).
+  const news = linkNewsSource(md, brief)
+  md = news.markdown
+  fixes.push(...news.fixes)
   if (!/^#\s+\S/m.test(md) && draft.title) {
     md = `# ${draft.title}\n\n${md}`
     fixes.push('added the missing H1 title')

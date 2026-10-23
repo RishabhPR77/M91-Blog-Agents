@@ -17,7 +17,7 @@ ROADMAP_ENABLED=true
 RAPID_RESPONSE_ENABLED=true
 READING_GRADE_POST_MAX=7
 READING_GRADE_INTRO_MAX=6
-READING_GRADE_HARD_MARGIN=0
+READING_GRADE_HARD_MARGIN=1
 TARGET_WORDS_MIN=500
 TARGET_WORDS_MAX=1200
 SENTENCE_MAX_WORDS=20
@@ -253,6 +253,33 @@ itself a docs page). The agents still **read** the docs for facts (Scout facts, 
   outside source. Its ALLOWED URLS follow the Writer's.
 - **Re-export:** `npm run export -- --all-approved` exports every approved post again under these rules (record
   replaced, file rewritten). It makes 0 AI calls and a few Mem0 requests per post.
+
+## Why the Reviewer failed every post: four fixes
+
+The first Phase 12 reviews (three briefs, eight versions) all failed the code gate `checks_hard_passed`. Two
+versions scored 80 and 82.5 and failed only on a reading grade. Four fixes:
+
+1. **Reading limits: hard 8/7, soft 7/6.** `READING_GRADE_HARD_MARGIN` is now 1 (it was 0).
+   - `READING_GRADE_POST_MAX=7` and `READING_GRADE_INTRO_MAX=6` are targets. Missing them fails the soft checks
+     `reading_post` and `reading_intro_target`; the Reviewer still scores simplicity by them.
+   - The hard checks `reading_post_hard` and `reading_intro` fail only above target + margin: post 8, intro 7.
+2. **Link checker: one retry, and a timeout is "blocked", not "dead".**
+   - A request that fails (a timeout, a reset) is tried once more after a short wait. If it fails again, the
+     link is "blocked" and kept.
+   - Only 404/410, a host that does not exist (DNS) and a refused connection are "dead". Before this,
+     https://m91.msg91.com/ was failed as dead after one slow answer.
+3. **The news source is linked by code** (`src/writer/newslink.js`, part of the Writer's automatic fixes). In a
+   story or news post, the outlet's name at its first mention ("reported by <outlet>" first) becomes a link to
+   the brief's source URL. Headings, code and existing links are skipped. The wording does not change, so the
+   attribution checks still pass.
+4. **Writer prompt lines:**
+   - link the outlet at its first mention; every outside claim carries its link;
+   - examples stay generic: no invented names, IDs, timestamps, companies or payload values (no "Aryan", no
+     "deploy-4821"), and an M91 field or behaviour only when the brief's M91 facts state it;
+   - no absolute claims ("cannot", "always", "guarantees", "impossible"): say what a control does and what it
+     does not cover.
+
+0 extra AI calls and 0 extra Mem0 requests. A few more link-check requests when a site is slow.
 
 ## Hosting on Embarko (admin login)
 

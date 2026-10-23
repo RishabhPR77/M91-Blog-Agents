@@ -248,5 +248,5 @@ test('Phase 12 sentence and paragraph limits: the details name the sentences; th
   assert.match(get(loose, 'sentence_length').detail, /of 21–40 words/)
   const p = run(GOOD.replace('Some steps are risky, like sending money.', 'Some steps are risky. Like sending money. Or deleting data.'), { cfg: fakeConfig({ M91_CTA_URL: CTA, TARGET_WORDS_MIN: '180', TARGET_WORDS_MAX: '500', PARAGRAPH_MAX_SENTENCES: '5' }) })
   assert.equal(get(p, 'paragraph_length').passed, true)
-  assert.equal(get(run(GOOD), 'reading_post_hard').detail, 'hard limit grade 7', 'READING_GRADE_POST_MAX=7, margin 0: the target is the hard limit')
+  assert.equal(get(run(GOOD), 'reading_post_hard').detail, 'hard limit grade 8', 'READING_GRADE_POST_MAX=7 plus margin 1: the hard limit is 8')
 })

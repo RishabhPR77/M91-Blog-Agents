@@ -172,7 +172,7 @@ test('Phase 4 Writer keys: defaults, fallback pairing, validation', () => {
   assert.equal(c.writer.tutorialSourceMaxChars, 40000)
   assert.equal(c.writer.postDrafts, false)
   assert.equal(c.writer.fallbackService, undefined)
-  assert.equal(c.content.readingGradeHardMargin, 0)
+  assert.equal(c.content.readingGradeHardMargin, 1)
   assert.deepEqual([c.content.sentenceMaxWords, c.content.sentenceHardMaxWords, c.content.paragraphMaxSentences], [20, 25, 3])
   assert.equal(c.content.wordsHardMarginPct, 20)
   assert.equal(c.notify.chunkChars, 2800)

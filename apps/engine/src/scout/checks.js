@@ -85,26 +85,35 @@ export function limiter(max) {
 
 /**
  * URL checker with a per-run cache: each unique URL is requested once, at most 8 at a time.
- * HEAD first, GET when HEAD does not answer 2xx/3xx. 404/410, DNS failure and timeouts are "dead".
+ * HEAD first, GET when HEAD does not answer 2xx/3xx. 404/410 and a host that does not exist (DNS) or refuses the
+ * connection are "dead". A request that fails any other way (a timeout, a reset) is tried once more after a short
+ * wait, and if it fails again it is "blocked" (kept): a slow or flaky moment proves nothing about the link.
  */
-export function createUrlChecker({ fetch = globalThis.fetch, timeoutMs = 10000, concurrency = 8 } = {}) {
+export const DEAD_NETWORK_CODES = Object.freeze(['ENOTFOUND', 'ECONNREFUSED'])
+
+export function createUrlChecker({ fetch = globalThis.fetch, timeoutMs = 10000, concurrency = 8, retryDelayMs = 400, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
   const cache = new Map()
   const limit = limiter(concurrency)
   const stats = { requests: 0 }
 
   async function request(url, method) {
-    stats.requests++
-    try {
-      const res = await fetch(url, {
-        method,
-        redirect: 'follow',
-        signal: AbortSignal.timeout(timeoutMs),
-        headers: { 'user-agent': 'Mozilla/5.0 (compatible; M91BlogEngine/1.0; source link check)', accept: '*/*' }
-      })
-      res.body?.cancel?.().catch?.(() => {})
-      return classifyStatus(res.status)
-    } catch {
-      return 'dead' // DNS failure, refused connection, timeout
+    for (let attempt = 1; ; attempt++) {
+      stats.requests++
+      try {
+        const res = await fetch(url, {
+          method,
+          redirect: 'follow',
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: { 'user-agent': 'Mozilla/5.0 (compatible; M91BlogEngine/1.0; source link check)', accept: '*/*' }
+        })
+        res.body?.cancel?.().catch?.(() => {})
+        return classifyStatus(res.status)
+      } catch (error) {
+        const code = error?.cause?.code ?? error?.code
+        if (DEAD_NETWORK_CODES.includes(code)) return 'dead' // the host does not exist or refuses connections
+        if (attempt >= 2) return 'blocked' // a timeout or reset twice in a row: unknown, not dead
+        await sleep(retryDelayMs)
+      }
     }
   }
 

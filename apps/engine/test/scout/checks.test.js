@@ -42,7 +42,7 @@ function fakeFetch(byUrl) {
   return fn
 }
 
-test('URL check: ok, blocked kept, 404/timeout dead, search pages invalid, HEAD→GET fallback, cache', async () => {
+test('URL check: ok, blocked kept, 404 dead, a timeout is blocked (not dead), search pages invalid, HEAD→GET fallback, cache', async () => {
   const fetch = fakeFetch({
     'https://a.com/ok': 200,
     'https://a.com/redirect': 301,
@@ -53,14 +53,14 @@ test('URL check: ok, blocked kept, 404/timeout dead, search pages invalid, HEAD�
     'https://a.com/timeout': new Error('The operation was aborted due to timeout'),
     'https://a.com/nohead': { HEAD: 405, GET: 200 }
   })
-  const c = createUrlChecker({ fetch, timeoutMs: 50 })
+  const c = createUrlChecker({ fetch, timeoutMs: 50, retryDelayMs: 0 })
   assert.equal(await c.check('https://a.com/ok'), 'ok')
   assert.equal(await c.check('https://a.com/redirect'), 'ok')
   assert.equal(await c.check('https://a.com/forbidden'), 'blocked')
   assert.equal(await c.check('https://a.com/limited'), 'blocked')
   assert.equal(await c.check('https://a.com/gone'), 'dead')
   assert.equal(await c.check('https://a.com/gone410'), 'dead')
-  assert.equal(await c.check('https://a.com/timeout'), 'dead')
+  assert.equal(await c.check('https://a.com/timeout'), 'blocked')
   assert.equal(await c.check('https://a.com/nohead'), 'ok')
   assert.equal(await c.check('https://www.google.com/search?q=x'), 'invalid')
   assert.equal(await c.check('ftp://a.com/x'), 'invalid')
@@ -118,4 +118,26 @@ test('dates: expiry, rapid-response window, unknown and future dates', () => {
   assert.equal(daysAgo('2026-02-30', '2026-10-17'), null)
   assert.equal(freshnessFromDates(['unknown', '2026-10-12'], '2026-10-17'), 'this_week')
   assert.equal(freshnessFromDates(['2026-09-01'], '2026-10-17'), 'ongoing')
+})
+
+test('URL check: a failed request is tried once more; a second failure is blocked; DNS and refused connections are dead', async () => {
+  const calls = []
+  const flaky = async (url, init) => {
+    calls.push(`${init.method} ${url}`)
+    if (url.endsWith('/flaky') && calls.filter((c) => c.endsWith('/flaky')).length === 1) throw Object.assign(new Error('timeout'), { name: 'TimeoutError' })
+    if (url.endsWith('/nodns')) throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } })
+    if (url.endsWith('/refused')) throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } })
+    if (url.endsWith('/reset')) throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } })
+    return { status: 200 }
+  }
+  const waits = []
+  const c = createUrlChecker({ fetch: flaky, retryDelayMs: 7, sleep: async (ms) => { waits.push(ms) } })
+  assert.equal(await c.check('https://a.com/flaky'), 'ok', 'the second try answered')
+  assert.deepEqual(calls.filter((x) => x.endsWith('/flaky')), ['HEAD https://a.com/flaky', 'HEAD https://a.com/flaky'], 'one retry, then it was fine')
+  assert.deepEqual(waits, [7])
+  assert.equal(await c.check('https://a.com/nodns'), 'dead')
+  assert.equal(await c.check('https://a.com/refused'), 'dead')
+  assert.equal(calls.filter((x) => x.endsWith('/nodns')).length, 2, 'HEAD then GET, no retry for a host that does not exist')
+  assert.equal(await c.check('https://a.com/reset'), 'blocked')
+  assert.equal(calls.filter((x) => x.endsWith('/reset')).length, 4, 'HEAD twice, then GET twice')
 })
