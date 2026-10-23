@@ -204,6 +204,17 @@ npm run embarko -- apply-env --yes
 **Which settings Embarko needs:** `npm run embarko:env` prints the names (never values), in four groups. You type
 the values in Embarko's **App setup** page. Do not set `PORT`, `DATA_DIR`, `APP_NAME` or `APP_VERSION`: Embarko does.
 
+**Copy the settings from `.env` instead of typing them:**
+
+```bash
+npm run embarko:env-sync
+npm run embarko:env-sync -- --yes
+```
+
+The first only lists the setting names it would send. The second sends them to Embarko and applies them. It reads
+`.env` itself, prints names only (never a value), and leaves out `PORT`, `DATA_DIR`, `APP_NAME`, the local-only keys
+and a `PUBLISH_TARGET` that is not `none`. Re-run it after you change a value in `.env`.
+
 **Redeploy** (after a code change; do it when the header does not say **Run in progress**, because a redeploy
 stops the engine and ends a run that is still going):
 

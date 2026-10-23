@@ -60,6 +60,7 @@
     "package:embarko": "node scripts/package-embarko.mjs",
     "deploy:embarko": "node --env-file=../../.env scripts/deploy-embarko.mjs",
     "embarko:env": "node scripts/embarko-env.mjs",
+    "embarko:env-sync": "node --env-file=../../.env scripts/embarko-env-sync.mjs",
     "embarko": "node --env-file=../../.env scripts/embarko-api.mjs"
   },
   "dependencies": {

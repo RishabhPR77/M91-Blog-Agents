@@ -250,3 +250,58 @@ test('embarko: errors say what Embarko said; a missing token and an unknown comm
   await assert.rejects(waitTerminal({ token: TOKEN, fetchImpl: fakeEmbarko({ 'GET /s': { body: { status: 'starting' } } }).fetchImpl, statusUrl: '/s', sleep: noSleep, tries: 2 }), /still not finished/)
   assert.equal((await embarkoCall({ token: TOKEN, fetchImpl: f.fetchImpl, path: '/apps/m91-engine/status' })).status, 404)
 })
+
+// ---------- copying the settings from .env to Embarko (names printed, values never) ----------
+
+import { planSync, sync } from '../scripts/embarko-env-sync.mjs'
+
+const SECRET_VALUE = 'super-secret-value-0001'
+const syncEnv = {
+  MEM0_API_KEY: SECRET_VALUE, VIASOCKET_ORG_ID: 'org-1', VIASOCKET_PROJECT_ID: 'proj-1', VIASOCKET_EMBED_SECRET: 'embed-secret-0002', PIPELINE_TRIGGER_KEY: 'trigger-key-0123456789',
+  ADMIN_USERNAME: 'admin', ADMIN_PASSWORD_HASH: 'scrypt:32768:8:3:AAAAAAAAAAAAAAAAAAAAAA:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+  M91_CTA_URL: 'https://m91.msg91.com/signup', MEM0_AGENT_ID: 'm91-blog', MEM0_ORG_ID: '   ',
+  // never sent:
+  PORT: '8080', DATA_DIR: '/x', APP_NAME: 'x', DASHBOARD_AUTH: 'true', DASHBOARD_PASSWORD: 'local-only-pass', EMBARKO_DEPLOY_TOKEN: TOKEN, ENGINE_DATA_DIR: '/local', EXPORT_DIR: '/local/e',
+  PUBLISH_TARGET: 'embarko', PATH: '/usr/bin', HOME: '/home/x'
+}
+
+test('env sync plan: only the listed settings that have a value; local-only and Embarko-set keys and OS variables stay out', () => {
+  const plan = planSync(syncEnv)
+  assert.deepEqual(Object.keys(plan.send).sort(), ['ADMIN_PASSWORD_HASH', 'ADMIN_USERNAME', 'M91_CTA_URL', 'MEM0_AGENT_ID', 'MEM0_API_KEY', 'PIPELINE_TRIGGER_KEY', 'VIASOCKET_EMBED_SECRET', 'VIASOCKET_ORG_ID', 'VIASOCKET_PROJECT_ID'])
+  for (const never of ['PORT', 'DATA_DIR', 'APP_NAME', 'DASHBOARD_AUTH', 'DASHBOARD_PASSWORD', 'EMBARKO_DEPLOY_TOKEN', 'ENGINE_DATA_DIR', 'EXPORT_DIR', 'PATH', 'HOME', 'MEM0_ORG_ID']) assert.ok(!(never in plan.send), never)
+  assert.deepEqual(plan.skipped, ['PUBLISH_TARGET (not "none": blog publishing stays off on Embarko)'])
+  assert.deepEqual(plan.missingRequired.sort(), ['M91_ALERT_WEBHOOK_URL', 'SLACK_POST_WEBHOOK_URL', 'WEBHOOK_SHARED_KEY'])
+  assert.equal(planSync({ ...syncEnv, PUBLISH_TARGET: 'none' }).send.PUBLISH_TARGET, 'none')
+})
+
+test('env sync: nothing is sent without --yes; with it the values go to Embarko, and no printed line holds a value', async () => {
+  const f = fakeEmbarko({ 'PUT /api/apps/m91-engine/env-vars': { body: { applied: true } } })
+  const dry = await sync({ env: syncEnv, token: TOKEN, fetchImpl: f.fetchImpl })
+  assert.equal(f.calls.length, 0)
+  assert.match(dry[0], /^Would send 9 settings to m91-engine: ADMIN_PASSWORD_HASH ADMIN_USERNAME /)
+  assert.match(dry.at(-1), /Nothing was sent: add --yes/)
+  const lines = await sync({ env: syncEnv, token: TOKEN, yes: true, fetchImpl: f.fetchImpl })
+  assert.equal(f.calls.length, 1)
+  const put = f.calls[0]
+  assert.equal(put.headers.authorization, `Bearer ${TOKEN}`)
+  assert.equal(put.body.apply, true)
+  assert.equal(put.body.vars.find((v) => v.key === 'MEM0_API_KEY').value, SECRET_VALUE, 'the value does reach Embarko')
+  assert.deepEqual(put.body.vars.map((v) => v.key), [...put.body.vars.map((v) => v.key)].sort())
+  const printed = [...dry, ...lines].join('\n')
+  for (const v of Object.values(syncEnv).filter((x) => x.trim().length >= 6)) assert.ok(!printed.includes(v) || /^(8080|true)$/.test(v), `a value was printed: ${v.slice(0, 4)}…`)
+  assert.ok(!printed.includes(SECRET_VALUE) && !printed.includes(TOKEN))
+  assert.match(lines.join('\n'), /Saved 9 settings and applied them\./)
+  assert.match(lines.join('\n'), /Not in .env.*M91_ALERT_WEBHOOK_URL/)
+})
+
+test('env sync: waits for the app when Embarko answers with a status address; refuses without a token; reports a refusal', async () => {
+  let polls = 0
+  const f = fakeEmbarko({
+    'PUT /api/apps/m91-engine/env-vars': { status: 202, body: { statusUrl: '/apps/m91-engine/status' } },
+    'GET /apps/m91-engine/status': () => ({ body: ++polls < 2 ? { status: 'starting' } : { status: 'crashed', terminal: true, error: 'exit code 2' } })
+  })
+  assert.match((await sync({ env: syncEnv, token: TOKEN, yes: true, fetchImpl: f.fetchImpl, sleep: noSleep })).join('\n'), /App: crashed \(exit code 2\)/)
+  await assert.rejects(sync({ env: syncEnv, yes: true, fetchImpl: f.fetchImpl }), /EMBARKO_DEPLOY_TOKEN is not set/)
+  const refuse = fakeEmbarko({ 'PUT /api/apps/m91-engine/env-vars': { status: 422, body: { code: 'invalid_env_key' } } })
+  await assert.rejects(sync({ env: syncEnv, token: TOKEN, yes: true, fetchImpl: refuse.fetchImpl }), /Embarko refused the settings: 422 invalid_env_key/)
+})

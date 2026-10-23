@@ -57,6 +57,7 @@ publishing of the blog stays off (`PUBLISH_TARGET=none`); this is only where the
 | `npm run embarko:env` | The environment setting names to set in Embarko. |
 | `npm run package:embarko` | Builds and scans the upload folder (`--prebuilt` for a built dashboard). Uploads nothing. |
 | `npm run deploy:embarko -- --yes` | Packages, then uploads with the embarko-deploy skill's `deploy.sh` as `m91-engine`. |
+| `npm run embarko:env-sync [-- --yes]` | Sends the settings from `.env` to Embarko (names printed, never values) and applies them. |
 | `npm run embarko -- status | logs | deployments | env-keys` | Looks at the deployed app. |
 | `npm run embarko -- apply-env --yes` / `rollback --yes [<id>]` | Applies saved settings / rolls back. |
 
