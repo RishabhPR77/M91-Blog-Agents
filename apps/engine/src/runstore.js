@@ -8,6 +8,8 @@
 // - newBrief(briefId): every record of that brief is made in this run, so lists scoped to it need no read.
 // - seed (Phase 9 A4): the engine's index. Lists are taken from it instead of Mem0 while it is up to date.
 // - Searches and lessons pass straight through.
+// - Over the work store (workstore.js): newBrief also claims the brief (its work stays local), promoteBrief copies
+//   the approved post to Mem0 and swaps the held records, saveRunSummary passes through.
 import { recordMatches } from './store.js'
 
 const keyOf = (f) => JSON.stringify([f.type ?? null, f.brief_id ?? null, f.status ?? null])
@@ -80,7 +82,25 @@ export function createRunStore(base, { seed = null } = {}) {
     get dryRun() { return base.dryRun },
     base,
     /** Every record of this brief is made in this run (a new pipeline): its lists need no Mem0 read. */
-    newBrief(briefId) { if (briefId) newBriefs.add(briefId) },
+    newBrief(briefId) {
+      if (!briefId) return
+      newBriefs.add(briefId)
+      base.claimBrief?.(briefId)
+    },
+    /** Approval over the work store: the post's records move to Mem0 (null when there is nothing to copy). */
+    async promoteBrief(briefId) {
+      const r = await base.promoteBrief?.(briefId)
+      if (!r) return null
+      for (const id of r.deleted) forget(id)
+      for (const rec of r.created) {
+        if (rec?.id && !rec.dryRun) {
+          created.push(rec)
+          remember(rec)
+        }
+      }
+      return r
+    },
+    saveRunSummary: base.saveRunSummary ? (run) => base.saveRunSummary(run) : undefined,
     getRecords,
     async getOne(type, briefId, version) {
       const records = await getRecords({ type, brief_id: briefId, ...(version !== undefined && { version }) })

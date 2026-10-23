@@ -210,6 +210,16 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
     warnings.push(`Markdown export failed (the approval stands; run npm run export -- --brief-id=${briefId} --save): ${error.message}`)
   }
 
+  // Work store: the finished post (final brief, approved draft, its review and guide) is copied to Mem0 and the
+  // brief's local work is deleted. A failure is a warning: the post stays approved in the local file.
+  if (store.promoteBrief) {
+    try {
+      await store.promoteBrief(briefId)
+    } catch (error) {
+      warnings.push(`approved post not copied to Mem0 (it stays approved in the local work file): ${error.message}`)
+    }
+  }
+
   // Phase 12: the knowledge map gets this post (what it taught), so later posts link to it instead of re-explaining.
   if (config.roadmap?.enabled) {
     try {

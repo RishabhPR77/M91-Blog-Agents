@@ -343,6 +343,52 @@ A page to see what Mem0 holds, judge whether each record is still useful, and de
 - **Costs:** every list and filter 0 Mem0 requests; Load all ≈ records / 100; each delete 1. List views never read
   records one by one.
 
+## The agents hand off in process; Mem0 keeps finished posts and context (`WORK_STORE=local`)
+
+The agents (Scout → Strategist → Writer → Experience Designer → Reviewer) already passed their output to the next one
+inside the run; every step also wrote it to Mem0. Now a run's work in progress stays in a local file, and Mem0 holds
+only what has to outlive the run.
+
+- **Local** (`work.json` in the engine's data folder, ids start with `w-`): the briefs, drafts, reviews, guides and
+  source packs of a post this engine started (the full run "claims" its new brief before the first step), and every
+  run's full record (steps, timeline). Code: `src/workstore.js`, under `createStore` in `src/store.js`.
+- **Mem0:** M91 facts, style notes, lessons, the roadmap and knowledge records, pinned topics, leads and question
+  clusters, timely cards; finished posts (published posts, Markdown exports, promo packs); one **short run summary**
+  per run (status, times, steps without the timeline; written once, at the end; not in DRY_RUN).
+- **Approval** copies the finished post to Mem0 (`promoteBrief`): the final brief, the approved draft, its review and
+  its guide (4 writes, each with `promoted_from` = the local id), then deletes the brief's local work. Failed
+  versions, their reviews, superseded briefs and source packs never reach Mem0. If the copy fails, the approval
+  stands with a warning and the post stays in the local file.
+- **Waiting for you:** a draft at awaiting_human (and its revisions) is in the local file, which survives an engine
+  restart (and on Embarko a redeploy: `DATA_DIR` is kept). The engine's index loads the local records with Mem0's, so
+  Approvals, Content and Runs show them; approve, counter prompt and reject find the draft by its `w-` id.
+- **Clean-up:** the local work of a rejected, failed or cancelled post, and local run records, are deleted after
+  `WORK_KEEP_DAYS` (default 7; a draft still waiting is never deleted) at engine start and at each full run
+  (`pruneWork`); at most 200 local run records are kept. The Runs page then shows the run's Mem0 summary.
+- **Lists:** a list of a work type scoped to a claimed brief is local only (0 Mem0 requests); other lists merge the
+  local records with Mem0's (older posts stay readable). A run's Mem0 summary is hidden while its local record is held.
+- **Older posts:** records already in Mem0 keep working (updates go by id). Work on a post that is not local (an
+  older post, or a counter prompt on an approved post) goes to Mem0 as before.
+- **The Memory page** (`GET /api/memory`, `held()`) lists Mem0 records only, not the local file.
+- `WORK_STORE=mem0` puts every step in Mem0 again (the old behaviour). The unit tests pin it; `test/workstore.test.js`
+  and the full-run measure test `local`.
+
+Mem0 requests (`test/fullrun-mem0.test.js`, fake AI, a real Scout → Reviewer loop with one failed review; the engine's
+index is not used, so reads of data from before the run are counted):
+
+| Run | `WORK_STORE=mem0` | `WORK_STORE=local` |
+|---|---|---|
+| Full run | 30 (12 reads, 18 writes) | **17** (12 reads, 5 writes) |
+| Counter prompt (revise) | 18 | **4** |
+| Approve | 12 | **8** (4 copies, the export, the run summary, 2 reads) |
+| Change the design | 7 | 5 |
+| Publish | 12 | 10 |
+| Unpublish | 10 | 8 |
+
+With the engine's index (the dashboard engine) the lists are read once per engine start, then served from memory,
+so later full runs should cost about 5 requests (the facts, cluster and lead writes, the cluster's "used" status and
+the run summary). This is an estimate: the test above runs without the index.
+
 ## Hosting on Embarko (admin login)
 
 The engine and dashboard can run on Embarko as `m91-engine`, behind an admin ID + password login that is forced

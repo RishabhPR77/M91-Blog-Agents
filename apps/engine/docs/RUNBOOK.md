@@ -189,6 +189,18 @@ to see the current estimate.
 **"Data may be out of date":** a command was run outside the dashboard and changed the data. Click **Refresh
 from Mem0** (about 7 Mem0 requests).
 
+## Where the work is kept
+
+A run's work in progress (briefs, every draft version, reviews, guides, source packs, the run's full record) is kept
+in `work.json` in the engine's data folder (`apps/engine/data`, or `DATA_DIR` on Embarko), not in Mem0. A draft
+waiting for you is there too and survives a restart. When you **Approve**, the final brief, the approved draft, its
+review and its guide are copied to Mem0 (4 requests) and the post's local work is deleted. A rejected or failed
+post never goes to Mem0: its local work is deleted after `WORK_KEEP_DAYS` (default 7). Each run also saves one short
+summary in Mem0 (1 request), so the Runs page keeps its history.
+
+`WORK_STORE=mem0` in `.env` writes every step to Mem0 again (about 30 requests per full run instead of 17).
+`npm run reset:all` also deletes `work.json`.
+
 ## See and clean up what Mem0 holds
 
 Open **Memory** in the dashboard. The type buttons show how many records of each kind are stored; the amber number
@@ -275,7 +287,9 @@ further back; Embarko keeps the last 5). It keeps today's settings and data. Any
 redeploy.
 
 **What a restart or redeploy loses.** Only the folder Embarko keeps (`DATA_DIR`) survives, and the engine puts
-its files there: the Mem0 usage counter, the run lock, the exported Markdown files and the refresh marker survive.
+its files there: the Mem0 usage counter, the run lock, the exported Markdown files, the refresh marker and the work
+file (`work.json`: drafts waiting for you, their revisions and the run history) survive. Embarko does not back up
+that folder: if it were lost, a draft still waiting for you would be lost too (approved posts are in Mem0).
 Lost: the logins (you log in again), a run that was in progress, and nothing else. The exported posts are also in
 Mem0. Embarko does not back up `DATA_DIR`.
 

@@ -39,6 +39,8 @@ export function fakeEnv(overrides = {}) {
     // Phase 12: the existing tests run without the roadmap and with rapid response (Phase 12 tests turn them on/off).
     ROADMAP_ENABLED: 'false',
     RAPID_RESPONSE_ENABLED: 'true',
+    // The existing tests keep every record in Mem0; the work store tests (and the full-run measure) use WORK_STORE=local.
+    WORK_STORE: 'mem0',
     ...overrides
   }
 }

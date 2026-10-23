@@ -185,6 +185,12 @@ export async function measureFullRun(env = {}, { decisions = false } = {}) {
       out.decisions[mode] = { status: r.status, summary: r.run?.result_summary ?? r.error, total: sum(), ai: Object.fromEntries(Object.entries(calls).map(([k, v]) => [k, v - (before[k] ?? 0)]).filter(([, v]) => v)) }
     }
     rmSync(blog.blogDir, { recursive: true, force: true })
+    // What Mem0 holds after the decisions (by type and status).
+    out.typesAfter = {}
+    for (const m of mem0.memories.values()) {
+      const k = `${m.metadata?.type}:${m.metadata?.status}`
+      out.typesAfter[k] = (out.typesAfter[k] ?? 0) + 1
+    }
     return out
   } finally {
     off()

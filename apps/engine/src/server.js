@@ -943,6 +943,12 @@ async function main() {
   const store = getStore()
   const manager = createRunManager({ config })
   const server = createServer({ triggerKey: config.runtime.triggerKey, manager, store, config })
+  // Local work of rejected or failed posts older than WORK_KEEP_DAYS goes first (no Mem0 request).
+  try {
+    store.pruneWork?.()
+  } catch (error) {
+    log.warn('local work not pruned', { error })
+  }
   // Load the dashboard's lists once at start (one read per type); later writes keep them current.
   try {
     await server.index.build()

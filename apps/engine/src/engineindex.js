@@ -5,6 +5,7 @@
 // as out of date until a refresh. It has the store's interface, so the API and the run checks use it as is.
 import { recordMatches, RECORD_TYPES, toRecord } from './store.js'
 import { onStoreWrite, readWriteMarker } from './storeevents.js'
+import { isLocalId, preferLocalRuns } from './workstore.js'
 import { log } from './util/log.js'
 
 /** Loaded at engine start: everything the dashboard's list pages show. */
@@ -75,7 +76,8 @@ export function createEngineIndex(base, { config = null, now = Date.now, pid = p
       }
       for (const r of (await load(type)).values()) if (recordMatches(r, filters)) out.push(copy(r))
     }
-    return out
+    // A run's Mem0 summary is left out while its full local record is held.
+    return wanted.includes('run') ? preferLocalRuns(out) : out
   }
 
   /** Whether another process wrote to Mem0 after this index was loaded. */
@@ -113,6 +115,8 @@ export function createEngineIndex(base, { config = null, now = Date.now, pid = p
         dirty.clear()
         for (const t of RECORD_TYPES) types.set(t, byType.get(t) ?? new Map())
         for (const [t, m] of byType) if (!types.has(t)) types.set(t, m)
+        // The work store's local records (a run's work in progress) are not in Mem0's list: add them back.
+        for (const r of base.localRecords?.() ?? []) types.get(r.type)?.set(r.id, copy(r))
       } else {
         for (const t of RECORD_TYPES) {
           if (SKIP.has(t)) types.set(t, new Map((await base.getRecords({ type: t })).map((r) => [r.id, copy(r)])))
@@ -123,11 +127,11 @@ export function createEngineIndex(base, { config = null, now = Date.now, pid = p
       loadedAt = now()
       return this.status()
     },
-    /** Every record the index holds now (no Mem0 request). */
+    /** Every Mem0 record the index holds now (no Mem0 request). Local work records (ids "w-") are left out. */
     held() {
       const out = new Map()
-      for (const m of types.values()) for (const [id, r] of m) out.set(id, copy(r))
-      for (const [id, r] of loose) if (!out.has(id)) out.set(id, copy(r))
+      for (const m of types.values()) for (const [id, r] of m) if (!isLocalId(id)) out.set(id, copy(r))
+      for (const [id, r] of loose) if (!out.has(id) && !isLocalId(id)) out.set(id, copy(r))
       return out
     },
     /** Reloads every loaded type from Mem0 (the dashboard's Refresh). */

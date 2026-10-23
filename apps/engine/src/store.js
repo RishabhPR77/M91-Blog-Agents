@@ -11,6 +11,7 @@ import { istDate } from './util/time.js'
 import { countMem0 } from './util/mem0count.js'
 import { emitStoreWrite, markWrite } from './storeevents.js'
 import { configureUsage } from './util/mem0usage.js'
+import { createWorkStore } from './workstore.js'
 
 export const RECORD_TYPES = Object.freeze([
   'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'draft',
@@ -138,8 +139,18 @@ export function clearStoreCache() {
   CACHES.clear()
 }
 
+/**
+ * The engine's store: Mem0, with the run's work in progress kept in a local file (WORK_STORE=local, workstore.js).
+ * WORK_STORE=mem0: Mem0 only. Same options as createMem0Store.
+ */
+export function createStore(opts = {}) {
+  const mem0 = createMem0Store(opts)
+  const config = opts.config ?? getConfig()
+  return config.runtime?.workStore === 'mem0' ? mem0 : createWorkStore(mem0, { config, now: opts.now })
+}
+
 // cacheTtlMs (default STORE_CACHE_TTL_MS) and now are injectable for tests.
-export function createStore({ config = getConfig(), clientFactory = defaultClientFactory, fetch = globalThis.fetch, sleepFn = sleep, eventTimeoutMs = 60000, eventPollMs = 1000, dryRun = config.runtime.dryRun, testTag = false, cacheTtlMs, now = Date.now } = {}) {
+export function createMem0Store({ config = getConfig(), clientFactory = defaultClientFactory, fetch = globalThis.fetch, sleepFn = sleep, eventTimeoutMs = 60000, eventPollMs = 1000, dryRun = config.runtime.dryRun, testTag = false, cacheTtlMs, now = Date.now } = {}) {
   const { apiKey, agentId } = config.mem0
   // Phase 9 A5: this process's Mem0 requests go into the usage file of this engine's data folder.
   configureUsage(config, { now })

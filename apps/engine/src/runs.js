@@ -270,6 +270,16 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     })
     for (const s of run.steps) if (s.status === 'running') Object.assign(s, { status: result.status === 'cancelled' ? 'cancelled' : 'failed', finished_at: run.finished_at })
     const type = result.status === 'succeeded' ? 'run.finished' : result.status === 'cancelled' ? 'run.cancelled' : 'run.failed'
+    // Work store: the full run record is local; Mem0 gets one short summary (counted in the run's totals).
+    if (store.saveRunSummary) {
+      try {
+        if (mem0) run.mem0 = { ...mem0, writes: mem0.writes + (dry ? 0 : 1), requests: mem0Requests(mem0) + (dry ? 0 : 1) }
+        await store.saveRunSummary(run)
+      } catch (error) {
+        log.error('could not save the run summary', { runId, error })
+      }
+      if (mem0) run.mem0 = { ...mem0, requests: mem0Requests(mem0) }
+    }
     await save()
     await queue
     unsubscribe()

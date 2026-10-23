@@ -83,6 +83,8 @@ const DEFAULTS = {
   // Phase 5.5: human approval gate
   // Phase 7: Mem0 read cache, Publisher and Embarko
   STORE_CACHE_TTL_MS: '30000',
+  // Run work (briefs, drafts, reviews, guides, source packs, run records) in a local file; Mem0 keeps finished posts and context
+  WORK_STORE: 'local', WORK_KEEP_DAYS: '7',
   EMBARKO_API_BASE: 'https://ship.embarko.ai', EMBARKO_AGENT_NAME: 'm91-blog-engine', BLOG_BUILD_TIMEOUT_MS: '300000', PUBLISH_VERIFY_TIMEOUT_MS: '120000',
   MAX_HUMAN_REVISIONS: '5', REREVIEW_AFTER_HUMAN: 'true', M91_NOTIFY_ON_AWAITING: 'false',
   // TEST-ONLY CLI commands (npm run test:await); never available through the API
@@ -407,7 +409,12 @@ export function loadConfig(env = process.env) {
       // Empty: apps/engine/data (gitignored). Holds the run lock and the Mem0 usage file; never content.
       // Hosted: a folder under DATA_DIR (the only disk Embarko keeps across redeploys).
       dataDir: str('ENGINE_DATA_DIR') || (hostedDir ? join(hostedDir, 'engine') : null),
-      runLockStaleMin: int('RUN_LOCK_STALE_MIN', { min: 1, max: 1440 })
+      runLockStaleMin: int('RUN_LOCK_STALE_MIN', { min: 1, max: 1440 }),
+      // A run's work in progress (briefs, drafts, reviews, guides, source packs, run records): 'local' keeps it in
+      // work.json under the data folder and copies a post to Mem0 when it is approved; 'mem0' writes it all to Mem0.
+      workStore: oneOf('WORK_STORE', ['local', 'mem0']),
+      // Local work of a rejected or failed post (and old local run records) is deleted after this many days.
+      workKeepDays: int('WORK_KEEP_DAYS', { min: 1, max: 3650 })
     },
     server: {
       port: int('PORT', { min: 1, max: 65535 })
