@@ -8,6 +8,8 @@ import { ScoreCard, type Area } from './ScoreCard'
 export type Review = {
   total: number | null
   pass: boolean | null
+  /** pass | notes (pass with notes: only minor problems, not sent back to the Writer) | revise. Older reviews: none. */
+  outcome?: 'pass' | 'notes' | 'revise'
   gates?: Gate[]
   areas?: Area[]
   feedback?: FeedbackItem[]
@@ -23,7 +25,7 @@ export function VerdictPanel({ review }: { review: Review }) {
   const settings = useSettings()
   return (
     <div className="space-y-4">
-      <ScoreCard total={review.total} pass={review.pass} passMin={settings.data?.gates.pass_score_min} areaMin={settings.data?.gates.pass_area_min} areas={review.areas ?? []} />
+      <ScoreCard total={review.total} pass={review.pass} notes={review.outcome === 'notes'} passMin={settings.data?.gates.pass_score_min} areaMin={settings.data?.gates.pass_area_min} areas={review.areas ?? []} />
       {review.summary && <p className="text-sm">{review.summary}</p>}
       <div><H>Gates</H><GatesList gates={review.gates ?? []} /></div>
       <div><H>Feedback</H><FeedbackList items={review.feedback ?? []} /></div>

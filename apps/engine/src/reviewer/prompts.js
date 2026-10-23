@@ -15,7 +15,7 @@ CHECK RESULTS are measured by code (word count, reading grades, link status, phr
 - claims_to_avoid_respected: nothing in the post says what BRIEF claims_to_avoid forbids.
 - no_invented_content: no invented numbers, quotes, customers, companies, results, stories or first-person experiences ("we've seen", "our customers").
 - sources_support_claims: every outside fact is linked to its outside source in ALLOWED URLS, and the sources you checked support what the post says. A claim about M91 that matches M91 FACTS passes without a link: posts never link to M91's docs.
-- story_attribution_correct: if a story is used, it is credited as the brief's attribution line says and never presented as M91's own experience. If no story is used, pass.
+- story_attribution_correct: if a story is used, it is clearly credited to the outlet named in the brief's attribution line and never presented as M91's own experience. Any clear wording passes ("reported by X", "X reported", "a report by X", "according to X"); the exact words of the attribution line are not required. If no story is used, pass.
 - tutorial_traceable: for tutorials, every step comes from the brief's tutorial steps, and code appears only as inserted snippets. For other posts, pass if the post has no code beyond snippets.
 - answers_main_question: the post clearly answers the brief's main question near the top.
 - no_legal_advice_framing: the post never presents itself as legal, regulatory or compliance advice.{{design_gate}}
@@ -37,7 +37,7 @@ Use these anchors for every area: 10 = exemplary, nothing to improve; 8 = strong
 For every problem, add one item:
 - "quote": copy the exact words from the post (at most 25 words) so the problem can be found. Never paraphrase the quote.
 - "problem" and "fix": specific and doable. Never "make it better".
-- "severity": "must" if it causes a failed gate or an area below {{pass_area_min}}; otherwise "should".
+- "severity": "must" if it causes a failed gate or an area below {{pass_area_min}}; otherwise "should". Keep "must" for problems that make the post wrong, unsupported or misleading; wording, length and polish are "should".
 - "send_to": {{designer_send_to}}"writer" for wording, simplicity, structure, SEO, tone and missing links that exist in ALLOWED URLS; "strategist" when the angle, search intent, topic or outline is wrong, or the topic duplicates past coverage; "scout" when a claim needs a source that is not in ALLOWED URLS (list those claims in "claims").
 - List at most {{max_feedback_items}} items, "must" items first.
 

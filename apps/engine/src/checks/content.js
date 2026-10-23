@@ -309,8 +309,8 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
   }
   if (brief?.news?.is_news_based) {
     const outlet = String(brief.news.outlet ?? '')
-    const ok = /reported by/i.test(md) && outlet && md.toLowerCase().includes(outlet.toLowerCase())
-    R('news_attribution', ok, 'hard', ok ? 1 : 0, ok ? 'ok' : `"reported by" and "${outlet}" must both appear`)
+    const ok = creditsOutlet(md, outlet)
+    R('news_attribution', ok, 'hard', ok ? 1 : 0, ok ? 'ok' : `the news must be credited to ${outlet}, e.g. "reported by ${outlet}", "${outlet} reported" or "according to ${outlet}"`)
   }
 
   // The timely lane: a rapid-response post starts its body with the Start-here line (code puts it in).
@@ -355,7 +355,9 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
   for (const r of blockFriendly(p, md, brief, isTutorial)) R(r.id, r.passed, 'soft', r.value, r.detail)
 
   const hard_passed = results.filter((r) => r.severity === 'hard').every((r) => r.passed)
-  return { results, hard_passed, word_count: wordCount, reading: { intro_grade: introGrade, post_grade: postGrade }, parsed: p }
+  // Minor hard checks do not send the post back to the Writer (no repair call, no revision); they are listed for you.
+  const major_passed = results.filter((r) => r.severity === 'hard' && !MINOR_HARD_CHECKS.includes(r.id)).every((r) => r.passed)
+  return { results, hard_passed, major_passed, word_count: wordCount, reading: { intro_grade: introGrade, post_grade: postGrade }, parsed: p }
 }
 
 /** Phase 4 brief 6.6 conventions, checked only where they apply. */
@@ -393,7 +395,44 @@ export function blockFriendly(p, md, brief, isTutorial) {
   return out
 }
 
+/**
+ * Hard checks whose failure is minor: a paragraph over PARAGRAPH_MAX_SENTENCES (code splits most of them) or a
+ * sentence over SENTENCE_HARD_MAX_WORDS. They still fail hard_passed, but never call the Writer: a post that fails only
+ * these goes to you with them listed as "should fix". Every other hard check is major.
+ */
+export const MINOR_HARD_CHECKS = Object.freeze(['paragraph_length', 'sentence_hard'])
+
+const problemLine = (r) => `${r.id}: ${r.detail}${r.value !== undefined && r.value !== '' ? ` (value: ${r.value})` : ''}`
+
+/**
+ * Is the outlet credited as the source of a report, in any common wording? "reported by X", "as reported by X",
+ * "X reported", "X reports", "a report by X", "X's report", "according to X" (link markup and case ignored).
+ */
+export function creditsOutlet(markdown, outlet) {
+  const name = String(outlet ?? '').trim()
+  if (!name) return false
+  const text = String(markdown ?? '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[’]/g, "'").replace(/\s+/g, ' ')
+  const o = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
+  return [
+    `\\breported\\s+by\\s+(the\\s+)?${o}`,
+    `\\b${o}\\s+(has\\s+)?(reported|reports|wrote|described)\\b`,
+    `\\breport(s)?\\s+(by|from|in)\\s+(the\\s+)?${o}`,
+    `\\b${o}'s?\\s+(report|article|story)\\b`,
+    `\\baccording\\s+to\\s+(the\\s+)?${o}`
+  ].some((re) => new RegExp(re, 'i').test(text))
+}
+
 /** One line per failed hard check, for the repair prompt. */
 export function hardProblems(results) {
-  return results.filter((r) => r.severity === 'hard' && !r.passed).map((r) => `${r.id}: ${r.detail}${r.value !== undefined && r.value !== '' ? ` (value: ${r.value})` : ''}`)
+  return results.filter((r) => r.severity === 'hard' && !r.passed).map(problemLine)
+}
+
+/** Failed hard checks that are major (every hard check except MINOR_HARD_CHECKS). */
+export function majorProblems(results) {
+  return results.filter((r) => r.severity === 'hard' && !r.passed && !MINOR_HARD_CHECKS.includes(r.id)).map(problemLine)
+}
+
+/** Failed hard checks that are minor (MINOR_HARD_CHECKS). */
+export function minorProblems(results) {
+  return results.filter((r) => r.severity === 'hard' && !r.passed && MINOR_HARD_CHECKS.includes(r.id)).map(problemLine)
 }

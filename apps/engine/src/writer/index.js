@@ -7,7 +7,7 @@ import { randomCode } from '../util/ids.js'
 import { createViaSocketClient, TruncatedError } from '../viasocket.js'
 import { emit, throwIfCancelled, CancelledError } from '../events.js'
 import { createUrlChecker } from '../scout/checks.js'
-import { runContentChecks, hardProblems, urlKey, parseMarkdown, ctaVariantKey } from '../checks/content.js'
+import { runContentChecks, hardProblems, majorProblems, urlKey, parseMarkdown, ctaVariantKey } from '../checks/content.js'
 import { latestLessons } from '../lessons.js'
 import { DEFAULT_CTA_TEXT } from '../strategist/prompts.js'
 import { writer_draft, draftSchemaErrors } from './schemas.js'
@@ -17,6 +17,7 @@ import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets
 import { needsStartHere, starterPost, withStartHere } from '../timely/starthere.js'
 import { stripDocsLinks, isDocsFix } from '../util/m91links.js'
 import { linkNewsSource } from './newslink.js'
+import { splitLongParagraphs } from './paragraphs.js'
 import { draftsOf, nextDraftVersion, saveDraft, draftVersion, isEarlierDraft } from './save.js'
 import { saveRunLog } from '../util/runlog.js'
 
@@ -90,6 +91,10 @@ export function autoFixDraft(draft, { config, brief }) {
   const news = linkNewsSource(md, brief)
   md = news.markdown
   fixes.push(...news.fixes)
+  // A paragraph over PARAGRAPH_MAX_SENTENCES is split at sentence ends (same words), so it never needs the Writer.
+  const paras = splitLongParagraphs(md, config.content.paragraphMaxSentences ?? 3)
+  md = paras.markdown
+  fixes.push(...paras.fixes)
   if (!/^#\s+\S/m.test(md) && draft.title) {
     md = `# ${draft.title}\n\n${md}`
     fixes.push('added the missing H1 title')
@@ -318,17 +323,18 @@ export async function runWriter(params = {}, deps = {}) {
     snippetsUsed = replaced.used
     snippetInserts = replaced.inserts
     checks = await check(draft, replaced)
-    if (checks.hard_passed || repairs >= wc.maxRepairs) break
+    // Only a major hard check calls the Writer again; a minor one (a long paragraph or sentence) is listed for you.
+    if (checks.major_passed || repairs >= wc.maxRepairs) break
     repairs++
     // The repair sees snippet tokens again, so it places them instead of copying code.
-    answer = await callModel('repair', repairTail({ ...draft, post_markdown: tokeniseSnippets(draft.post_markdown, snippets, snippetInserts) }, hardProblems(checks.results)))
+    answer = await callModel('repair', repairTail({ ...draft, post_markdown: tokeniseSnippets(draft.post_markdown, snippets, snippetInserts) }, majorProblems(checks.results)))
   }
 
   // ---------- save ----------
   throwIfCancelled()
   const payload = {
     title: draft.title, post_markdown: draft.post_markdown, tldr: draft.tldr, seo: draft.seo, context: draft.context, revision_notes: draft.revision_notes,
-    checks: { hard_passed: checks.hard_passed, results: checks.results },
+    checks: { hard_passed: checks.hard_passed, major_passed: checks.major_passed, results: checks.results },
     word_count: checks.word_count, reading: checks.reading, model_used: answer.model, writer_mode: mode, repairs_used: repairs, auto_fixes: autoFixes,
     snippets_used: snippetsUsed, snippets_available: snippets.length,
     // The inserted snippets themselves, for the Reviewer (B3) and later re-checks.

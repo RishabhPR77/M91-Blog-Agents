@@ -53,6 +53,8 @@ const DEFAULTS = {
   MEM0_MONTHLY_LIMIT: '1000', MEM0_MONTHLY_ADD_LIMIT: '10000', MEM0_WARN_PCT: '80', MEM0_STOP_PCT: '95',
   M91_DOCS_URL: 'https://m91-api.msg91.com/llms.txt',
   PASS_SCORE_MIN: '80', PASS_AREA_MIN: '6',
+  // Below this score, or with a major problem, the post goes back to the Writer; otherwise it goes to you ("pass with notes").
+  REVISE_BELOW_SCORE: '70',
   MAX_WRITER_REVISIONS: '2', MAX_STRATEGIST_REBRIEFS: '1', MAX_SCOUT_RETRIES: '1', MAX_AI_ROUNDS_PER_POST: '5',
   TARGET_WORDS_MIN: '500', TARGET_WORDS_MAX: '1200',
   DEFAULT_TONE: 'friendly-teacher', TIMEZONE: 'Asia/Kolkata',
@@ -73,7 +75,7 @@ const DEFAULTS = {
   DEDUPE_MODE: 'local', DEDUPE_SIMILARITY_LOCAL: '0.65',
   URL_CHECK_TIMEOUT_MS: '10000',
   // Phase 4: Writer
-  WRITER_MAX_REPAIRS: '1', WRITER_REVISION_INPUT: 'context', TUTORIAL_SOURCE_MAX_CHARS: '40000', SLACK_POST_DRAFTS: 'false',
+  WRITER_MAX_REPAIRS: '1', WRITER_REVISION_INPUT: 'full', TUTORIAL_SOURCE_MAX_CHARS: '40000', SLACK_POST_DRAFTS: 'false',
   READING_GRADE_HARD_MARGIN: '1', SENTENCE_MAX_WORDS: '20', SENTENCE_HARD_MAX_WORDS: '25', PARAGRAPH_MAX_SENTENCES: '3', WORDS_HARD_MARGIN_PCT: '20', SLACK_CHUNK_CHARS: '2800',
   // Phase 5: Reviewer, lessons, promo pack
   REVIEWER_MAX_SOURCE_CHECKS: '5', REVIEW_FEEDBACK_MAX_ITEMS: '8', LESSONS_PER_REVIEW_MAX: '3',
@@ -371,7 +373,8 @@ export function loadConfig(env = process.env) {
     },
     gates: {
       passScoreMin: int('PASS_SCORE_MIN', { min: 0, max: 100 }),
-      passAreaMin: int('PASS_AREA_MIN', { min: 0, max: 10 })
+      passAreaMin: int('PASS_AREA_MIN', { min: 0, max: 10 }),
+      reviseBelowScore: int('REVISE_BELOW_SCORE', { min: 0, max: 100 })
     },
     limits: {
       maxWriterRevisions: int('MAX_WRITER_REVISIONS'),

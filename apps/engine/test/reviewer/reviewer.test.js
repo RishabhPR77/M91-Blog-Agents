@@ -13,6 +13,9 @@ import { config, reviewAnswer, item, fakeReviewerAi, savedDraft, BRIEF_ID, brief
 const quiet = () => setSink(() => {})
 const cfg = config()
 const ctx = (over = {}) => ({ markdown: GOOD_MD, checkResults: savedDraft().checks.results, config: cfg, ...over })
+// The pre-REVISE_BELOW_SCORE rule (any total under 95 goes back to the Writer): for the tests of the revise path.
+const strict = config({ REVISE_BELOW_SCORE: '95' })
+const ctxStrict = (over = {}) => ctx({ config: strict, ...over })
 const areasAll = (n) => AREA_IDS.map((id) => ({ id, score: n }))
 
 test('weights add up to 100; total = Σ(score/10 × weight), 1 decimal', () => {
@@ -58,7 +61,7 @@ test('pass rule edges: 79.9 fails, 80.0 passes (PASS_SCORE_MIN=80, Phase 9); 84.
 })
 
 test('consistency rules: a fail with no "must" item gets generic ones; a pass with "must" items downgrades them', () => {
-  const failNoMust = decide(reviewAnswer({ scores: { simplicity: 5 }, feedback: [item()] }), ctx())
+  const failNoMust = decide(reviewAnswer({ scores: { simplicity: 5 }, feedback: [item()] }), ctxStrict())
   assert.equal(failNoMust.pass, false)
   const gen = failNoMust.feedback.filter((f) => f.generated)
   assert.deepEqual(gen.map((f) => [f.area, f.severity, f.send_to]), [['simplicity', 'must', 'writer']])
@@ -84,9 +87,9 @@ test('quotes: found despite Markdown, quote marks, spacing and case; marked quot
 
 test('route hint from "must" items: strategist, then scout with claims, then writer; claims only kept for scout items', () => {
   const low = { scores: { accuracy: 5 } }
-  assert.equal(decide(reviewAnswer({ ...low, feedback: [item({ severity: 'must' }), item({ severity: 'must', send_to: 'strategist' })] }), ctx()).route_hint, 'strategist')
-  assert.equal(decide(reviewAnswer({ ...low, feedback: [item({ severity: 'must', send_to: 'scout', claims: ['x'] })] }), ctx()).route_hint, 'scout')
-  const w = decide(reviewAnswer({ ...low, feedback: [item({ severity: 'must', claims: ['ignored'] })] }), ctx())
+  assert.equal(decide(reviewAnswer({ ...low, feedback: [item({ severity: 'must' }), item({ severity: 'must', send_to: 'strategist' })] }), ctxStrict()).route_hint, 'strategist')
+  assert.equal(decide(reviewAnswer({ ...low, feedback: [item({ severity: 'must', send_to: 'scout', claims: ['x'] })] }), ctxStrict()).route_hint, 'scout')
+  const w = decide(reviewAnswer({ ...low, feedback: [item({ severity: 'must', claims: ['ignored'] })] }), ctxStrict())
   assert.equal(w.route_hint, 'writer')
   assert.deepEqual(w.feedback[0].claims, [])
 })
@@ -271,10 +274,10 @@ test('C4 decide: no guide → experience scored as structure and no_new_facts_in
 
 test('C4 decide: feedback may quote the guide text; design-only "must" items give route_hint "designer"', () => {
   const fb = [item({ quote: 'Your agent wants to refund order #1182', severity: 'must', send_to: 'designer', area: 'experience' })]
-  const d = decide(reviewAnswer({ scores: { experience: 5 }, feedback: fb }), ctx({ guide: GUIDE, guideText: 'Your agent wants to refund order #1182' }))
+  const d = decide(reviewAnswer({ scores: { experience: 5 }, feedback: fb }), ctxStrict({ guide: GUIDE, guideText: 'Your agent wants to refund order #1182' }))
   assert.equal(d.feedback[0].quote_found, true)
   assert.equal(d.route_hint, 'designer')
-  const mixed = decide(reviewAnswer({ scores: { experience: 5 }, feedback: [...fb, item({ severity: 'must' })] }), ctx({ guide: GUIDE, guideText: 'Your agent wants to refund order #1182' }))
+  const mixed = decide(reviewAnswer({ scores: { experience: 5 }, feedback: [...fb, item({ severity: 'must' })] }), ctxStrict({ guide: GUIDE, guideText: 'Your agent wants to refund order #1182' }))
   assert.equal(mixed.route_hint, 'writer')
 })
 

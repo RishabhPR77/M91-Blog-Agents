@@ -129,7 +129,7 @@ test('writer run mode through the API: 202, a draft for the latest brief version
 
 test('DRY_RUN pipeline with fail_once: the Writer works from the in-memory brief and previous draft; nothing but run/run_log saved', async () => {
   const restore = quiet()
-  const cfg = config({ DRY_RUN: 'true' })
+  const cfg = config({ DRY_RUN: 'true', WRITER_REVISION_INPUT: 'context' })
   const store = memoryStore({ dryRun: true })
   const ai = fakeAi({ revise: draftAnswer({ revision_notes: [{ feedback_quote: 'q', what_changed: 'w' }] }) })
   const manager = createRunManager({
@@ -164,7 +164,7 @@ test('the real Reviewer in the loop (DRY_RUN): fail with a quoted "must" item �
   const store = memoryStore({ dryRun: true })
   const writerAi = fakeAi({ revise: draftAnswer({ revision_notes: [{ feedback_quote: 'A ringing phone gets attention fast.', what_changed: 'w' }] }) })
   const must = { area: 'simplicity', quote: 'A ringing phone gets attention fast.', problem: 'p', fix: 'f', severity: 'must', send_to: 'writer', claims: [] }
-  const reviewerAi = fakeReviewerAi([reviewAnswer({ scores: { simplicity: 5 }, feedback: [must], lessons: ['Explain jargon.'] }), reviewAnswer({ lessons: ['Short intros.'] })])
+  const reviewerAi = fakeReviewerAi([reviewAnswer({ scores: { simplicity: 5 }, gates: { no_invented_content: false }, feedback: [must], lessons: ['Explain jargon.'] }), reviewAnswer({ lessons: ['Short intros.'] })])
   const aiSend = (opts) => (opts.agent === 'reviewer' ? reviewerAi(opts) : writerAi(opts))
   const manager = createRunManager({
     config: cfg,
@@ -187,7 +187,7 @@ test('the real Reviewer in the loop (DRY_RUN): fail with a quoted "must" item �
   assert.match(reviewerAi.requests[1].message, /--- PREVIOUS REVIEW ---\n\{"feedback":\[\{"area":"simplicity","quote":"A ringing phone gets attention fast\."/)
   assert.match(writerAi.requests.filter((q) => q.agent === 'writer')[1].message, /--- FEEDBACK ---\n\[\{"source":"reviewer","area":"simplicity","quote":"A ringing phone gets attention fast\."/)
   const reviewSteps = r.run.steps.filter((x) => x.name === 'reviewer')
-  assert.match(reviewSteps[0].summary, /^Score \d+(\.\d)?\/100 · fail · simplicity 5 → writer$/)
+  assert.match(reviewSteps[0].summary, /^Score \d+(\.\d)?\/100 · fail · no_invented_content, simplicity 5 → writer$/)
   assert.match(reviewSteps[1].summary, /^Score 90\/100 · pass · gates 11\/11 · 0 should-fix items$/)
   const events = replay(run_id)
   const routes = events.filter((e) => e.type === 'loop.route').map((e) => e.data.action)
@@ -196,7 +196,7 @@ test('the real Reviewer in the loop (DRY_RUN): fail with a quoted "must" item �
   const reviewerEvents = events.filter((e) => e.agent === 'reviewer').map((e) => e.type)
   // (ai.call events come from the real viaSocket client, which the fakes replace; call names are checked above.)
   for (const t of ['step.started', 'step.finished', 'step.output']) assert.ok(reviewerEvents.includes(t), t)
-  assert.match(events.find((e) => e.agent === 'reviewer' && e.type === 'step.output').message, /^Score .+ · fail · simplicity 5 → writer$/)
+  assert.match(events.find((e) => e.agent === 'reviewer' && e.type === 'step.output').message, /^Score .+ · fail · no_invented_content, simplicity 5 → writer$/)
   const all = JSON.stringify(events)
   assert.ok(!all.includes("You are the Reviewer for M91's blog"), 'no prompt in events')
   assert.ok(!all.includes('A pause keeps a person in charge. You can read how'), 'no post paragraph in events')

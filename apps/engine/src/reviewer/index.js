@@ -133,7 +133,7 @@ export async function runReviewer(params = {}, deps = {}) {
   const ms = now() - started
   const payload = {
     brief_id: params.briefId, brief_version: briefVersion, version,
-    gates: d.gates, areas: d.areas, total: d.total, pass: d.pass, feedback: d.feedback, fixed_previous: d.fixed_previous,
+    gates: d.gates, areas: d.areas, total: d.total, pass: d.pass, outcome: d.outcome, feedback: d.feedback, fixed_previous: d.fixed_previous,
     sources_checked: d.sources_checked, lessons: d.lessons, summary: d.summary, model_used: res.model, ms, repairs_used: repairs,
     guide_reviewed: Boolean(guide)
   }

@@ -126,7 +126,7 @@ export async function measureFullRun(env = {}, { decisions = false } = {}) {
 
   const ai = { scout: scoutAi(), strategist: strategistAi(), writer: writerAi({ revise: draftAnswer({ revision_notes: [{ feedback_quote: 'q', what_changed: 'w' }] }) }) }
   const quote = GOOD_MD.split('\n').find((l) => l.startsWith('Agent approval means')).split('. ')[0] + '.'
-  ai.reviewer = fakeReviewerAi([reviewAnswer({ scores: { simplicity: 5 }, feedback: [item({ quote, severity: 'must' })] }), reviewAnswer()])
+  ai.reviewer = fakeReviewerAi([reviewAnswer({ scores: { simplicity: 5 }, gates: { no_invented_content: false }, feedback: [item({ quote, severity: 'must' })] }), reviewAnswer()])
   ai.promo = async (opts) => done(opts, PACK)
   // Phase 10: the Experience Designer gets a plain guide (one chapter per H2, all prose) for every draft.
   ai.designer = async (opts) => done(opts, plainPlan(GOOD_MD, draftAnswer().title))

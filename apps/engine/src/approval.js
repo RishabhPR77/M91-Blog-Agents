@@ -59,8 +59,11 @@ export async function reviewOfDraft(store, d) {
     .sort((a, b) => String(b.createdAt ?? b.date).localeCompare(String(a.createdAt ?? a.date)))[0] ?? null
 }
 
-/** True when the draft's own hard content checks passed (missing results count as not passed). */
-export const hardChecksPassed = (d) => d?.payload?.checks?.hard_passed === true
+/**
+ * True when the draft's major hard content checks passed (missing results count as not passed). A minor one (a long
+ * paragraph or sentence) never blocks approval. Drafts saved before the major/minor split use hard_passed.
+ */
+export const hardChecksPassed = (d) => (d?.payload?.checks?.major_passed ?? d?.payload?.checks?.hard_passed) === true
 
 export const NOT_REVIEWED_MESSAGE = 'This version was not checked by the Reviewer. Review it first, or approve with force_unreviewed.'
 

@@ -168,7 +168,7 @@ test('secret values are collected but not enumerable', () => {
 test('Phase 4 Writer keys: defaults, fallback pairing, validation', () => {
   const c = loadConfig(fakeEnv())
   assert.equal(c.writer.maxRepairs, 1)
-  assert.equal(c.writer.revisionInput, 'context')
+  assert.equal(c.writer.revisionInput, 'full')
   assert.equal(c.writer.tutorialSourceMaxChars, 40000)
   assert.equal(c.writer.postDrafts, false)
   assert.equal(c.writer.fallbackService, undefined)

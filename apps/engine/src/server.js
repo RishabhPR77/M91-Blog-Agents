@@ -318,7 +318,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         revision_notes: p.revision_notes ?? [], model_used: p.model_used ?? null,
         reviewed, hard_passed: hardChecksPassed(d), approved_unreviewed: d.metadata?.approved_unreviewed ?? null
       },
-      review: review && { total: review.total, pass: review.pass, gates: review.gates, areas: review.areas, feedback: review.feedback, summary: review.summary, sources_checked: review.sources_checked },
+      review: review && { total: review.total, pass: review.pass, outcome: review.outcome ?? (review.pass ? 'pass' : 'revise'), gates: review.gates, areas: review.areas, feedback: review.feedback, summary: review.summary, sources_checked: review.sources_checked },
       checks: p.checks?.results ?? [],
       // Phase 12: the roadmap slot of this post and the earlier posts it builds on (from the engine's index).
       slot: config?.roadmap?.enabled ? await slotOfBrief(briefId, d) : null,

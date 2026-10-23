@@ -281,6 +281,40 @@ versions scored 80 and 82.5 and failed only on a reading grade. Four fixes:
 
 0 extra AI calls and 0 extra Mem0 requests. A few more link-check requests when a site is slow.
 
+## The Writer only for major problems
+
+The next run (261023-1426-8D57) still failed: `READING_GRADE_HARD_MARGIN=0` in the settings kept the old limits, and
+each revision for a small problem rewrote the post and added new, real errors (scores 71.5 → 72.5 → 71). In the 16
+reviews read, four versions scored 80+ and failed only on a reading grade that the 8/7 limits allow.
+
+```
+REVISE_BELOW_SCORE=70
+WRITER_REVISION_INPUT=full
+```
+
+- **Three outcomes** (code, `outcomeOf` in `reviewer/decide.js`):
+  - **pass:** every gate passed, no hard check failed, total ≥ `PASS_SCORE_MIN`, every area ≥ `PASS_AREA_MIN`.
+  - **pass with notes:** no major problem, but something minor is left: a total from `REVISE_BELOW_SCORE` up to
+    `PASS_SCORE_MIN`, an area under `PASS_AREA_MIN`, or a minor hard check. The post goes to you, not back to the
+    Writer. Its "must" items become "should", and code lists the minor checks and low areas as "should fix". The
+    dashboard shows an amber **pass with notes**. **Request changes** still works as before.
+  - **revise:** a major problem: a failed AI gate (facts, invented content, sources, claims to avoid, the main
+    question, legal framing), a source that contradicts the post, a major hard check, or a total below
+    `REVISE_BELOW_SCORE`. Only then does the post go back (Writer, Strategist or Scout, as before).
+- **Minor hard checks:** `paragraph_length` and `sentence_hard`. They no longer trigger the Writer's repair call
+  and never block **Approve**; every other hard check is major. A draft records `major_passed` next to `hard_passed`.
+- **Paragraphs split by code:** a paragraph over `PARAGRAPH_MAX_SENTENCES` is split at sentence ends into even
+  groups, same words (part of the Writer's automatic fixes; lists, quotes and code are left alone).
+- **Attribution in common wording:** the `news_attribution` check and the Reviewer's `story_attribution_correct`
+  gate accept "reported by X", "X reported", "a report by X", "X's report" and "according to X".
+- **Focused revisions:** a revision now sees the full previous draft (`WRITER_REVISION_INPUT=full`; before, only a
+  summary) and is told to change only the sentences the feedback names and copy everything else word for word.
+- **Reviewer:** "must" is kept for problems that make the post wrong, unsupported or misleading; wording, length
+  and polish are "should".
+
+`REVISE_BELOW_SCORE=80` brings back the old rule for the score (a low area or a minor check still gives a pass with
+notes). Costs: 0 extra AI calls; a revision's prompt is longer (the full draft).
+
 ## Hosting on Embarko (admin login)
 
 The engine and dashboard can run on Embarko as `m91-engine`, behind an admin ID + password login that is forced

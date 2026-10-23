@@ -1,7 +1,7 @@
 // What the code does with the Reviewer's answer (Phase 5 brief, B6). The code — not the AI —
 // adds the code gates, checks the quotes, computes the total and decides pass or fail.
 
-import { hardProblems } from '../checks/content.js'
+import { majorProblems, minorProblems } from '../checks/content.js'
 import { reviewerIds } from './schemas.js'
 
 // Phase 10: experience (10) is new; structure and originality give 5 each (the guide now carries structure).
@@ -59,12 +59,27 @@ export function passRule({ gates, areas, total }, { passScoreMin, passAreaMin })
   return gates.every((g) => g.passed) && total >= passScoreMin && areas.every((a) => a.score >= passAreaMin)
 }
 
-/** The two gates code adds; the AI cannot overrule them. */
+/**
+ * The outcome of a review:
+ * - pass: every gate passed, no hard check failed, total ≥ PASS_SCORE_MIN, every area ≥ PASS_AREA_MIN;
+ * - notes ("pass with notes"): no major problem, but something minor is left (a total from REVISE_BELOW_SCORE up to
+ *   PASS_SCORE_MIN, a low area, a minor hard check): the post goes to you, not back to the Writer;
+ * - revise: a major problem (an AI gate, a contradicting source, a major hard check) or a total below
+ *   REVISE_BELOW_SCORE: the post goes back.
+ */
+export function outcomeOf({ gates, areas, total, minorChecks = [] }, { passScoreMin, passAreaMin, reviseBelowScore = passScoreMin }) {
+  const major = gates.some((g) => !g.passed) || total < reviseBelowScore
+  if (major) return 'revise'
+  return minorChecks.length === 0 && passRule({ gates, areas, total }, { passScoreMin, passAreaMin }) ? 'pass' : 'notes'
+}
+
+/** The two gates code adds; the AI cannot overrule them. checks_hard_passed counts the major hard checks only. */
 export function codeGates({ checkResults = [], sourcesChecked = [] }) {
-  const hard = hardProblems(checkResults)
+  const hard = majorProblems(checkResults)
+  const minor = minorProblems(checkResults)
   const contradicted = sourcesChecked.filter((s) => s.verdict === 'contradicts')
   return [
-    { id: 'checks_hard_passed', passed: hard.length === 0, evidence: hard.length ? `hard content check(s) failed: ${hard.join(' | ')}` : 'every hard content check passed', source: 'code' },
+    { id: 'checks_hard_passed', passed: hard.length === 0, evidence: hard.length ? `hard content check(s) failed: ${hard.join(' | ')}` : minor.length ? `every major hard check passed; minor: ${minor.join(' | ')}` : 'every hard content check passed', source: 'code' },
     { id: 'sources_contradicted', passed: contradicted.length === 0, evidence: contradicted.length ? `source(s) contradict the post: ${contradicted.map((s) => `${s.url} — ${s.claim}`).join(' | ')}` : 'no checked source contradicts the post', source: 'code' }
   ]
 }
@@ -106,7 +121,10 @@ export function decide(answer, { markdown, checkResults = [], allowedUrls = null
   const total = computeTotal(areas, weightsFor(design))
   const failedGates = gates.filter((g) => !g.passed)
   const lowAreas = areas.filter((a) => a.score < passAreaMin)
-  const pass = passRule({ gates, areas, total }, config.gates)
+  const minorChecks = minorProblems(checkResults)
+  const outcome = outcomeOf({ gates, areas, total, minorChecks }, config.gates)
+  // "Pass with notes" counts as a pass: the post goes to you for approval, the minor items listed as "should".
+  const pass = outcome !== 'revise'
 
   // B6.3: every quote must exist in the post (kept either way, marked).
   let feedback = (answer.feedback ?? []).map((f) => ({ ...f, claims: f.send_to === 'scout' ? f.claims ?? [] : [], quote_found: quoteFound(findIn, f.quote) }))
@@ -121,7 +139,12 @@ export function decide(answer, { markdown, checkResults = [], allowedUrls = null
   }
   if (pass && feedback.some((f) => f.severity === 'must')) {
     feedback = feedback.map((f) => (f.severity === 'must' ? { ...f, severity: 'should', downgraded: true } : f))
-    warnings.push('the review passed with "must" items: downgraded to "should"')
+    warnings.push(`the review ${outcome === 'notes' ? 'passed with notes' : 'passed'} with "must" items: downgraded to "should"`)
+  }
+  // Pass with notes: the minor hard checks and the low areas are listed for you (they did not call the Writer).
+  if (outcome === 'notes') {
+    for (const m of minorChecks) feedback.push({ area: 'checks', quote: '', problem: m, fix: 'Minor: fix it by hand or with Request changes if it matters.', severity: 'should', send_to: 'writer', claims: [], quote_found: false, generated: true })
+    for (const a of lowAreas) if (!feedback.some((f) => f.area === a.id)) feedback.push({ area: a.id, quote: '', problem: `${a.id} ${a.score}/10: ${a.evidence}`, fix: 'Minor: improve it with Request changes if it matters.', severity: 'should', send_to: 'writer', claims: [], quote_found: false, generated: true })
   }
   feedback.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'must' ? -1 : 1))
 
@@ -133,7 +156,7 @@ export function decide(answer, { markdown, checkResults = [], allowedUrls = null
     : 'writer'
 
   return {
-    gates, areas, total, pass, feedback,
+    gates, areas, total, pass, outcome, feedback,
     low_areas: lowAreas.map((a) => a.id),
     fixed_previous: answer.fixed_previous ?? [],
     sources_checked: sources,
@@ -149,7 +172,7 @@ export function reviewSummaryLine(r) {
   const gatesPassed = r.gates.filter((g) => g.passed).length
   if (r.pass) {
     const should = r.feedback.filter((f) => f.severity === 'should').length
-    return `Score ${r.total}/100 · pass · gates ${gatesPassed}/${r.gates.length} · ${should} should-fix item${should === 1 ? '' : 's'}`
+    return `Score ${r.total}/100 · ${r.outcome === 'notes' ? 'pass with notes' : 'pass'} · gates ${gatesPassed}/${r.gates.length} · ${should} should-fix item${should === 1 ? '' : 's'}`
   }
   const low = (r.low_areas ?? []).map((id) => `${id} ${r.areas.find((a) => a.id === id)?.score}`)
   const failed = r.gates.filter((g) => !g.passed).map((g) => g.id)

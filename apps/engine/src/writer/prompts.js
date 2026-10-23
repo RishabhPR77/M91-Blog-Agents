@@ -92,6 +92,7 @@ export const REVISE = `Task: revise the post to fix every item in FEEDBACK.
 - Feedback from "human" comes from the editor: follow it closely. If it asks for something the HONESTY RULES forbid (a fact not in the brief, a claim in claims_to_avoid, an invented example, code that is not a snippet), do not do that part; explain why in revision_notes.
 - Keep the same structure, headings and everything the feedback did not criticise, as described in PREVIOUS DRAFT.
 - If SOURCE PACK is present, use its URLs to support the claims it covers; remove or soften any claim it could not support.
+- Change only the sentences the feedback quotes or names, plus what they need to stay correct. Copy every other sentence, heading, link and attribution from PREVIOUS DRAFT word for word. Do not rephrase, add or remove anything else: a new sentence can bring a new mistake.
 - Return the full revised post, not only the changed parts.
 - In "revision_notes", add one item per feedback item: the feedback quote and what you changed.`
 

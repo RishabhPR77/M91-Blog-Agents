@@ -71,6 +71,11 @@ Cards you don't act on expire `TIMELY_WINDOW_DAYS` after the event.
    Writer (the draft), checks, and Reviewer (the score). A full run takes 15–30 minutes.
 6. When the Reviewer passes the draft, the run ends with **Waiting for your approval**. Slack gets a
    message. If the draft does not pass within the limits, the run ends as failed (see "When a run fails").
+   - The draft goes back to the Writer only for a **major** problem: wrong or invented facts, an unlinked or
+     contradicting source, a major hard check, or a score below `REVISE_BELOW_SCORE` (70).
+   - With only minor problems (a score of 70–79, a low area, a long paragraph or sentence) the Reviewer says
+     **pass with notes** (amber). It comes to you with the minor items as "should fix". Approve it, or use
+     **Request changes**.
 
 ## Read a draft and decide
 
