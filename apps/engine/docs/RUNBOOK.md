@@ -189,6 +189,20 @@ to see the current estimate.
 **"Data may be out of date":** a command was run outside the dashboard and changed the data. Click **Refresh
 from Mem0** (about 7 Mem0 requests).
 
+## See and clean up what Mem0 holds
+
+Open **Memory** in the dashboard. The type buttons show how many records of each kind are stored; the amber number
+is how many look unused. Tick **Probably not useful** to see only those, with the reason on each row (old status,
+test data, a rejected or replaced brief, no draft, a duplicate, old and unused). Click a title to read the record.
+
+If the page says some types are not loaded, click **Load all types** (about 1 Mem0 request per 100 records, once).
+Listing and filtering cost 0 requests.
+
+To delete, tick rows (or use the bin on one row) and click **Delete selected**. The dialog lists every record and
+the cost: 1 Mem0 request per record. Records with a lock (published posts, current facts and style notes, the
+approved roadmap, exports of approved posts) cannot be deleted; lessons, open pinned topics and the records of an
+approved post need the extra tick. Deleting waits until no run is in progress and does nothing while DRY_RUN is on.
+
 ## On Embarko: log in, redeploy, roll back
 
 The engine and dashboard can run on Embarko as the app **m91-engine** (https://m91-engine.embarko.app once it is

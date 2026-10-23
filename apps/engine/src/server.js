@@ -32,7 +32,9 @@ import { listOpportunities, nextTimely, applyAction, isExpired, OPEN_STATUSES, T
 import { istDate } from './util/time.js'
 import { previewExport, latestExport, ExportError } from './export/index.js'
 import { createDocstar } from './publisher/docstar.js'
-import { withMem0Count, mem0Requests } from './util/mem0count.js'
+import { withMem0Count, mem0Requests, currentMem0Counts } from './util/mem0count.js'
+import { judgeRecords, filterRows, planDelete, createdMs, DEFAULT_STALE_DAYS } from './memory.js'
+import { deleteIds } from './cleanup.js'
 import { createEngineIndex } from './engineindex.js'
 import { usageStatus, stopMessage } from './util/mem0usage.js'
 import { verifyPassword, sameText } from './util/adminhash.js'
@@ -717,6 +719,63 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       const r = await store.getRecord(seg[2])
       if (!r) return fail(res, 404, 'not_found', `no record ${seg[2]}`)
       return send(res, 200, { record: r })
+    }
+
+    // Memory manager: every record the index holds, judged (why it may not be useful, whether it may be deleted).
+    // Served from the index only: 0 Mem0 requests. Types the index has not loaded are listed in not_loaded.
+    if (path === '/api/memory' && method === 'GET') {
+      const q = url.searchParams
+      const staleDays = Math.min(3650, Math.max(1, Number(q.get('stale_days') ?? DEFAULT_STALE_DAYS) || DEFAULT_STALE_DAYS))
+      const limit = Math.min(2000, Math.max(1, Number(q.get('limit') ?? 500) || 500))
+      const held = [...store.held().values()]
+      const judged = judgeRecords(held, { now: now(), staleDays })
+      const rows = held.map((r) => {
+        const j = judged.get(r.id)
+        const t = createdMs(r)
+        return { ...trimRecord(r), created_at: t === null ? null : new Date(t).toISOString(), created_ms: t, age_days: t === null ? null : Math.floor((now() - t) / 86400000), reasons: j.reasons, protection: j.protection, protection_reason: j.protection_reason }
+      }).sort((a, b) => (b.created_ms ?? 0) - (a.created_ms ?? 0))
+      const counts = {}
+      for (const r of rows) {
+        const c = (counts[r.type] ??= { total: 0, not_useful: 0, statuses: {} })
+        c.total++
+        if (r.reasons.length) c.not_useful++
+        if (r.status) c.statuses[r.status] = (c.statuses[r.status] ?? 0) + 1
+      }
+      const matched = filterRows(rows, { type: q.get('type') || undefined, status: q.get('status') || undefined, briefId: q.get('brief_id') || undefined, before: q.get('before') || undefined, after: q.get('after') || undefined, q: q.get('q') || undefined, notUseful: q.get('not_useful') === 'true' })
+      const st = store.status()
+      return send(res, 200, {
+        counts, total: rows.length, not_useful: rows.filter((r) => r.reasons.length).length, matched: matched.length,
+        records: matched.slice(0, limit).map(({ created_ms, ...r }) => r),
+        stale_days: staleDays, index: st, not_loaded: st.all_loaded ? [] : RECORD_TYPES.filter((t) => !st.types.includes(t)), dry_run: Boolean(store.dryRun), mem0_requests: 0
+      })
+    }
+    // Memory manager: load every type with one paged list of the whole agent (about 1 request per 100 records).
+    if (path === '/api/memory/load-all' && method === 'POST') {
+      if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: load when it has finished')
+      const u = config ? usageStatus(config, { now }) : null
+      if (u?.level === 'stop') throw new ApiError(429, 'mem0_quota', stopMessage(u))
+      const before = mem0Requests(currentMem0Counts())
+      const index = await store.loadAll()
+      return send(res, 200, { index, mem0_requests: mem0Requests(currentMem0Counts()) - before })
+    }
+    // Memory manager: delete records by id (1 Mem0 request each). Protected records are refused or need confirm_protected.
+    // Nothing is deleted when any id is refused or needs the confirm. The index drops each record as it is deleted.
+    if (path === '/api/records' && method === 'DELETE') {
+      const body = await readJson(req)
+      const ids = body.ids
+      if (!Array.isArray(ids) || !ids.length || ids.length > 200 || !ids.every((x) => typeof x === 'string' && x)) throw new ApiError(400, 'bad_params', 'ids must be a list of 1 to 200 record ids')
+      if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: delete when it has finished')
+      if (store.dryRun) throw new ApiError(409, 'dry_run', 'DRY_RUN is on: Mem0 deletes are skipped, so nothing would be deleted')
+      const u = config ? usageStatus(config, { now }) : null
+      if (u?.level === 'stop') throw new ApiError(429, 'mem0_quota', stopMessage(u))
+      const held = store.held()
+      const plan = planDelete(ids, held, judgeRecords([...held.values()], { now: now() }), { confirmProtected: body.confirm_protected === true })
+      if (plan.refused.length) return send(res, 400, { error: { code: 'refused', message: `${plan.refused.length} record(s) cannot be deleted: nothing was deleted` }, refused: plan.refused })
+      if (plan.needsConfirm.length) return send(res, 409, { error: { code: 'needs_confirm', message: `${plan.needsConfirm.length} protected record(s) need the extra confirm: nothing was deleted` }, needs_confirm: plan.needsConfirm })
+      const before = mem0Requests(currentMem0Counts())
+      const { deleted, failed } = await deleteIds(store, plan.ok.map((r) => r.id))
+      log.info('memory delete', { deleted: deleted.length, failed: failed.length, types: [...new Set(plan.ok.map((r) => r.type))] })
+      return send(res, failed.length && !deleted.length ? 502 : 200, { deleted, failed, mem0_requests: mem0Requests(currentMem0Counts()) - before })
     }
 
     // Refresh from Mem0 (Phase 9 A4): reload every type the index holds (one read per type).

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Activity, BookOpen, FileDown, Gauge, History, Inbox, Lightbulb, LogOut, Map as MapIcon, Menu, Monitor, Moon, Newspaper, Pin, Settings as SettingsIcon, Sun, X } from 'lucide-react'
+import { Activity, BookOpen, Database, FileDown, Gauge, History, Inbox, Lightbulb, LogOut, Map as MapIcon, Menu, Monitor, Moon, Newspaper, Pin, Settings as SettingsIcon, Sun, X } from 'lucide-react'
 import { api } from '../api/client'
 import { keys, useApprovals, useHealth, useRuns, useSettings } from '../api/queries'
 import { openEventStream } from '../api/sse'
@@ -84,6 +84,8 @@ export function Layout({ children }: { children: ReactNode }) {
     ...(settings.data?.roadmap?.enabled ? [{ to: '/roadmap', label: 'Roadmap', icon: <MapIcon size={18} /> }] : []),
     { to: '/runs', label: 'Runs', icon: <History size={18} />, end: true },
     { to: '/content', label: 'Content', icon: <BookOpen size={18} /> },
+    // What Mem0 holds, why a record may not be useful, and clean-up.
+    { to: '/memory', label: 'Memory', icon: <Database size={18} /> },
     // Phase 11: the final Markdown exports; the blog's Posts page only while the blog is the publish target.
     { to: '/exports', label: 'Exports', icon: <FileDown size={18} /> },
     ...(flagsOf(settings.data).blogOn ? [{ to: '/posts', label: 'Posts', icon: <Newspaper size={18} /> }] : []),

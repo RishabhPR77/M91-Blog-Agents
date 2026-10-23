@@ -12,6 +12,7 @@ const Runs = lazy(() => import('./pages/Runs'))
 const Approvals = lazy(() => import('./pages/Approvals'))
 const ApprovalDetail = lazy(() => import('./pages/ApprovalDetail'))
 const Content = lazy(() => import('./pages/Content'))
+const Memory = lazy(() => import('./pages/Memory'))
 const RecordDetail = lazy(() => import('./pages/RecordDetail'))
 const Pinned = lazy(() => import('./pages/Pinned'))
 const Lessons = lazy(() => import('./pages/Lessons'))
@@ -36,6 +37,7 @@ export function AppRoutes() {
                 <Route path="/approvals" element={<Approvals />} />
                 <Route path="/approvals/:briefId" element={<ApprovalDetail />} />
                 <Route path="/content" element={<Content />} />
+                <Route path="/memory" element={<Memory />} />
                 <Route path="/records/:memoryId" element={<RecordDetail />} />
                 <Route path="/pinned" element={<Pinned />} />
                 <Route path="/lessons" element={<Lessons />} />

@@ -315,6 +315,34 @@ WRITER_REVISION_INPUT=full
 `REVISE_BELOW_SCORE=80` brings back the old rule for the score (a low area or a minor check still gives a pass with
 notes). Costs: 0 extra AI calls; a revision's prompt is longer (the full draft).
 
+## The Memory manager (dashboard /memory)
+
+A page to see what Mem0 holds, judge whether each record is still useful, and delete what is not.
+
+- **What it shows:** every record the engine's index holds, with counts per type (and how many look unused), filters
+  (type, status, brief id, created after/before, title or id search, "Probably not useful", "Old after N days") and
+  why each record may not be useful. Clicking a title opens the record (RecordDetail).
+- **Why a record may not be useful** (`src/memory.js`, `judgeRecords`): a dead status (superseded, expired,
+  discarded, cancelled, old, failed, rejected, failed_review, publish_failed, unpublished); dry-run or smoke-test data
+  and broken version numbering (the cleanup rules); made for a brief that was rejected, replaced by a newer brief
+  version, or is no longer in memory; a review/promo pack/guide of a draft that was superseded or rejected; the newest
+  brief with no draft after N days; duplicates (same type and brief + version or lead id, or a lead with the same
+  title; the newest copy is kept); leads (clusters, stories, tutorials, timely cards) older than N days that no brief,
+  run, roadmap or knowledge record refers to; run history and run logs older than N days. Nothing is flagged for
+  records of an approved or published post.
+- **Protection:** never deletable here: published posts, current M91 facts and style notes, the approved roadmap,
+  current knowledge records, and exports of approved or published posts. Deletable with an extra tick: lessons,
+  open pinned topics, other blog post records, a roadmap that is not approved, settings, and the briefs, drafts and
+  reviews of an approved or published post.
+- **API:** `GET /api/memory` (index only, 0 Mem0 requests; `not_loaded` names types the index has not loaded),
+  `POST /api/memory/load-all` (one paged list of the whole agent id, about 1 request per 100 records, then every type
+  is held; Refresh repeats it), `DELETE /api/records` with `{ ids, confirm_protected }` (1 request per delete). The
+  delete is refused while a run is in progress (409), with DRY_RUN on (409, deletes would be skipped), at the Mem0
+  stop level (429), or when any id is protected (400) or needs the tick (409); then nothing is deleted. The index
+  drops each deleted record from its own write events, so no re-read is needed.
+- **Costs:** every list and filter 0 Mem0 requests; Load all ≈ records / 100; each delete 1. List views never read
+  records one by one.
+
 ## Hosting on Embarko (admin login)
 
 The engine and dashboard can run on Embarko as `m91-engine`, behind an admin ID + password login that is forced

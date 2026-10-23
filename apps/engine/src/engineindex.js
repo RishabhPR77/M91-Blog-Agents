@@ -3,7 +3,7 @@
 // the type as a server-side filter, then kept up to date by every write this process makes (store write
 // events). Writes by another process (a CLI command) stamp the write marker; the index then reports itself
 // as out of date until a refresh. It has the store's interface, so the API and the run checks use it as is.
-import { recordMatches, RECORD_TYPES } from './store.js'
+import { recordMatches, RECORD_TYPES, toRecord } from './store.js'
 import { onStoreWrite, readWriteMarker } from './storeevents.js'
 import { log } from './util/log.js'
 
@@ -20,6 +20,8 @@ export function createEngineIndex(base, { config = null, now = Date.now, pid = p
   const loose = new Map()
   const dirty = new Set()
   let loadedAt = null
+  // Memory page: every type was loaded with one paged list of the whole agent (loadAll).
+  let allLoaded = false
 
   const copy = (r) => (r ? { ...r, metadata: { ...(r.metadata ?? {}) } } : r)
 
@@ -92,8 +94,45 @@ export function createEngineIndex(base, { config = null, now = Date.now, pid = p
       for (const t of list) await load(t)
       log.info('index loaded', { types: [...types.keys()], records: [...types.values()].reduce((n, m) => n + m.size, 0) })
     },
+    /**
+     * Memory page: every record of this agent, any type (run logs, locks and records of unknown type too), with one
+     * paged list (about 1 Mem0 request per 100 records) instead of one list per type. Stores without that list load
+     * each type instead.
+     */
+    async loadAll() {
+      if (base.listAgentMemories) {
+        const byType = new Map()
+        for (const m of await base.listAgentMemories()) {
+          const r = toRecord(m)
+          const type = r.type || 'unknown'
+          if (!byType.has(type)) byType.set(type, new Map())
+          byType.get(type).set(r.id, copy({ ...r, type }))
+        }
+        types.clear()
+        loose.clear()
+        dirty.clear()
+        for (const t of RECORD_TYPES) types.set(t, byType.get(t) ?? new Map())
+        for (const [t, m] of byType) if (!types.has(t)) types.set(t, m)
+      } else {
+        for (const t of RECORD_TYPES) {
+          if (SKIP.has(t)) types.set(t, new Map((await base.getRecords({ type: t })).map((r) => [r.id, copy(r)])))
+          else await load(t)
+        }
+      }
+      allLoaded = true
+      loadedAt = now()
+      return this.status()
+    },
+    /** Every record the index holds now (no Mem0 request). */
+    held() {
+      const out = new Map()
+      for (const m of types.values()) for (const [id, r] of m) out.set(id, copy(r))
+      for (const [id, r] of loose) if (!out.has(id)) out.set(id, copy(r))
+      return out
+    },
     /** Reloads every loaded type from Mem0 (the dashboard's Refresh). */
     async refresh() {
+      if (allLoaded) return this.loadAll()
       const loaded = [...types.keys()]
       types.clear()
       loose.clear()
@@ -104,7 +143,7 @@ export function createEngineIndex(base, { config = null, now = Date.now, pid = p
       return this.status()
     },
     status() {
-      return { loaded_at: loadedAt === null ? null : new Date(loadedAt).toISOString(), types: [...types.keys()], records: [...types.values()].reduce((n, m) => n + m.size, 0), out_of_date: outOfDate() }
+      return { loaded_at: loadedAt === null ? null : new Date(loadedAt).toISOString(), types: [...types.keys()], all_loaded: allLoaded, records: [...types.values()].reduce((n, m) => n + m.size, 0), out_of_date: outOfDate() }
     },
     outOfDate,
     getRecords,
