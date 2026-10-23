@@ -170,12 +170,11 @@ export default function Memory() {
                 <tr className="border-b border-slate-200 dark:border-slate-800">
                   <th className="px-2 py-1.5"><input type="checkbox" aria-label="Select all shown" checked={allChosen} onChange={() => setSelected(allChosen ? new Set() : new Set(deletable.map((r) => r.id)))} /></th>
                   <th className="px-2 py-1.5 font-medium">Type</th>
-                  <th className="px-2 py-1.5 font-medium">Title / text</th>
+                  <th className="px-2 py-1.5 font-medium">Title / text · why it may not be useful</th>
                   <th className="px-2 py-1.5 font-medium">Status</th>
                   <th className="px-2 py-1.5 font-medium">Brief</th>
                   <th className="px-2 py-1.5 font-medium">Created</th>
-                  <th className="px-2 py-1.5 font-medium">Why it may not be useful</th>
-                  <th className="px-2 py-1.5"><span className="sr-only">Actions</span></th>
+                  <th className="px-2 py-1.5" aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
@@ -189,14 +188,12 @@ export default function Memory() {
                     <td className="whitespace-nowrap px-2 py-1.5">{label(r.type)}{r.version != null ? <span className="text-slate-500"> v{r.version}</span> : null}</td>
                     <td className="px-2 py-1.5">
                       <Link to={`/records/${r.id}`} className="hover:underline">{r.title || <span className="font-mono text-xs text-slate-400">{r.key_id ?? r.id.slice(0, 8)}</span>}</Link>
+                      {r.reasons.length ? <ul className="mt-0.5 space-y-0.5" aria-label="Why it may not be useful">{r.reasons.map((x) => <li key={x.code} className="text-xs text-amber-700 dark:text-amber-300">{x.text}</li>)}</ul> : null}
                       {r.protection === 'confirm' && <div className="text-xs text-slate-500"><Lock size={11} className="inline" /> {r.protection_reason} (extra confirm)</div>}
                     </td>
                     <td className="px-2 py-1.5"><StatusBadge status={r.status} /></td>
                     <td className="whitespace-nowrap px-2 py-1.5 font-mono text-xs">{r.brief_id ?? ''}</td>
                     <td className="whitespace-nowrap px-2 py-1.5">{r.created_at?.slice(0, 10) ?? r.date ?? ''}{r.age_days != null && <div className="text-xs text-slate-500">{r.age_days} d ago</div>}</td>
-                    <td className="px-2 py-1.5">
-                      {r.reasons.length ? <ul className="space-y-0.5">{r.reasons.map((x) => <li key={x.code} className="text-xs text-amber-700 dark:text-amber-300">{x.text}</li>)}</ul> : <span className="text-xs text-slate-400">—</span>}
-                    </td>
                     <td className="px-2 py-1.5">
                       {r.protection !== 'never' && (
                         <button type="button" aria-label={`Delete ${r.title ?? r.id}`} className="text-slate-400 hover:text-red-600" onClick={() => setToDelete([r])}><Trash2 size={15} /></button>
