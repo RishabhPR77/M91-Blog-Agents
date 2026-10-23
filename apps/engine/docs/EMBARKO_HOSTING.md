@@ -61,6 +61,10 @@ publishing of the blog stays off (`PUBLISH_TARGET=none`); this is only where the
 | `npm run embarko -- status | logs | deployments | env-keys` | Looks at the deployed app. |
 | `npm run embarko -- apply-env --yes` / `rollback --yes [<id>]` | Applies saved settings / rolls back. |
 
+On Windows the deploy runs `deploy.sh` with Git Bash (`C:\Program Files\Git\bin\bash.exe`). A plain `bash` from
+PowerShell is often WSL's, which cannot see `C:/` paths ("No such file or directory"). Set `EMBARKO_BASH` to use
+another bash.
+
 ## What is not known until the first deploy
 
 Whether the app sleeps when idle, whether Embarko's proxy streams server-sent events without buffering, the real

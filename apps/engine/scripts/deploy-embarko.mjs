@@ -22,6 +22,17 @@ export function deployScriptPath(env = process.env) {
   return env.EMBARKO_DEPLOY_SCRIPT || join(homedir(), '.claude', 'skills', 'embarko-deploy', 'scripts', 'deploy.sh')
 }
 
+/**
+ * The bash that runs deploy.sh. On Windows a bare "bash" from PowerShell is often WSL's (WindowsApps), which cannot see
+ * C:/ paths, so Git Bash is preferred: EMBARKO_BASH, else Git for Windows' usual places, else "bash".
+ */
+export function bashPath(env = process.env, { platform = process.platform, exists = existsSync } = {}) {
+  if (env.EMBARKO_BASH) return env.EMBARKO_BASH
+  if (platform !== 'win32') return 'bash'
+  const roots = [env.ProgramFiles, env['ProgramFiles(x86)'], env.LOCALAPPDATA && join(env.LOCALAPPDATA, 'Programs')].filter(Boolean)
+  return roots.map((r) => join(r, 'Git', 'bin', 'bash.exe')).find((p) => exists(p)) ?? 'bash'
+}
+
 /** The version label: engine version, short commit, time (unique per upload). */
 export function versionLabel(now = new Date()) {
   const pkg = JSON.parse(readFileSync(join(ENGINE, 'package.json'), 'utf8'))
@@ -54,7 +65,7 @@ async function main() {
     console.error(`The embarko-deploy script was not found at ${script}. Set EMBARKO_DEPLOY_SCRIPT to its path.`)
     process.exit(1)
   }
-  const child = spawn('bash', [script.replace(/\\/g, '/'), STAGE.replace(/\\/g, '/'), name, versionLabel()], {
+  const child = spawn(bashPath(), [script.replace(/\\/g, '/'), STAGE.replace(/\\/g, '/'), name, versionLabel()], {
     env: { ...process.env, DEPLOY_TOKEN: token, EMBARKO_APP_TYPE: 'admin dashboard', EMBARKO_AGENT_NAME: 'claude-code' },
     stdio: ['ignore', 'pipe', 'pipe']
   })

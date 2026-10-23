@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { buildStage, scanStage, stagePackage, APP_HEAP_MB } from '../scripts/package-embarko.mjs'
 import { envNames, parseTemplate, SET_BY_EMBARKO } from '../scripts/embarko-env.mjs'
-import { maskToken, deployScriptPath, versionLabel, DEFAULT_NAME } from '../scripts/deploy-embarko.mjs'
+import { maskToken, deployScriptPath, bashPath, versionLabel, DEFAULT_NAME } from '../scripts/deploy-embarko.mjs'
 
 const tmp = (name) => mkdtempSync(join(tmpdir(), `m91-${name}-`))
 const put = (root, rel, text = 'x') => {
@@ -160,6 +160,15 @@ test('deploy wrapper: the token is masked wherever it shows, the script path and
   assert.match(deployScriptPath({}), /embarko-deploy[\\/]scripts[\\/]deploy\.sh$/)
   assert.equal(deployScriptPath({ EMBARKO_DEPLOY_SCRIPT: '/x/deploy.sh' }), '/x/deploy.sh')
   assert.match(versionLabel(new Date('2026-10-23T06:05:00Z')), /^\d+\.\d+\.\d+-[0-9a-z]+-20261023\d{4}$/)
+})
+
+test('deploy wrapper: Git Bash on Windows (WSL bash cannot see C:/ paths); EMBARKO_BASH wins; plain bash elsewhere', () => {
+  const git = join('C:\\Program Files', 'Git', 'bin', 'bash.exe')
+  const win = { platform: 'win32', exists: (p) => p === git }
+  assert.equal(bashPath({ ProgramFiles: 'C:\\Program Files' }, win), git)
+  assert.equal(bashPath({ ProgramFiles: 'C:\\Program Files', EMBARKO_BASH: 'D:\\tools\\bash.exe' }, win), 'D:\\tools\\bash.exe')
+  assert.equal(bashPath({ ProgramFiles: 'C:\\Nowhere' }, win), 'bash', 'no Git Bash found: plain bash')
+  assert.equal(bashPath({}, { platform: 'linux', exists: () => true }), 'bash')
 })
 
 test('deploy wrapper: without --yes nothing is uploaded; with --yes but no token it refuses (no anonymous deploy)', async () => {
