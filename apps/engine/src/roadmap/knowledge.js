@@ -1,6 +1,9 @@
 // The knowledge map (Phase 12, Task 5): one short `knowledge` record per approved post, saved by code when the
 // person approves it (one write, no AI). The Strategist reads them all, so a new post never re-explains what an
 // earlier post taught: it points to that post instead.
+import { listGuides, guidesAsKnowledge } from '../guides/sync.js'
+import { loadRoadmap } from './model.js'
+
 
 /** The knowledge record's payload from the approved brief, draft, slot and export. */
 export function knowledgeOf({ briefId, brief = {}, draft = {}, slot = null, stage = null, exportInfo = null }) {
@@ -24,12 +27,26 @@ export function knowledgeOf({ briefId, brief = {}, draft = {}, slot = null, stag
 export const KNOWLEDGE_MAX = 40
 export const KNOWLEDGE_SUMMARY_MAX = 200
 
-/** All knowledge records, oldest first (the order the reader met them). */
+/**
+ * All knowledge records, oldest first (the order the reader met them), plus the M91 guides already live on
+ * msg91.com/guide that no knowledge record stands for (a hand-written guide, or one published before this engine).
+ */
 export async function knowledgeMap(store) {
-  return (await store.getRecords({ type: 'knowledge' }))
-    .map((r) => r.payload)
-    .filter(Boolean)
-    .sort((a, b) => String(a.approved_at ?? '').localeCompare(String(b.approved_at ?? '')))
+  const own = (await store.getRecords({ type: 'knowledge' })).map((r) => r.payload).filter(Boolean)
+  const titles = new Set(own.map((k) => norm(k.title)))
+  const links = new Set(own.map((k) => k.link).filter(Boolean))
+  const slugs = new Set(own.map((k) => k.export_slug).filter(Boolean))
+  const guides = (await listGuides(store)).filter((g) => !titles.has(norm(g.title)) && !links.has(g.url) && !slugs.has(g.slug))
+  const coveredBy = await coveredSlots(store)
+  return [...own, ...guidesAsKnowledge(guides, coveredBy)].sort((a, b) => String(a.approved_at ?? '').localeCompare(String(b.approved_at ?? '')))
+}
+
+const norm = (t) => String(t ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+/** guide URL → the roadmap slot it covers. */
+async function coveredSlots(store) {
+  const rec = await loadRoadmap(store)
+  return new Map((rec?.payload?.stages ?? []).flatMap((st) => st.slots ?? []).filter((s) => s.status === 'covered' && s.covered_by?.url).map((s) => [s.covered_by.url, s.slot_id]))
 }
 
 /** Saves the knowledge record of an approved post (replacing an earlier one of the same brief). */

@@ -3,9 +3,11 @@
 // and the person approves the roadmap before any pipeline run (Task 3).
 
 export const LEVELS = Object.freeze(['beginner', 'intermediate', 'advanced'])
-export const SLOT_STATUSES = Object.freeze(['planned', 'drafting', 'in_review', 'approved', 'skipped', 'proposed'])
+// covered: a guide already live on msg91.com/guide answers this slot (slot.covered_by = { url, title }); it is done
+// and never written again.
+export const SLOT_STATUSES = Object.freeze(['planned', 'drafting', 'in_review', 'approved', 'skipped', 'proposed', 'covered'])
 /** Slots a (re)generation never changes: work has started on them, or the person decided about them. */
-export const LOCKED_STATUSES = Object.freeze(['drafting', 'in_review', 'approved', 'skipped'])
+export const LOCKED_STATUSES = Object.freeze(['drafting', 'in_review', 'approved', 'skipped', 'covered'])
 
 export const STAGES = Object.freeze([
   { number: 0, name: 'Starter', level: 'beginner', goal: 'What M91 is, why software needs a human sometimes, and how it works, for someone who has never heard of it.' },

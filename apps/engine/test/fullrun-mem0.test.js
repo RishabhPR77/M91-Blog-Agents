@@ -7,7 +7,7 @@ import { setSink } from '../src/util/log.js'
 import { measureFullRun, table } from './fixtures/fullrun.js'
 
 // WORK_STORE=mem0 (fakeConfig's default): every step in Mem0, as before the work store.
-test('full run: 30 Mem0 requests (28 before Phase 10, 160 before Phase 9): no searches, no run_log, reads only for data from before the run', async (t) => {
+test('full run: 31 Mem0 requests (30 before the published guides, 28 before Phase 10, 160 before Phase 9): no searches, no run_log, reads only for data from before the run', async (t) => {
   const restore = setSink(() => {})
   const m = await measureFullRun({ EMBARKO_DEPLOY_TOKEN: 'emb_faketokenfortests_0123456789' }, { decisions: true })
   restore()
@@ -15,11 +15,12 @@ test('full run: 30 Mem0 requests (28 before Phase 10, 160 before Phase 9): no se
   assert.equal(m.status, 'succeeded', m.summary)
   assert.deepEqual(m.ai, { scout: 8, strategist: 1, writer: 2, designer: 2, reviewer: 2 })
   // Phase 10: one guide_doc write per draft version (2 here), no reads: the Experience Designer gets its inputs from the run.
-  assert.deepEqual(m.total, { reads: 12, searches: 0, writes: 18 })
+  // One more read than before: the published guides (loaded once into the index).
+  assert.deepEqual(m.total, { reads: 13, searches: 0, writes: 18 })
   assert.equal(m.types.run_log, undefined, 'no run_log records')
   assert.equal(m.types.lock, undefined, 'no lock records (the lock is a local file)')
   // Reads are the lists of data from before the run, each once: the Scout's, then only the new types later.
-  assert.deepEqual(Object.fromEntries(Object.entries(m.byStep).map(([k, v]) => [k, v.reads])), { run: 0, scout: 8, strategist: 3, writer: 1, designer: 0, reviewer: 0 })
+  assert.deepEqual(Object.fromEntries(Object.entries(m.byStep).map(([k, v]) => [k, v.reads])), { run: 0, scout: 8, strategist: 4, writer: 1, designer: 0, reviewer: 0 })
   // Writes: what must outlast the run (facts note, cluster, brief, lead, drafts, reviews, run record).
   assert.equal(m.byStep.run.writes, 5, 'the run record: start, waiting for approval, end; the brief and draft statuses')
 
@@ -31,14 +32,14 @@ test('full run: 30 Mem0 requests (28 before Phase 10, 160 before Phase 9): no se
   for (const mode of Object.keys(m.decisions)) assert.equal(m.decisions[mode].total.searches, 0, mode)
 })
 
-test('WORK_STORE=local: a full run sends 17 Mem0 requests (30 with every step in Mem0); the approved post is copied to Mem0, the failed attempts never are', async (t) => {
+test('WORK_STORE=local: a full run sends 18 Mem0 requests (31 with every step in Mem0); the approved post is copied to Mem0, the failed attempts never are', async (t) => {
   const restore = setSink(() => {})
   const m = await measureFullRun({ EMBARKO_DEPLOY_TOKEN: 'emb_faketokenfortests_0123456789', WORK_STORE: 'local' }, { decisions: true })
   restore()
   t.diagnostic(`\n${table(m)}`)
   assert.equal(m.status, 'succeeded', m.summary)
   // Reads are unchanged (data from before the run); writes are the context (facts, cluster, lead) and the run summary.
-  assert.deepEqual(m.total, { reads: 12, searches: 0, writes: 5 })
+  assert.deepEqual(m.total, { reads: 13, searches: 0, writes: 5 })
   for (const type of ['brief', 'draft', 'review', 'guide_doc', 'source_pack']) assert.equal(m.types[type], undefined, `no ${type} in Mem0 while the post waits`)
   assert.equal(m.types.run, 1, 'one short run summary')
   for (const [mode, d] of Object.entries(m.decisions)) assert.equal(d.status, 'succeeded', `${mode}: ${d.summary}`)

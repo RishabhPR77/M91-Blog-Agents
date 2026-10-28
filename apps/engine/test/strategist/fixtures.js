@@ -57,7 +57,7 @@ export function validBrief(over = {}) {
     why_today: 'Developers are asking this now.',
     titles: ['How to make your AI agent wait for a human yes', 'Stop agents acting before a person approves', 'Agent approvals when nobody answers'],
     keyword: 'ai agent human approval',
-    supporting_keywords: ['agent approval', 'human in the loop', 'approval timeout'],
+    supporting_keywords: ['agent approval', 'human in the loop', 'approval timeout', 'human approval', 'approval workflow', 'phone alerts', 'escalation', 'AI agent'],
     topic_group: 1,
     reader: 'Developers building AI agents who need a person to approve risky steps.',
     intent: 'learn',

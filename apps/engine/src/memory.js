@@ -124,6 +124,7 @@ export function judgeRecords(records, { now = Date.now(), staleDays = DEFAULT_ST
     if (r.type === 'roadmap') r.status === 'approved' ? protect(r, 'never', 'the approved roadmap') : protect(r, 'confirm', 'the roadmap')
     if (r.type === 'knowledge' && r.status === 'current') protect(r, 'never', 'what an approved post taught (the roadmap uses it)')
     if (r.type === 'markdown_export' && r.briefId && briefs.get(r.briefId)?.live) protect(r, 'never', "an approved post's export")
+    if (r.type === 'published_guide' && r.status === 'live') protect(r, 'confirm', 'a guide that is live on msg91.com/guide (the roadmap and the links use it)')
     if (r.type === 'lesson') protect(r, 'confirm', 'a lesson the agents learn from')
     if (r.type === 'pinned_topic' && r.status === 'open') protect(r, 'confirm', 'an open pinned topic')
     if (['brief', 'draft', 'review'].includes(r.type) && r.briefId && briefs.get(r.briefId)?.live) protect(r, 'confirm', 'part of an approved or published post')

@@ -87,3 +87,24 @@ export async function decideProposed(store, slotId, accept, { now = Date.now } =
   else stage.slots.splice(index, 1)
   return commit(store, rec, roadmap, now)
 }
+
+/**
+ * Marks a planned slot as covered by a published guide (it is done, never written), or puts a covered slot back to
+ * planned (guide null). guide: { url, title } of a known published guide.
+ */
+export async function setCovered(store, slotId, guide, { now = Date.now } = {}) {
+  const rec = await current(store)
+  const roadmap = clone(rec.payload)
+  const { slot } = findSlot(roadmap, slotId)
+  if (guide) {
+    if (slot.status !== 'planned') throw new RoadmapError('slot_locked', `only a planned slot can be marked covered (${slotId} is ${slot.status})`)
+    slot.status = 'covered'
+    slot.covered_by = { url: guide.url, title: guide.title }
+  } else {
+    if (slot.status !== 'covered') throw new RoadmapError('bad_params', `slot ${slotId} is not covered`, 400)
+    slot.status = 'planned'
+    delete slot.covered_by
+  }
+  return commit(store, rec, roadmap, now)
+}
+

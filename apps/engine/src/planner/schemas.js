@@ -15,6 +15,8 @@ export const planner_roadmap = {
       number: { type: 'integer', enum: [0, 1, 2, 3, 4, 5] },
       slots: arr(obj({ slot_id: str, title_idea: str, question: str, teaches: arr(str), needs: arr(str) }))
     })),
+    // Slots a guide already live on msg91.com/guide answers (PUBLISHED GUIDES): they are marked covered, never written.
+    covered: arr(obj({ slot_id: str, guide_url: str })),
     notes: str
   })
 }

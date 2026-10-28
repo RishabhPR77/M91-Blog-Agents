@@ -3,7 +3,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from './client'
 
-export type SlotStatus = 'planned' | 'drafting' | 'in_review' | 'approved' | 'skipped' | 'proposed'
+/** covered: a guide already live on msg91.com/guide answers this slot (covered_by); it is done and never written. */
+export type SlotStatus = 'planned' | 'drafting' | 'in_review' | 'approved' | 'skipped' | 'proposed' | 'covered'
 export type RoadmapSlot = {
   slot_id: string
   title_idea: string
@@ -14,6 +15,7 @@ export type RoadmapSlot = {
   brief_id: string
   evidence_url?: string
   demand_evidence?: string
+  covered_by?: { url: string; title: string }
 }
 export type RoadmapStage = { number: number; name: string; level: 'beginner' | 'intermediate' | 'advanced'; goal: string; slots: RoadmapSlot[] }
 export type Roadmap = { version: number; status: 'draft' | 'approved'; stages: RoadmapStage[]; generated_at?: string | null; approved_at?: string | null; model_used?: string | null; notes?: string; updated_at?: string }
@@ -28,6 +30,13 @@ export type NextUp = (
 export type RoadmapResponse = { roadmap: Roadmap | null; record_id: string | null; next: NextUp; problems: string[] }
 
 export const roadmapKey = ['roadmap'] as const
+
+/** The M91 guides already live on msg91.com/guide (GET /api/guides). covers: the slot a guide covers. */
+export type Guide = { url: string; title: string; published_at: string | null; summary: string; headings: string[]; words: number | null; synced_at: string | null; covers: string | null }
+export type GuidesResponse = { guides: Guide[]; newer_than_roadmap: number }
+export const guidesKey = ['guides'] as const
+export const useGuides = (enabled = true) =>
+  useQuery({ queryKey: guidesKey, queryFn: () => api<GuidesResponse>('/api/guides'), enabled, staleTime: 30_000 })
 
 export const useRoadmap = (enabled = true) =>
   useQuery({ queryKey: roadmapKey, queryFn: () => api<RoadmapResponse>('/api/roadmap'), enabled, staleTime: 15_000 })

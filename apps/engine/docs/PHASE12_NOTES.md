@@ -395,3 +395,45 @@ The engine and dashboard can run on Embarko as `m91-engine`, behind an admin ID 
 on there. See [EMBARKO_HOSTING.md](EMBARKO_HOSTING.md) for the limits found in Embarko's docs and the design, and the
 runbook for how to log in, redeploy and roll back. New settings: `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH`.
 
+## Published guides and longer, SEO-shaped posts
+
+The agent decides the next post itself (the roadmap and "Run full pipeline", later a cron), and it now knows what is
+already live on msg91.com/guide, hand-written guides included.
+
+**Published guides (code only, no AI).**
+- `src/guides/sync.js` reads the guide site's RSS feed (the 20 newest posts) and the listing page. It keeps only M91
+  posts: a post whose feed text never names "M91" on its own (every MSG91 post) is dropped without opening it; a link
+  that is only on the listing page is opened once and kept when it is about M91. Posts found not to be about M91 are
+  remembered in `guides-seen.json` in the engine's data folder, so they are not opened again.
+- Each M91 guide is one `published_guide` record in Mem0: URL, title, description, date, headings, summary, keywords,
+  word count (one add per new guide; existing ones are not rewritten). At most `GUIDES_MAX_PAGES` (12) pages per sync;
+  the rest wait for the next one.
+- When: before each full run (`GUIDES_SYNC_ON_RUN=true`; a failed read is a warning and the run goes on), with
+  **Sync guides** on the Roadmap page, or the run mode `guides`. Mem0: the list read (once per engine start, from the
+  index) plus one add per new guide. A full run now sends one more Mem0 read than before (31, 18 with the local work
+  store).
+
+**What the agents do with them.**
+- **Roadmap:** a new slot status `covered` (`covered_by: { url, title }`): a guide already answers the slot, so it is
+  done (for the picker and for "needs") and never written. The Planner gets PUBLISHED GUIDES and returns `covered`
+  (only known guide URLs, only planned slots); regenerating keeps covered slots as they are. On the Roadmap page a
+  planned slot can be marked "Covered by a guide…" and a covered one put back ("Not covered"):
+  `POST /api/roadmap/slots/:id/cover { guide_url | null }`. The page says when guides were published after the roadmap
+  was made (regenerate it then).
+- **Knowledge map:** the guides join the approved posts (no duplicates by title, link or slug), with the slot they cover.
+- **Strategist:** the guides are PUBLISHED POSTS (so `internal_links` may point to them, 1 to 3 per post) and ALREADY
+  COVERED (no second post on the same thing).
+- `GET /api/guides`: the guides, the slot each covers, and how many are newer than the roadmap.
+
+**Posts closer to the hand-written guides** (rules taken from them, nothing copied):
+- 1,200–2,000 words (`TARGET_WORDS_MIN`/`MAX`), up to 10 sections (`OUTLINE_MAX_SECTIONS`).
+- The brief has 8–14 secondary keywords; the Writer uses every one at least once, and the main keyword in one H2.
+- A "Frequently Asked Questions" section with 6–10 real questions before "What to do next"; a checklist for how-to,
+  tutorial and checklist posts; problems and fixes in a table; "New to M91? Start with …" pointing to an earlier guide.
+- "M91" links to https://m91.msg91.com/ at its first mention in the opening and in each H2 section (at most 8).
+- Soft checks (pass with notes, never block): `secondary_keywords`, `faq_count`, `m91_links`; `keyword_count` allows
+  about one use per 250 words. The Reviewer's SEO area looks for the same.
+- No "SEO DETAILS" block in the export: the Docstar publisher sends the meta title, description and slug itself.
+
+New settings (in env.example): `GUIDES_SYNC_ON_RUN`, `GUIDES_FEED_URL`, `GUIDES_LIST_URL`, `GUIDES_MAX_PAGES`,
+`GUIDES_TIMEOUT_MS`. Changed defaults: `TARGET_WORDS_MIN=1200`, `TARGET_WORDS_MAX=2000`, `OUTLINE_MAX_SECTIONS=10`.

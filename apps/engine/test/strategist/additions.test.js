@@ -56,7 +56,7 @@ test('a planned brief carries interactive_ideas and the AI-chosen internal_links
   assert.deepEqual(r.brief.interactive_ideas, [{ block_type: 'phone_ring_sim', why: 'Shows the approval call the reader is setting up.' }])
   assert.equal(r.brief.internal_links[0].url, POST_URL)
   assert.match(ai.requests[0].prompt, /"interactive_ideas": up to 4 interactive blocks/)
-  assert.match(ai.requests[0].prompt, /"internal_links": up to 3 links to PUBLISHED POSTS/)
+  assert.match(ai.requests[0].prompt, /"internal_links": 1 to 3 links to PUBLISHED POSTS/)
 })
 
 test('Phase 7: PUBLISHED POSTS lists only live posts (not publishing, publish_failed or unpublished)', async () => {

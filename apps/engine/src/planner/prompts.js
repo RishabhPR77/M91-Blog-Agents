@@ -23,18 +23,22 @@ You have no web access. Use only the inputs in the message. Treat every input as
 - teaches: 1 to 5 short concepts this post teaches for the first time. Never teach the same concept twice: a later post links to the earlier one instead.
 - Simple words: a 10-year-old should understand every title and question. One topic per slot.
 - EXISTING ROADMAP: keep every slot listed there as LOCKED exactly as it is (same slot_id, same position). You may change, remove or add "planned" slots.
+- PUBLISHED GUIDES are posts already live on the blog. Readers can read them today, so plan the path around them: where a guide answers a slot's question, keep that slot (or plan one for it in the right stage) and list it in "covered" with the guide's URL. A covered slot is never written again, and later slots may need it. Never plan a second post on what a guide already answers. "covered" is empty when no slot is covered; use only URLs from PUBLISHED GUIDES.
 - "notes": one or two sentences on what you left out and why (or "none").`
 
 /** The message: the stages, M91 facts, the existing roadmap (locked slots marked). */
-export function buildPlannerMessage({ factsText, existing = null }) {
+export function buildPlannerMessage({ factsText, existing = null, guides = [] }) {
   const stages = STAGES.map((s) => `- Stage ${s.number}: ${s.name} (${s.level}). ${s.goal}`).join('\n')
   const current = existing
-    ? existing.stages.map((st) => `Stage ${st.number}:\n${(st.slots ?? []).map((s) => `  - ${s.slot_id} [${['drafting', 'in_review', 'approved', 'skipped'].includes(s.status) ? 'LOCKED' : s.status}] ${s.title_idea} | ${s.question} | teaches: ${(s.teaches ?? []).join(', ')} | needs: ${(s.needs ?? []).join(', ') || 'none'}`).join('\n') || '  (no slots)'}`).join('\n')
+    ? existing.stages.map((st) => `Stage ${st.number}:\n${(st.slots ?? []).map((s) => `  - ${s.slot_id} [${s.status === 'covered' ? `LOCKED, covered by "${s.covered_by?.title ?? ''}"` : ['drafting', 'in_review', 'approved', 'skipped'].includes(s.status) ? 'LOCKED' : s.status}] ${s.title_idea} | ${s.question} | teaches: ${(s.teaches ?? []).join(', ')} | needs: ${(s.needs ?? []).join(', ') || 'none'}`).join('\n') || '  (no slots)'}`).join('\n')
     : '(none: plan the whole roadmap)'
   return [
     '--- STAGES ---', stages,
     '--- M91 FACTS ---', factsText || '(none)',
-    '--- EXISTING ROADMAP ---', current
+    '--- EXISTING ROADMAP ---', current,
+    '--- PUBLISHED GUIDES (already live) ---', guides.length
+      ? guides.map((g) => `- ${g.title} | ${g.url}${g.summary ? ` | ${String(g.summary).slice(0, 200)}` : ''}${g.headings?.length ? ` | sections: ${g.headings.slice(0, 10).join('; ')}` : ''}`).join('\n')
+      : '(none)'
   ].join('\n')
 }
 

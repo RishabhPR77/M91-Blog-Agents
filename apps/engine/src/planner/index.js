@@ -15,6 +15,7 @@ import { STAGES, LOCKED_STATUSES, loadRoadmap, saveRoadmap } from '../roadmap/mo
 import { roadmapProblems } from '../roadmap/checks.js'
 import { planner_roadmap, plannerSchemaErrors } from './schemas.js'
 import { PLANNER_PROMPT, buildPlannerMessage, plannerRepairTail } from './prompts.js'
+import { listGuides } from '../guides/sync.js'
 
 export class PlannerError extends Error {
   constructor(message, { problems = [] } = {}) {
@@ -30,7 +31,7 @@ export const plannerThreadId = (runId, call) => `planner-${runId}-${call}-${rand
  * The roadmap from a Planner answer: the code's stages with the answer's slots (status "planned"), then every
  * locked slot and every proposed slot of the existing roadmap put back exactly as it was.
  */
-export function roadmapFromAnswer(answer, existing = null) {
+export function roadmapFromAnswer(answer, existing = null, guides = []) {
   const byStage = new Map((answer?.stages ?? []).map((st) => [st.number, st.slots ?? []]))
   const keep = (existing?.stages ?? []).flatMap((st) => (st.slots ?? []).filter((s) => LOCKED_STATUSES.includes(s.status) || s.status === 'proposed').map((s) => ({ ...s, stage: st.number })))
   const stages = STAGES.map((st) => {
@@ -47,6 +48,16 @@ export function roadmapFromAnswer(answer, existing = null) {
     }
     return { ...st, slots }
   })
+  // Slots a published guide answers: covered (done, never written). Only known guide URLs, only planned slots.
+  const byUrl = new Map(guides.map((g) => [g.url, g]))
+  for (const c of answer?.covered ?? []) {
+    const guide = byUrl.get(String(c.guide_url ?? '').trim())
+    const slot = stages.flatMap((st) => st.slots).find((s) => s.slot_id === String(c.slot_id ?? '').trim())
+    if (guide && slot && slot.status === 'planned') {
+      slot.status = 'covered'
+      slot.covered_by = { url: guide.url, title: guide.title }
+    }
+  }
   return { version: 1, status: 'draft', stages }
 }
 
@@ -81,7 +92,9 @@ export async function runPlanner(params = {}, deps = {}) {
 
   const existingRec = await loadRoadmap(store)
   const existing = existingRec?.payload ?? null
-  const message = buildPlannerMessage({ factsText: summariseFacts(facts), existing })
+  // The M91 guides already live (saved by the guide sync): the Planner marks the slots they answer as covered.
+  const guides = await listGuides(store)
+  const message = buildPlannerMessage({ factsText: summariseFacts(facts), existing, guides })
 
   async function send(call, tail = '') {
     throwIfCancelled()
@@ -89,7 +102,7 @@ export async function runPlanner(params = {}, deps = {}) {
     try {
       const r = await aiSend({ agent: 'planner', prompt: PLANNER_PROMPT, message: tail ? `${message}\n${tail}` : message, jsonSchema: planner_roadmap, threadId: plannerThreadId(runId, call), retries: config.viasocket.maxRetries })
       const schema = plannerSchemaErrors(r.content)
-      const roadmap = schema.length ? null : roadmapFromAnswer(r.content, existing)
+      const roadmap = schema.length ? null : roadmapFromAnswer(r.content, existing, guides)
       const problems = schema.length ? schema : roadmapProblems(roadmap)
       const entry = { run_id: runId, agent: 'planner', call, model: r.model ?? pc.model, delivery: r.delivery ?? pc.delivery, ms: r.ms ?? now() - started, result: problems.length ? 'problems' : 'ok', problems: problems.slice(0, 10), error: null, time: istIso(new Date(now())) }
       calls.push(entry)

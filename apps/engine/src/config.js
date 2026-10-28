@@ -56,7 +56,7 @@ const DEFAULTS = {
   // Below this score, or with a major problem, the post goes back to the Writer; otherwise it goes to you ("pass with notes").
   REVISE_BELOW_SCORE: '70',
   MAX_WRITER_REVISIONS: '2', MAX_STRATEGIST_REBRIEFS: '1', MAX_SCOUT_RETRIES: '1', MAX_AI_ROUNDS_PER_POST: '5',
-  TARGET_WORDS_MIN: '500', TARGET_WORDS_MAX: '1200',
+  TARGET_WORDS_MIN: '1200', TARGET_WORDS_MAX: '2000',
   DEFAULT_TONE: 'friendly-teacher', TIMEZONE: 'Asia/Kolkata',
   AUTO_PUBLISH: 'false', DRY_RUN: 'false', LOG_LEVEL: 'info',
   // Phase 9: the engine's local data folder (run lock, Mem0 usage) and when a run lock counts as stale
@@ -90,6 +90,8 @@ const DEFAULTS = {
   // TEST-ONLY CLI commands (npm run test:await); never available through the API
   ALLOW_TEST_COMMANDS: 'false',
   // Phase 3.5: dashboard API
+  // Published guides (msg91.com/guide): the M91 posts already live, read before each full run (no AI).
+  GUIDES_SYNC_ON_RUN: 'true', GUIDES_FEED_URL: 'https://msg91.com/guide/feed.xml', GUIDES_LIST_URL: 'https://msg91.com/guide', GUIDES_MAX_PAGES: '12', GUIDES_TIMEOUT_MS: '15000',
   DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', PORT: '8080',
   // Phase 10: the Experience Designer (writes the guide's interactive parts, before the Reviewer); the promo
   // pack is off unless PROMO_ENABLED=true. Blog + Embarko (Phase 7).
@@ -103,7 +105,7 @@ const DEFAULTS = {
   BLOG_APP_NAME: 'm91-blog', BLOG_BASE_URL: 'https://m91-blog.embarko.app', NOINDEX_FIRST_N_POSTS: '10',
   // Phase 3: Strategist
   STRATEGIST_MAX_REPAIRS: '1', RECENT_BRIEFS_WINDOW: '10', TITLE_MAX_CHARS: '70', KEYWORD_MAX_WORDS: '6', OUTLINE_MIN_SECTIONS: '4',
-  OUTLINE_MAX_SECTIONS: '8', MIN_QUESTION_HEADINGS: '3', LESSONS_LIMIT: '5', ALLOW_UPDATE_BRIEFS: 'false',
+  OUTLINE_MAX_SECTIONS: '10', MIN_QUESTION_HEADINGS: '3', LESSONS_LIMIT: '5', ALLOW_UPDATE_BRIEFS: 'false',
   READING_GRADE_INTRO_MAX: '6', READING_GRADE_POST_MAX: '7',
   M91_SKILL_REPO_URL: 'https://github.com/MSG91/m91-skill',
   COMPETITORS: 'withHuman, PagerDuty, Opsgenie, Twilio A2H, Pushover'
@@ -324,6 +326,13 @@ export function loadConfig(env = process.env) {
     // Phase 12: each run writes the next slot of the approved roadmap (pinned topics first).
     roadmap: { enabled: bool('ROADMAP_ENABLED') },
     // The timely lane, next to the roadmap (on only when both RAPID_RESPONSE_ENABLED and ROADMAP_ENABLED are true).
+    guides: {
+      syncOnRun: bool('GUIDES_SYNC_ON_RUN'),
+      feedUrl: url('GUIDES_FEED_URL', { required: true }),
+      listUrl: url('GUIDES_LIST_URL', { required: true }),
+      maxPages: int('GUIDES_MAX_PAGES', { min: 0, max: 50 }),
+      timeoutMs: int('GUIDES_TIMEOUT_MS', { min: 1000, max: 120000 })
+    },
     timely: {
       enabled: bool('RAPID_RESPONSE_ENABLED') && bool('ROADMAP_ENABLED'),
       checkOnRun: bool('TIMELY_CHECK_ON_RUN'),

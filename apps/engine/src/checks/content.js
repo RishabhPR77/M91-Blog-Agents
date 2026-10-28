@@ -8,6 +8,11 @@ import { fleschKincaidGrade, sentences, words, sentenceStats } from './readabili
 import { normaliseCode } from '../writer/snippets.js'
 import { docsLinksIn, M91_SITE_URL } from '../util/m91links.js'
 
+// SEO structure (soft): the FAQ size and how often "M91" links to the main site.
+export const FAQ_MIN = 6
+export const FAQ_MAX = 10
+export const M91_LINKS_MAX = 8
+
 export const urlKey = (u) => String(u ?? '').trim().replace(/\/+$/, '').toLowerCase()
 const norm = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9?]+/g, ' ').trim()
 // Link text that says nothing about the source (Phase 5 A2.3).
@@ -293,7 +298,21 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
   const inTitle = kwRe ? [draft?.title, p.h1[0], String(draft?.seo?.slug_suggestion ?? '').replace(/-/g, ' ')].map((t) => new RegExp(kwRe.source, 'i').test(String(t ?? ''))) : [false, false, false]
   R('keyword_title_h1_slug', inTitle.every(Boolean), 'soft', inTitle.filter(Boolean).length, 'keyword in title, H1 and slug')
   const kwCount = kwRe ? (p.prose.match(new RegExp(kwRe.source, 'gi')) ?? []).length : 0
-  R('keyword_count', kwCount >= 1 && kwCount <= 5, 'soft', kwCount, kwCount > 5 ? 'keyword stuffing' : 'times the main keyword appears')
+  // About once per 250 words at most (5 for a short post, 8 for 2,000 words).
+  const kwMax = Math.max(5, Math.round(wordCount / 250))
+  R('keyword_count', kwCount >= 1 && kwCount <= kwMax, 'soft', kwCount, kwCount > kwMax ? `keyword stuffing (more than ${kwMax})` : 'times the main keyword appears')
+  // Every secondary keyword at least once (prose, headings or FAQ questions), as the brief planned.
+  const seoText = [p.prose, ...p.h2.map((h) => h.text), ...p.h3].join('\n').toLowerCase()
+  const supporting = (brief?.supporting_keywords ?? []).map((k) => String(k).trim()).filter(Boolean)
+  const missingKw = supporting.filter((k) => !seoText.includes(k.toLowerCase()) && !seoText.includes(k.toLowerCase().replace(/\s*\([^)]*\)\s*/g, ' ').trim()))
+  R('secondary_keywords', missingKw.length === 0, 'soft', supporting.length - missingKw.length, missingKw.length ? `not used: ${missingKw.slice(0, 6).join(', ')}` : `all ${supporting.length} secondary keywords used`)
+  // An FAQ section with 6–10 questions (as H3s ending with "?").
+  const faqSection = p.sections.find((s) => /\bfaq\b|frequently asked/i.test(s.heading))
+  const faqCount = (faqSection?.lines ?? []).filter((l) => /^###\s.+\?\s*$/.test(l)).length
+  R('faq_count', faqCount >= FAQ_MIN && faqCount <= FAQ_MAX, 'soft', faqCount, faqSection ? `${faqCount} FAQ questions (${FAQ_MIN}–${FAQ_MAX})` : 'no "Frequently Asked Questions" section')
+  // "M91" linked to the main site: at least once, at most once per section (8).
+  const m91Links = p.links.filter((l) => urlKey(l.url) === urlKey(M91_SITE_URL)).length
+  R('m91_links', m91Links >= 1 && m91Links <= M91_LINKS_MAX, 'soft', m91Links, m91Links > M91_LINKS_MAX ? `M91 linked ${m91Links} times (at most ${M91_LINKS_MAX})` : m91Links ? `M91 linked ${m91Links} times` : 'M91 is never linked to https://m91.msg91.com/')
 
   // SEO
   const tt = String(draft?.seo?.title_tag ?? '')

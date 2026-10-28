@@ -54,6 +54,18 @@ npm run timely -- --check
 
 Cards you don't act on expire `TIMELY_WINDOW_DAYS` after the event.
 
+## Published guides (msg91.com/guide)
+
+The engine knows which M91 guides are already live on msg91.com/guide, including the ones you write by hand. It
+reads them before each full run (no AI calls; one Mem0 add per new guide). Posts about other MSG91 products are
+ignored. You can also read them now: **Roadmap** page, **Published guides**, **Sync guides**.
+
+What it changes:
+- The roadmap does not write a post that a live guide already covers. When the Planner regenerates the roadmap, it
+  marks those slots **covered**. You can also mark a planned slot yourself with **Covered by a guide…**, and undo it
+  with **Not covered**. When the page says guides were published after the roadmap was made, regenerate it.
+- New posts link to the earlier guides ("New to M91? Start with …") and never explain again what they already explain.
+
 ## Run the pipeline
 
 1. Go to **Control**. Above **Run full pipeline** you see **Next up**: the slot this run will write. If it

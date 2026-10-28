@@ -2,7 +2,8 @@
 // opportunity you chose with Write now (the timely lane: once the Starter has an approved post, at most
 // TIMELY_MAX_PER_WEEK per 7 days; it never uses up a slot). Otherwise the
 // lowest stage that is not finished, then its first planned slot whose needs are all done. A slot is done when it
-// is approved (its Markdown export is saved on approval) or skipped. Proposed slots are never picked.
+// is approved (its Markdown export is saved on approval), skipped, or covered by a published guide. Proposed slots are
+// never picked.
 // Also the slot status updates of a run: drafting → in_review → approved, back to planned when the run fails,
 // skipped when the topic is rejected. Each is one write of the roadmap record.
 
@@ -11,7 +12,7 @@ import { istDate } from '../util/time.js'
 import { log } from '../util/log.js'
 import { nextTimely, timelyTarget } from '../timely/model.js'
 
-const DONE = new Set(['approved', 'skipped'])
+const DONE = new Set(['approved', 'skipped', 'covered'])
 
 /**
  * The next slot of an approved roadmap: { slot, stage } or { slot: null, reason }.

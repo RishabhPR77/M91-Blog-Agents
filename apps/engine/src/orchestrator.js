@@ -22,6 +22,7 @@ import { draftVersion, draftBriefVersion } from './writer/save.js'
 import { emit, throwIfCancelled, CancelledError, isCancel } from './events.js'
 import { acquireRunLock, LockedError } from './util/runlock.js'
 import { saveRunLog } from './util/runlog.js'
+import { syncGuides, guidesSummary } from './guides/sync.js'
 
 /** Reviewer feedback items for the Strategist: strings become { area, problem }. */
 export function strategistFeedback(review) {
@@ -393,6 +394,17 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
           } catch (error) {
             if (isCancel(error, signal)) throw error
             warnings.push(`news check failed (the run goes on): ${error.message}`)
+          }
+        }
+        // The M91 guides already live on msg91.com/guide (no AI): new ones are saved before the next topic is picked,
+        // so the knowledge map, the internal links and the roadmap see them. A failed read is a warning.
+        if (config.guides?.syncOnRun) {
+          try {
+            const g = await syncGuides({ store, config, now })
+            emit('step.output', { agent: 'orchestrator', step: 'guides', message: guidesSummary(g), data: { known: g.known, added: g.added.length } })
+            warnings.push(...g.warnings.map((w) => `guide sync: ${w}`))
+          } catch (error) {
+            warnings.push(`guide sync failed (the run goes on): ${error.message}`)
           }
         }
         // Phase 12: a pinned topic that is due, then a timely card you chose with Write now, else the next slot of

@@ -6,6 +6,7 @@ const slot = (slot_id, title_idea, question, teaches, needs = []) => ({ slot_id,
 /** A valid Planner answer: 2 Starter slots, 3 slots in each other stage. */
 export function goodAnswer() {
   return {
+    covered: [],
     stages: [
       { number: 0, slots: [
         slot('s0-1', 'What M91 is and why software needs a human', 'What is M91 and why would my software need a person?', ['human decision', 'M91']),

@@ -25,7 +25,7 @@ Use these anchors for every area: 10 = exemplary, nothing to improve; 8 = strong
 - answers_question: the reader's question is fully answered, starting in the first lines and under each heading.
 - simplicity: a 10-year-old could follow the main idea; short sentences; every technical word explained. Use the reading grades in CHECK RESULTS: above the targets lowers this score.
 - accuracy: every claim is precise and supported; nothing overstated.
-- seo: main keyword in the title, first 100 words and headings where natural; question headings; good title tag and meta description; internal links used when given.
+- seo: main keyword in the title, first 100 words and at least one heading; every secondary keyword used naturally; question headings; a "Frequently Asked Questions" section with real questions; good title tag and meta description; internal links to earlier guides used when given. Keyword stuffing lowers this score.
 - structure: TL;DR, clear sections, answer-first paragraphs, block-friendly formatting (numbered steps, tables for comparisons, H3s for troubleshooting and FAQ).
 - tone: matches TONE NOTES; calm, direct, plain.
 - originality: delivers the brief's angle; gives something typical articles do not.

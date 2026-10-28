@@ -16,6 +16,8 @@ export const COSTS = {
   // The timely lane: the news check (1 call; Mem0: ≈2–3 retrievals, plus one add per new card). A full run with
   // TIMELY_CHECK_ON_RUN=true makes it first (full_roadmap includes it).
   timely_check: { normal: '1', lowCost: '1', mem0: '≈2–3', note: 'one web search for fresh events; +1 add per new card; it writes nothing' },
+  // The published guides on msg91.com/guide: no AI; one Mem0 add per new guide (and one list read).
+  guides: { normal: '0', lowCost: '0', mem0: '≈1–3', note: 'reads msg91.com/guide, saves each new M91 guide' },
   roadmap: { normal: '1–2', lowCost: '1–2', mem0: '≈5–8', note: 'the Roadmap Planner (1), +1 for the M91 facts when there are none yet' },
   full_plain: { normal: '15–26', lowCost: '9–18', mem0: '≈28–45', mem0LowCost: '≈25–35', note: 'Scout + Strategist + Writer + Reviewer, plus revision rounds (no Experience Designer)' },
   scout: { normal: '≈10', lowCost: '5–6', mem0: '≈10–15', mem0LowCost: '≈8–11' },

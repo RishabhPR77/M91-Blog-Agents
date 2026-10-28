@@ -33,13 +33,14 @@ import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopi
 import { runScout } from './scout/index.js'
 import { runPlanner } from './planner/index.js'
 import { pickTarget } from './roadmap/pick.js'
+import { syncGuides, guidesSummary } from './guides/sync.js'
 import { runStrategist } from './strategist/index.js'
 import { runWriter } from './writer/index.js'
 import { loadBrief } from './writer/inputs.js'
 import { addToTimeline } from './timeline.js'
 
-export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export', 'roadmap', 'timely_check'])
-export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export', 'roadmap', 'timely_check'])
+export const MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export', 'roadmap', 'timely_check', 'guides'])
+export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer', 'reviewer', 'promo', 'approve', 'human_revise', 'reject_topic', 'approval_review', 'designer', 'publish', 'unpublish', 'set_index', 'rebuild_blog', 'export', 'roadmap', 'timely_check', 'guides'])
 // The Publisher's modes (Phase 7): code only, no AI calls.
 export const PUBLISH_MODES = Object.freeze(['publish', 'unpublish', 'set_index', 'rebuild_blog'])
 // Which publish modes each PUBLISH_TARGET supports (Phase 11). none: no publishing at all (the export is the output).
@@ -47,7 +48,7 @@ export const TARGET_MODES = Object.freeze({ none: [], embarko: ['publish', 'unpu
 // The human's decisions on a draft that waits at awaiting_human (Phase 5.5).
 export const DECISION_MODES = Object.freeze(['approve', 'human_revise', 'reject_topic', 'approval_review'])
 export const TRIGGERS = Object.freeze(['manual', 'cron', 'api', 'cli'])
-const TOP_STEPS = ['planner', 'scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer', 'promo', 'export', 'publisher']
+const TOP_STEPS = ['guides', 'planner', 'scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer', 'promo', 'export', 'publisher']
 
 export class RunError extends Error {
   constructor(code, message, status = 400) {
@@ -352,6 +353,20 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       return { status, brief_id: r.briefId, summary: r.error ?? r.summary ?? `pipeline ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
     }
     const agents = agentsFactory?.(runConfig, { store, notifier })
+    if (mode === 'guides') {
+      // The M91 guides already live on msg91.com/guide: 0 AI calls, one Mem0 add per new guide.
+      emit('step.started', { agent: 'guides', step: 'guides' })
+      try {
+        const out = await syncGuides({ store, config: runConfig, now })
+        emit('step.finished', { agent: 'guides', step: 'guides' })
+        const summary = guidesSummary(out)
+        emit('step.output', { agent: 'guides', step: 'guides', message: summary, data: { known: out.known, added: out.added.length, pending: out.pending } })
+        return { status: 'succeeded', summary, warnings: out.warnings, output: out }
+      } catch (error) {
+        stepEnded('guides', error, signal)
+        throw error
+      }
+    }
     if (mode === 'timely_check') {
       // The timely lane's news check on demand: 1 AI call; the cards wait for your decision (nothing is written).
       emit('step.started', { agent: 'scout', step: 'scout' })

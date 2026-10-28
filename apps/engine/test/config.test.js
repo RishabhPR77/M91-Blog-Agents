@@ -148,11 +148,11 @@ test('Phase 3 Strategist keys: defaults and validation', () => {
   const c = loadConfig(fakeEnv())
   assert.deepEqual(
     { r: c.strategist.maxRepairs, w: c.strategist.recentBriefsWindow, t: c.strategist.titleMaxChars, min: c.strategist.outlineMinSections, max: c.strategist.outlineMaxSections, q: c.strategist.minQuestionHeadings, l: c.strategist.lessonsLimit, u: c.strategist.allowUpdateBriefs },
-    { r: 1, w: 10, t: 70, min: 4, max: 8, q: 3, l: 5, u: false }
+    { r: 1, w: 10, t: 70, min: 4, max: 10, q: 3, l: 5, u: false }
   )
   assert.equal(c.content.readingGradeIntroMax, 6)
   assert.equal(c.content.readingGradePostMax, 7)
-  const keys = problemsForKeys({ OUTLINE_MIN_SECTIONS: '9', ALLOW_UPDATE_BRIEFS: 'maybe', MIN_QUESTION_HEADINGS: '12' })
+  const keys = problemsForKeys({ OUTLINE_MIN_SECTIONS: '11', ALLOW_UPDATE_BRIEFS: 'maybe', MIN_QUESTION_HEADINGS: '12' })
   for (const k of ['OUTLINE_MIN_SECTIONS', 'ALLOW_UPDATE_BRIEFS', 'MIN_QUESTION_HEADINGS']) assert.ok(keys.includes(k), k)
 })
 

@@ -8,6 +8,10 @@ import { storyDateRule } from '../scout/checks.js'
 import { isBlockType } from '@m91/content'
 import { findSimilar, dedupeSettings } from '../dedupe.js'
 
+// The brief's secondary keywords (the Writer uses every one at least once).
+export const SUPPORTING_MIN = 8
+export const SUPPORTING_MAX = 14
+
 const ajv = new Ajv({ allErrors: true, strict: false })
 const validate = ajv.compile(strategist_brief.schema)
 const validateSlot = ajv.compile(strategist_brief_slot.schema)
@@ -275,7 +279,7 @@ export async function findProblems(b, { config, inputs, store, excludeBriefId = 
   const kwWords = String(b.keyword ?? '').trim().split(/\s+/).filter(Boolean).length
   const kwMax = config?.strategist?.keywordMaxWords ?? 6
   if (kwWords > kwMax) P(`keyword "${b.keyword}" has ${kwWords} words; at most ${kwMax} (KEYWORD_MAX_WORDS): use the short phrase people search for, not a whole question`)
-  if (b.supporting_keywords.length < 3 || b.supporting_keywords.length > 6) P(`supporting_keywords has ${b.supporting_keywords.length} items; it must have 3–6`)
+  if (b.supporting_keywords.length < SUPPORTING_MIN || b.supporting_keywords.length > SUPPORTING_MAX) P(`supporting_keywords has ${b.supporting_keywords.length} items; it must have ${SUPPORTING_MIN}–${SUPPORTING_MAX}`)
 
   // Duplicate of a past brief: in memory against the briefs the run already listed (Phase 9 A3), or a Mem0 search.
   if (b.titles[0] && store?.getRecords) {

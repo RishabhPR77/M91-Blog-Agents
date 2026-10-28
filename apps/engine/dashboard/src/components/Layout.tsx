@@ -35,6 +35,7 @@ function useGlobalLive(online: boolean) {
           qc.invalidateQueries({ queryKey: keys.health })
           qc.invalidateQueries({ queryKey: keys.posts })
           qc.invalidateQueries({ queryKey: ['roadmap'] })
+          qc.invalidateQueries({ queryKey: ['guides'] })
           qc.invalidateQueries({ queryKey: ['timely'] })
         }
       }

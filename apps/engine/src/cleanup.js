@@ -3,7 +3,7 @@
 import { draftVersion, draftBriefVersion } from './writer/save.js'
 
 // Never deleted by --delete-listed (only when their ids are given explicitly).
-export const PROTECTED_TYPES = Object.freeze(['published_post', 'lesson', 'tone_profile', 'm91_facts'])
+export const PROTECTED_TYPES = Object.freeze(['published_post', 'published_guide', 'lesson', 'tone_profile', 'm91_facts'])
 
 const isDryRun = (r) => r.metadata?.dry_run === true || r.metadata?.dry_run === 'true' || r.payload?.dry_run === true
 const isTest = (r) => r.metadata?.test === true || r.metadata?.test === 'true'

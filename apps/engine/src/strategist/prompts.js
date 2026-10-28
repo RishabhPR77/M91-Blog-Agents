@@ -44,12 +44,12 @@ Topic groups:
 - "lead": the kind and the exact id of the lead you picked, copied from the inputs.
 - "why_today": 1–2 sentences.
 - "titles": exactly 3. Specific and concrete: name the exact situation, tool, amount or mistake. Never generic ("Implementing X", "Streamlining Y", "The Importance of Z", "Ultimate Guide", "Everything You Need to Know"). The first title must be under {{title_max_chars}} characters. Plain and direct, not clickbait.
-- "keyword": the main search keyword, taken from the real questions: a short phrase people type into a search box, at most {{keyword_max_words}} words (for example "ai agent human approval"), never a whole question or sentence. A short keyword lets the post open with simple sentences. "supporting_keywords": 3 to 6, also from the real questions.
+- "keyword": the main search keyword, taken from the real questions: a short phrase people type into a search box, at most {{keyword_max_words}} words (for example "ai agent human approval"), never a whole question or sentence. A short keyword lets the post open with simple sentences. "supporting_keywords": 8 to 14 secondary keywords: the other phrases people search for on this topic, from the real questions and the reader's situation (for example "human-in-the-loop (HITL)", "human approval", "approval workflow", "human takeover", "AI agent", "escalation", "phone alerts", "no-code", "test alert"). Each one short, each different; the Writer uses every one at least once.
 - "reader": who it is for and what they want. "intent": learn, compare, fix or buy.
 - "format": guide, tutorial, comparison, checklist, myth_buster or explainer.
 - "angle": the one thing this post gives the reader that typical articles on this topic do not.
 - "tone": if STYLE NOTES exist for this topic group, set source "style_notes", copy the profile id, and write 3–6 short guidance lines drawn from the notes. Otherwise set source "default", profile id "{{default_tone}}", and give guidance for a friendly teacher who explains simply. Either way the writing must be TO THE POINT: answer directly, no hooks, no clever openings, no filler, simple words a 10-year-old can follow.
-- "outline": {{outline_min}} to {{outline_max}} H2 sections. At least {{min_question_headings}} headings must be the real questions people ask, written as questions ending with "?". For each section: "answer_first" = what the first 1–2 sentences under it must answer directly; "points" = what the section covers; "source_urls" = the input URLs that support it.
+- "outline": {{outline_min}} to {{outline_max}} H2 sections. At least {{min_question_headings}} headings must be the real questions people ask, written as questions ending with "?". The main keyword appears in at least one H2. For a how-to, tutorial or checklist post, add a "<topic> checklist" section near the end (5–8 items the reader can tick). The last section before "What to do next" is "Frequently Asked Questions": its "points" are 6 to 10 real questions people ask about this topic, each one answered in the post. For each section: "answer_first" = what the first 1–2 sentences under it must answer directly; "points" = what the section covers; "source_urls" = the input URLs that support it.
 - "questions": the exact questions the post must answer (from the lead and related questions).
 - "m91_facts_to_use": facts ONLY from M91 FACTS, each with its source URL exactly as given (https).
 - "claims_to_avoid": things M91 does not do or must not be promised. ALWAYS include these two, word for word:
@@ -63,7 +63,7 @@ Topic groups:
 - "cta": a one-line call to action and the URL {{cta_url}}.
 - "notes_for_writer": warnings and things to be careful with: what not to claim, any gaps the writer must not fill, how to attribute the story or news ("reported by <outlet>"), and that the post must not be framed as legal, regulatory or compliance advice.
 - "interactive_ideas": up to 4 interactive blocks that would genuinely help a reader understand or do this (for example a step checklist for a tutorial, a phone_ring_sim to show the approval flow). Leave it empty if none would help.
-- "internal_links": up to 3 links to PUBLISHED POSTS that are genuinely related, with natural anchor text. Only URLs from PUBLISHED POSTS. Empty if there are none.
+- "internal_links": 1 to 3 links to PUBLISHED POSTS a reader of this post should read before or after (the guide it builds on first, for example the guide that explains what M91 is), with natural anchor text (the guide's title, or close to it). Only URLs from PUBLISHED POSTS. Empty only when there are none.
 
 === RULES ===
 - Never invent facts, numbers, quotes, stories, customers, URLs or ids.

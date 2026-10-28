@@ -26,7 +26,8 @@ import { buildPreview, readPreview, previewDir, PREVIEW_ROOT, PreviewError } fro
 import { loadRoadmap } from './roadmap/model.js'
 import { roadmapProblems } from './roadmap/checks.js'
 import { pickTarget } from './roadmap/pick.js'
-import { approveRoadmap, editSlot, moveSlot, setSkipped, decideProposed, RoadmapError } from './roadmap/actions.js'
+import { approveRoadmap, editSlot, moveSlot, setSkipped, decideProposed, setCovered, RoadmapError } from './roadmap/actions.js'
+import { listGuides } from './guides/sync.js'
 import { knowledgeMap } from './roadmap/knowledge.js'
 import { listOpportunities, nextTimely, applyAction, isExpired, OPEN_STATUSES, TimelyError } from './timely/model.js'
 import { istDate } from './util/time.js'
@@ -594,6 +595,18 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     // Phase 12: the roadmap. GET it (with what is next and any problems); approve it; change slots. Every change
     // is checked by the roadmap rules and saves the one roadmap record (about 2 Mem0 requests). Generate: POST
     // /api/runs with mode "roadmap".
+    // The M91 guides already live on msg91.com/guide (from the index; sync them with the run mode "guides").
+    if (path === '/api/guides' && method === 'GET') {
+      const guides = await listGuides(store)
+      const rec = await loadRoadmap(store)
+      const coveredBy = new Map((rec?.payload?.stages ?? []).flatMap((st) => st.slots).filter((s) => s.status === 'covered' && s.covered_by?.url).map((s) => [s.covered_by.url, s.slot_id]))
+      const since = rec?.payload?.generated_at ?? null
+      return send(res, 200, {
+        guides: guides.map((g) => ({ url: g.url, title: g.title, published_at: g.published_at ?? null, summary: g.summary ?? '', headings: g.headings ?? [], words: g.words ?? null, synced_at: g.synced_at ?? null, covers: coveredBy.get(g.url) ?? null })),
+        // Guides saved after the roadmap was generated: regenerate it (or mark slots covered) so the Planner sees them.
+        newer_than_roadmap: since ? guides.filter((g) => String(g.synced_at ?? '') > String(since)).length : 0
+      })
+    }
     if (seg[1] === 'roadmap') {
       if (path === '/api/roadmap' && method === 'GET') {
         const rec = await loadRoadmap(store)
@@ -620,6 +633,13 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
             if (typeof body.skipped !== 'boolean') throw new ApiError(400, 'bad_params', 'skipped must be true or false')
             rec = await setSkipped(store, seg[3], body.skipped, { now })
           } else if (seg[2] === 'slots' && seg[3] && (seg[4] === 'accept' || seg[4] === 'reject') && seg.length === 5) rec = await decideProposed(store, seg[3], seg[4] === 'accept', { now })
+          else if (seg[2] === 'slots' && seg[3] && seg[4] === 'cover' && seg.length === 5) {
+            // { guide_url } marks a planned slot covered by that published guide; { guide_url: null } undoes it.
+            if (body.guide_url !== null && typeof body.guide_url !== 'string') throw new ApiError(400, 'bad_params', 'guide_url must be a published guide URL, or null')
+            const guide = body.guide_url ? (await listGuides(store)).find((g) => g.url === body.guide_url) : null
+            if (body.guide_url && !guide) throw new ApiError(404, 'unknown_guide', `no published guide ${body.guide_url}: sync the guides first`)
+            rec = await setCovered(store, seg[3], guide, { now })
+          }
           else return fail(res, 404, 'not_found', `no route ${method} ${path}`)
           return send(res, 200, { roadmap: rec.payload, record_id: rec.id })
         } catch (error) {

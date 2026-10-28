@@ -39,7 +39,7 @@ test('new mode: one call, prompt and message, draft v1 saved with checks, brief 
   assert.match(q.threadId, /^writer-261018-1400-ABCD-v1-new-[a-z0-9]{4}$/)
   assert.ok(q.prompt.startsWith(WRITER_BASE.slice(0, 40)))
   assert.match(q.prompt, /You have no web access\./)
-  assert.match(q.prompt, /between 180 and 500 words/)
+  assert.match(q.prompt, /Length: 180–500 words of prose/)
   assert.match(q.prompt, /Main keyword "agent approval"/)
   assert.match(q.prompt, /\[Try M91: send your first alert in a few minutes\.\]\(https:\/\/m91\.msg91\.com\/signup\)/)
   assert.match(q.prompt, /"delve", "leverage"/)

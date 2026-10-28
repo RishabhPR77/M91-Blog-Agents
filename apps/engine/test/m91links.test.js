@@ -85,7 +85,7 @@ test('Writer: the docs link in the answer becomes the main site before the check
   assert.ok(r.warnings.includes(`docs links: rewrote 1 M91 docs link to ${SITE}`), JSON.stringify(r.warnings))
   assert.equal(saved.checks.results.find((x) => x.id === 'no_docs_links').passed, true)
   assert.ok(!/llms\.txt/.test(ai.requests[0].message.split('--- ALLOWED URLS ---\n')[1].split('\n--- ')[0]), 'the Writer may not link the docs')
-  assert.match(ai.requests[0].prompt, /link the word "M91" to https:\/\/m91\.msg91\.com\/, once or twice in the post/)
+  assert.match(ai.requests[0].prompt, /Link the word "M91" to https:\/\/m91\.msg91\.com\/ at its first mention in the opening and in each H2 section \(at most 8 in the post\)/)
 })
 
 const approvedStore = async ({ md = draftAnswer().post_markdown } = {}) => {

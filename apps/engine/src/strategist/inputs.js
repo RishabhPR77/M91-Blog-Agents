@@ -4,6 +4,7 @@ import { istDate } from '../util/time.js'
 import { knowledgeMap, knowledgeForPrompt } from '../roadmap/knowledge.js'
 import { storyDateRule } from '../scout/checks.js'
 import { MESSAGE_MAX } from '../scout/prompts.js'
+import { listGuides, guidesAsPublishedPosts } from '../guides/sync.js'
 
 export class InputsError extends Error {
   constructor(message) {
@@ -137,6 +138,9 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     if ((r.briefId ?? r.payload?.brief_id) === forBriefId) continue
     covered.push({ date: r.date, text: `${r.payload?.title ?? 'untitled'} — ${typeof r.payload?.context === 'string' ? r.payload.context : r.payload?.context?.summary ?? ''}` })
   }
+  // The M91 guides already live on msg91.com/guide are covered too (a hand-written guide has no brief or draft here).
+  const guides = await listGuides(store)
+  for (const g of guides) covered.push({ date: String(g.published_at ?? '').slice(0, 10), text: `${g.title} — published guide: ${g.summary ?? ''}` })
   const alreadyCovered = covered.sort((a, b) => byDateDesc(a.date, b.date)).slice(0, 60).map((l) => `- ${l.text.replace(/\s+/g, ' ').slice(0, 200)}`)
 
   // Lessons (Phase 5 writes them).
@@ -147,6 +151,8 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     .sort((a, b) => byDateDesc(a.payload?.published_at ?? a.date, b.payload?.published_at ?? b.date))
     .slice(0, 40)
     .map((r) => ({ title: r.payload.title ?? '', url: r.payload.url, topic_group: r.payload.topic_group ?? r.topicGroup ?? null, summary: String(r.payload.summary ?? r.payload.description ?? '').slice(0, 200) }))
+  // The M91 guides live on msg91.com/guide (hand-written ones too): readers can open them, so a post may link them.
+  for (const p of guidesAsPublishedPosts(guides)) if (!publishedPosts.some((x) => urlKey(x.url) === urlKey(p.url))) publishedPosts.push(p)
 
   const lessons = st.lessonsLimit > 0
     ? (await store.getRecords({ type: 'lesson' })).sort((a, b) => byDateDesc(a.date, b.date)).slice(0, st.lessonsLimit)
