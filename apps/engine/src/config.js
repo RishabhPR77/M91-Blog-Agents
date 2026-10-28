@@ -90,6 +90,8 @@ const DEFAULTS = {
   // TEST-ONLY CLI commands (npm run test:await); never available through the API
   ALLOW_TEST_COMMANDS: 'false',
   // Phase 3.5: dashboard API
+  // The editor (what the next run writes): editor = news, tutorials and no near-repeats decide; roadmap = the next slot.
+  NEXT_PICK: 'editor', NEXT_SIMILARITY: '0.6', NEXT_NEWS_GAP_DAYS: '7', NEXT_TUTORIAL_EVERY: '3',
   // Published guides (msg91.com/guide): the M91 posts already live, read before each full run (no AI).
   GUIDES_SYNC_ON_RUN: 'true', GUIDES_FEED_URL: 'https://msg91.com/guide/feed.xml', GUIDES_LIST_URL: 'https://msg91.com/guide', GUIDES_MAX_PAGES: '12', GUIDES_TIMEOUT_MS: '15000',
   DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', PORT: '8080',
@@ -326,6 +328,12 @@ export function loadConfig(env = process.env) {
     // Phase 12: each run writes the next slot of the approved roadmap (pinned topics first).
     roadmap: { enabled: bool('ROADMAP_ENABLED') },
     // The timely lane, next to the roadmap (on only when both RAPID_RESPONSE_ENABLED and ROADMAP_ENABLED are true).
+    editor: {
+      mode: oneOf('NEXT_PICK', ['editor', 'roadmap']),
+      similarity: num('NEXT_SIMILARITY', { min: 0.1, max: 1 }),
+      newsGapDays: int('NEXT_NEWS_GAP_DAYS', { min: 0, max: 60 }),
+      tutorialEvery: int('NEXT_TUTORIAL_EVERY', { min: 2, max: 20 })
+    },
     guides: {
       syncOnRun: bool('GUIDES_SYNC_ON_RUN'),
       feedUrl: url('GUIDES_FEED_URL', { required: true }),

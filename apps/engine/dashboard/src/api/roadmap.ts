@@ -26,7 +26,12 @@ export type NextUp = (
   | { kind: 'pinned'; topic: string; pinned_id: string }
   | { kind: 'timely'; title: string; opportunity_id: string; outlet: string }
   | { kind: 'none'; reason: string }
-) & { timely_waiting?: TimelyWaiting }
+) & {
+  timely_waiting?: TimelyWaiting
+  /** The editor: why this topic, and the topics it left out as repeats of posts readers already have. */
+  why?: string
+  skipped?: { id: string; title: string; why: string }[]
+}
 export type RoadmapResponse = { roadmap: Roadmap | null; record_id: string | null; next: NextUp; problems: string[] }
 
 export const roadmapKey = ['roadmap'] as const

@@ -437,3 +437,35 @@ already live on msg91.com/guide, hand-written guides included.
 
 New settings (in env.example): `GUIDES_SYNC_ON_RUN`, `GUIDES_FEED_URL`, `GUIDES_LIST_URL`, `GUIDES_MAX_PAGES`,
 `GUIDES_TIMEOUT_MS`. Changed defaults: `TARGET_WORDS_MIN=1200`, `TARGET_WORDS_MAX=2000`, `OUTLINE_MAX_SECTIONS=10`.
+
+## The editor: what the next run writes (no AI)
+
+The next post is no longer simply the next roadmap slot. `src/roadmap/editor.js` decides like an editor, and every
+choice carries a one-line reason (in the run, and in "Next up" on the Roadmap page and on Control):
+
+1. A pinned topic that is due, then a news card you chose with **Write now**: first, as before.
+2. Candidates: the ready roadmap slots of the lowest unfinished stage, the ready tutorial slots of the next stage, and
+   the news cards the news check found (medium or high urgency, not expired).
+3. No near-repeats: a candidate too close to a guide live on msg91.com/guide, an approved post or a post being
+   written is left out and listed with the post it repeats ("Left out s0-2 …: close to a published guide …"). Close =
+   similar titles, or at least `NEXT_SIMILARITY` (0.6) of the candidate's words (title, question, what it teaches)
+   already in that post's title, description, headings and keywords. When every ready topic repeats something, the run
+   writes nothing and says which slots to mark covered or edit.
+4. The mix:
+   - **news** when a fresh, relevant card exists and no news post went out in the last `NEXT_NEWS_GAP_DAYS` (7) days
+     (the Starter must have an approved post, and `TIMELY_MAX_PER_WEEK` still applies). The card is marked Write now;
+   - a **tutorial** when none of the last `NEXT_TUTORIAL_EVERY - 1` (2) posts was one and a tutorial is ready (stage 2,
+     or a how-to title);
+   - otherwise **the next roadmap slot**.
+
+`NEXT_PICK=roadmap` keeps the old behaviour (always the next slot). Settings in env.example: `NEXT_PICK`,
+`NEXT_SIMILARITY`, `NEXT_NEWS_GAP_DAYS`, `NEXT_TUTORIAL_EVERY`.
+
+## Mem0's own monthly limit
+
+Seen on 2026-10-28: Mem0 refused every read ("Monthly retrieval limit reached (1000 of 1000)", reset 2026-11-19,
+the account's billing day). The engine's own counters could not see it coming (the local and the hosted engine count
+separately). Now the store turns that error into a clear one (no retry), the guard records Mem0's figures and reset
+date and pauses runs until then (also past the 1st), the API answers 429 `mem0_quota` with the plain message, and the
+dashboard banner says it. Setting the figures again (`npm run mem0:usage -- --set=<n>`) clears it, after the limit is
+raised in Mem0.

@@ -99,6 +99,12 @@ export default function RoadmapPage() {
         <>
           <Card className="mb-4">
             <p className="text-sm" data-testid="next-up"><span className="font-semibold">Next up:</span> {nextUpText(next)}</p>
+            {next?.why && <p className="mt-1 text-xs text-slate-600 dark:text-slate-300" data-testid="next-up-why">Why: {next.why}</p>}
+            {next?.skipped && next.skipped.length > 0 && (
+              <ul className="mt-1 list-disc pl-5 text-xs text-slate-500" data-testid="next-up-skipped" aria-label="Left out as repeats">
+                {next.skipped.map((s) => <li key={s.id}>Left out {s.id} "{s.title}": {s.why}</li>)}
+              </ul>
+            )}
             {next?.timely_waiting && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" data-testid="next-up-timely-waiting">Timely card waiting: {next.timely_waiting.title} — {next.timely_waiting.reason}</p>}
             <p className="mt-1 text-xs text-slate-500">{rm.generated_at ? `Generated ${fmtDateTime(rm.generated_at)}` : ''}{rm.model_used ? ` · ${rm.model_used}` : ''}{rm.approved_at ? ` · approved ${fmtDateTime(rm.approved_at)}` : ''}{rm.notes && rm.notes !== 'none' ? ` · Planner notes: ${rm.notes}` : ''}</p>
           </Card>

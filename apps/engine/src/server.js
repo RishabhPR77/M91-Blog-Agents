@@ -618,7 +618,10 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
               : next.kind === 'timely' ? { kind: 'timely', title: next.opportunity.title, opportunity_id: next.opportunity.opportunity_id, outlet: next.opportunity.outlet }
                 : { kind: 'none', reason: next.reason }),
           // The timely lane: a Write now card that waits, and why.
-          ...(next.timelyWaiting && { timely_waiting: next.timelyWaiting })
+          ...(next.timelyWaiting && { timely_waiting: next.timelyWaiting }),
+          // The editor: why this one, and the topics it left out as repeats.
+          ...(next.why && { why: next.why }),
+          ...(next.skipped?.length && { skipped: next.skipped })
         }
         return send(res, 200, { roadmap: rec?.payload ?? null, record_id: rec?.id ?? null, next: compactNext, problems: rec?.payload ? roadmapProblems(rec.payload) : [] })
       }

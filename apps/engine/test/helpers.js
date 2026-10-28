@@ -41,6 +41,8 @@ export function fakeEnv(overrides = {}) {
     RAPID_RESPONSE_ENABLED: 'true',
     // The guide sync reads msg91.com: off in unit tests unless a test turns it on (with a fake fetch).
     GUIDES_SYNC_ON_RUN: 'false',
+    // The editor's choices are tested on their own; the older tests take the next roadmap slot.
+    NEXT_PICK: 'roadmap',
     // The existing tests keep every record in Mem0; the work store tests (and the full-run measure) use WORK_STORE=local.
     WORK_STORE: 'mem0',
     ...overrides

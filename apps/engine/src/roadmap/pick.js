@@ -11,6 +11,7 @@ import { loadRoadmap, saveRoadmap } from './model.js'
 import { istDate } from '../util/time.js'
 import { log } from '../util/log.js'
 import { nextTimely, timelyTarget } from '../timely/model.js'
+import { chooseNext } from './editor.js'
 
 const DONE = new Set(['approved', 'skipped', 'covered'])
 
@@ -55,6 +56,14 @@ export async function pickTarget(store, { now = Date.now, config = null } = {}) 
   if (timely.record) return timelyTarget(timely.record)
   const timelyWaiting = timely.waiting ? { title: timely.waiting.payload?.title ?? '', opportunity_id: timely.waiting.payload?.opportunity_id ?? null, reason: timely.reason } : null
   const rec = await loadRoadmap(store)
+  // The editor (NEXT_PICK=editor): news, a tutorial or the next slot, never a near-repeat, with a reason.
+  if (config && config.editor?.mode !== 'roadmap') {
+    const c = await chooseNext(store, { config, roadmap: rec?.payload ?? null, now })
+    const extra = { why: c.why ?? null, skipped: c.skipped ?? [], ...(timelyWaiting && { timelyWaiting }) }
+    if (c.kind === 'timely') return { ...timelyTarget(c.record), chosenByEditor: true, ...extra }
+    if (c.kind === 'slot') return { kind: 'slot', slot: c.slot, stage: c.stage, roadmapRecord: rec, ...extra }
+    if (c.reason) return { kind: 'none', reason: c.reason, ...extra }
+  }
   const picked = nextSlot(rec?.payload ?? null)
   if (!picked.slot) return { kind: 'none', reason: picked.reason, ...(timelyWaiting && { timelyWaiting }) }
   return { kind: 'slot', slot: picked.slot, stage: picked.stage, roadmapRecord: rec, ...(timelyWaiting && { timelyWaiting }) }

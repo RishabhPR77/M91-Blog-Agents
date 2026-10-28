@@ -15,7 +15,7 @@ import { runPromo } from './promo/index.js'
 import { runExperience, isInteractive } from './experience/index.js'
 import { runPlanner } from './planner/index.js'
 import { pickTarget, setSlotStatus } from './roadmap/pick.js'
-import { markWriting, releaseWriting } from './timely/model.js'
+import { markWriting, releaseWriting, applyAction } from './timely/model.js'
 import { loadBrief } from './writer/inputs.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { draftVersion, draftBriefVersion } from './writer/save.js'
@@ -416,11 +416,13 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
         }
         if (target.kind === 'slot') {
           await setSlotStatus(store, { slotId: target.slot.slot_id }, 'drafting', { setBriefId: briefId, now })
-          emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Next up: stage ${target.stage.number} (${target.stage.name}) · ${target.slot.slot_id} ${target.slot.title_idea}`, data: { slot_id: target.slot.slot_id, stage: target.stage.number } })
+          emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Next up: stage ${target.stage.number} (${target.stage.name}) · ${target.slot.slot_id} ${target.slot.title_idea}${target.why ? ` — ${target.why}` : ''}`, data: { slot_id: target.slot.slot_id, stage: target.stage.number, why: target.why ?? null, skipped: target.skipped ?? [] } })
         } else if (target.kind === 'timely') {
           // A timely post never uses up a slot; the card holds the brief id while the post is written.
+          // A card the editor chose itself is marked Write now (as if you had clicked it), then taken.
+          if (target.chosenByEditor) await applyAction(store, target.opportunity.record_id, 'write_now', { now }).catch((error) => warnings.push(`news card not marked Write now: ${error.message}`))
           await markWriting(store, target.opportunity.record_id, briefId, { now })
-          emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Timely post first: ${target.opportunity.title} (reported by ${target.opportunity.outlet})`, data: { opportunity_id: target.opportunity.opportunity_id } })
+          emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Timely post first: ${target.opportunity.title} (reported by ${target.opportunity.outlet})${target.why ? ` — ${target.why}` : ''}`, data: { opportunity_id: target.opportunity.opportunity_id, why: target.why ?? null } })
         } else emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Pinned topic first: ${target.pin.topic}`, data: { pinned_id: target.pin.pinned_id } })
         if (target.timelyWaiting) emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Timely card waits: ${target.timelyWaiting.title} — ${target.timelyWaiting.reason}`, data: { opportunity_id: target.timelyWaiting.opportunity_id } })
       }

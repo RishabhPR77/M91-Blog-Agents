@@ -66,6 +66,17 @@ What it changes:
   with **Not covered**. When the page says guides were published after the roadmap was made, regenerate it.
 - New posts link to the earlier guides ("New to M91? Start with …") and never explain again what they already explain.
 
+## What the next run writes
+
+You do not pick topics. Each full run decides, and **Next up** (Roadmap page and Control) says what and why:
+- a pinned topic that is due, or a news card you chose with **Write now**, first;
+- else **news** when a fresh, relevant story was found and no news post went out in the last 7 days;
+- else a **tutorial** when the last two posts were not tutorials;
+- else the **next roadmap slot**.
+
+A topic that repeats a published guide or another post is left out, and Next up lists it with the post it repeats.
+If every ready topic repeats something, mark those slots **Covered by a guide** or edit them.
+
 ## Run the pipeline
 
 1. Go to **Control**. Above **Run full pipeline** you see **Next up**: the slot this run will write. If it

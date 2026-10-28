@@ -77,3 +77,15 @@ describe('Published guides on the Roadmap page', () => {
     ]))
   })
 })
+
+describe('Next up: the editor\'s reason', () => {
+  it('shows why this topic and the topics left out as repeats', async () => {
+    mockFetch({
+      'GET /api/settings': { body: S }, 'GET /api/runs?limit=5': { body: { runs: [] } }, 'GET /api/guides': { body: GUIDES },
+      'GET /api/roadmap': { body: { roadmap: ROADMAP, record_id: 'mem-rm', next: { kind: 'slot', slot_id: 's2-1', title_idea: 'Create a channel and send your first alert', stage: { number: 2, name: 'First steps', level: 'beginner' }, why: 'a tutorial: none of the last 2 posts was one', skipped: [{ id: 's0-2', title: 'How M91 works', why: 'close to a published guide "How the M91 Alert Flow"' }] }, problems: [] } }
+    } as Parameters<typeof mockFetch>[0])
+    renderApp(<Routes><Route path="/roadmap" element={<RoadmapPage />} /></Routes>, { route: '/roadmap' })
+    expect(await screen.findByTestId('next-up-why')).toHaveTextContent('Why: a tutorial: none of the last 2 posts was one')
+    expect(screen.getByTestId('next-up-skipped')).toHaveTextContent('Left out s0-2 "How M91 works": close to a published guide "How the M91 Alert Flow"')
+  })
+})
