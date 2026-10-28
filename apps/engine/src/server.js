@@ -39,6 +39,7 @@ import { deleteIds } from './cleanup.js'
 import { createEngineIndex } from './engineindex.js'
 import { usageStatus, stopMessage } from './util/mem0usage.js'
 import { verifyPassword, sameText } from './util/adminhash.js'
+import { mem0LimitOf, limitMessage } from './util/mem0limit.js'
 
 const VERSION = (() => {
   try {
@@ -436,7 +437,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       // With the login on, a caller without a session learns only that the engine is up and how to log in.
       if (auth && !authed(req)) return send(res, 200, { ok: true, login: loginMode })
       const u = config ? usageStatus(config, { now }) : null
-      return send(res, 200, { ok: true, ...(auth && { login: loginMode }), version: VERSION, run_in_progress: isRunning(), ...(store?.isIndex && { index: store.status() }), ...(u && { mem0_usage: { month: u.month, used: u.used, limit: u.limit, pct: u.pct, level: u.level, limited: u.limited, adds: u.adds, warn_pct: u.warn_pct, stop_pct: u.stop_pct, resets_on: u.resets_on, total: u.total } }) })
+      return send(res, 200, { ok: true, ...(auth && { login: loginMode }), version: VERSION, run_in_progress: isRunning(), ...(store?.isIndex && { index: store.status() }), ...(u && { mem0_usage: { month: u.month, used: u.used, limit: u.limit, pct: u.pct, level: u.level, limited: u.limited, adds: u.adds, warn_pct: u.warn_pct, stop_pct: u.stop_pct, resets_on: u.resets_on, total: u.total, blocked: u.blocked ?? null } }) })
     }
 
     if (path === '/api/login' && method === 'POST') {
@@ -922,6 +923,9 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         if (url.pathname === '/run') return send(res, error.status, { error: error.message })
         return fail(res, error.status ?? 400, error.code ?? 'bad_request', error.message)
       }
+      // Mem0's monthly limit (it refuses every read until its reset date): say so, as a 429.
+      const limit = mem0LimitOf(error)
+      if (limit) return fail(res, 429, 'mem0_quota', limitMessage(limit))
       log.error('request failed', { path: url.pathname, error })
       return fail(res, 500, 'internal', 'internal error')
     }

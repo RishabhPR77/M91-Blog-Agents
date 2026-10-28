@@ -27,6 +27,15 @@ export function QuotaBanner({ usage }: { usage?: Mem0Usage }) {
   const pct = addsLimited ? usage.adds!.pct : usage.pct
   const key = addsLimited ? 'MEM0_MONTHLY_ADD_LIMIT' : 'MEM0_MONTHLY_LIMIT'
   const unit = addsLimited ? 'adds' : usage.adds ? 'retrievals' : 'requests'
+  // Mem0 itself said the limit is reached: nothing that reads Mem0 works until its reset date.
+  if (usage.blocked) {
+    const b = usage.blocked
+    return (
+      <div role="alert" data-testid="mem0-quota-banner" className="border-b border-red-300 bg-red-50 px-4 py-2 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100">
+        Mem0's monthly {b.kind === 'adds' ? 'add' : 'retrieval'} limit is reached{b.used !== null && b.limit !== null ? ` (${b.used} of ${b.limit}, said by Mem0)` : ''}. Until Mem0 resets it on {resetDate(b.until)}, the engine cannot {b.kind === 'adds' ? 'save' : 'read'} its data: runs are paused and lists may not load. To go on sooner, raise the limit in Mem0, then set the figures again (npm run mem0:usage -- --set=…).
+      </div>
+    )
+  }
   return (
     <div role="alert" data-testid="mem0-quota-banner" className={`border-b px-4 py-2 text-sm ${stop ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100' : 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100'}`}>
       {stop

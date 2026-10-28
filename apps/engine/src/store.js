@@ -12,6 +12,8 @@ import { countMem0 } from './util/mem0count.js'
 import { emitStoreWrite, markWrite } from './storeevents.js'
 import { configureUsage } from './util/mem0usage.js'
 import { createWorkStore } from './workstore.js'
+import { mem0LimitOf, Mem0LimitError } from './util/mem0limit.js'
+import { recordMem0Limit } from './util/mem0usage.js'
 
 export const RECORD_TYPES = Object.freeze([
   'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'draft',
@@ -177,7 +179,7 @@ export function createMem0Store({ config = getConfig(), clientFactory = defaultC
   // could save a second copy.
   // Each attempt is one request to Mem0, so retries are counted too (util/mem0count.js).
   const KIND = { list: 'reads', get: 'reads', event: 'reads', search: 'searches', update: 'writes', delete: 'writes', add: 'writes' }
-  const net = (fn, what) => retry(() => {
+  const net = (fn, what) => limitAware(retry(() => {
     countMem0(KIND[what] ?? 'reads')
     return fn()
   }, {
@@ -185,6 +187,14 @@ export function createMem0Store({ config = getConfig(), clientFactory = defaultC
     sleepFn,
     shouldRetry: isNetworkError,
     onRetry: (error, attempt, delay) => log.warn('Mem0 network error; retrying', { what, attempt, delay_ms: delay, error })
+  }))
+  // Mem0's monthly limit: a clear error (not "internal error"), and the quota guard stops runs until Mem0's reset date.
+  const limitAware = (p) => p.catch((error) => {
+    const info = mem0LimitOf(error)
+    if (!info) throw error
+    recordMem0Limit(info)
+    log.error('Mem0 monthly limit reached', { kind: info.kind, used: info.used, limit: info.limit, reset_at: info.reset_at })
+    throw new Mem0LimitError(info)
   })
 
   const entityFilters = (briefId) => (briefId ? { AND: [{ agent_id: agentId }, { run_id: briefId }] } : { agent_id: agentId })
@@ -278,12 +288,12 @@ export function createMem0Store({ config = getConfig(), clientFactory = defaultC
     }
     const c = await client()
     countMem0('writes')
-    const added = await c.add([{ role: 'user', content: JSON.stringify(payload ?? {}) }], {
+    const added = await limitAware(c.add([{ role: 'user', content: JSON.stringify(payload ?? {}) }], {
       agentId,
       ...(briefId && { runId: briefId }),
       metadata,
       infer: false
-    })
+    }))
     const eventId = added?.eventId ?? added?.event_id
     // Synchronous add (infer=false): the id is in the answer, so no event poll. Otherwise poll, then look it up.
     let id = Array.isArray(added) ? added[0]?.id : added?.results?.find?.((r) => r?.id)?.id ?? added?.id
@@ -376,7 +386,7 @@ export function createMem0Store({ config = getConfig(), clientFactory = defaultC
     }
     const c = await client()
     countMem0('writes')
-    const added = await c.add([{ role: 'user', content: text }], { agentId, metadata: { ...meta, ...(testTag && { test: true }), type: 'lesson', date: istDate() }, infer: true })
+    const added = await limitAware(c.add([{ role: 'user', content: text }], { agentId, metadata: { ...meta, ...(testTag && { test: true }), type: 'lesson', date: istDate() }, infer: true }))
     forgetLists()
     // Mem0 extracts the lesson later (infer=true): the index only learns that its lesson list changed.
     wrote({ op: 'lesson', type: 'lesson' })

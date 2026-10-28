@@ -4,7 +4,9 @@
 export type IndexStatus = { loaded_at: string | null; types: string[]; records: number; out_of_date: boolean }
 
 /** The Mem0 quota guard's estimate for this month (Phase 9 A5). The Mem0 console has the exact figure. */
-export type Mem0Usage = { month: string; used: number; limit: number; pct: number; level: 'ok' | 'warn' | 'stop'; warn_pct: number; stop_pct: number; resets_on: string; limited?: 'retrievals' | 'adds' | null; adds?: { used: number; limit: number; pct: number; level: 'ok' | 'warn' | 'stop' } }
+export type Mem0Usage = { month: string; used: number; limit: number; pct: number; level: 'ok' | 'warn' | 'stop'; warn_pct: number; stop_pct: number; resets_on: string; limited?: 'retrievals' | 'adds' | null; adds?: { used: number; limit: number; pct: number; level: 'ok' | 'warn' | 'stop' }; blocked?: Mem0Blocked | null }
+/** Mem0 itself refused a request: its monthly limit is reached until its reset date (until). */
+export type Mem0Blocked = { kind: 'retrievals' | 'adds'; limit: number | null; used: number | null; until: string; at: string }
 
 /** `login`: how the engine logs people in (the only thing a caller without a session is told): off, password, or the admin ID + password. */
 export type Health = { ok: boolean; login?: 'off' | 'password' | 'admin'; version: string; run_in_progress: boolean; index?: IndexStatus; mem0_usage?: Mem0Usage }

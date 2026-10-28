@@ -43,8 +43,10 @@ function readFile(file) {
 function current(file, t) {
   const month = monthOf(t)
   const v = readFile(file)
-  if (!v || v.month !== month) return { month, seed: 0, seed_adds: 0, total: blank(), days: {} }
-  return { month, seed: Number(v.seed) || 0, seed_adds: Number(v.seed_adds) || 0, total: { ...blank(), ...v.total }, days: v.days ?? {} }
+  // Mem0's own "limit reached" (blocked) holds until Mem0's reset date, which need not be the 1st.
+  const blocked = v?.blocked && Date.parse(v.blocked.until ?? '') > t ? v.blocked : undefined
+  if (!v || v.month !== month) return { month, seed: 0, seed_adds: 0, total: blank(), days: {}, ...(blocked && { blocked }) }
+  return { month, seed: Number(v.seed) || 0, seed_adds: Number(v.seed_adds) || 0, total: { ...blank(), ...v.total }, days: v.days ?? {}, ...(blocked && { blocked }) }
 }
 
 /**
@@ -63,6 +65,23 @@ export function setUsage(config, n, { now = Date.now, adds } = {}) {
   mkdirSync(join(file, '..'), { recursive: true })
   writeFileSync(file, JSON.stringify({ month: v.month, seed: n, seed_adds: seedAdds, total: blank(), days: v.days }))
   return usageStatus(config, { now })
+}
+
+/**
+ * Mem0 said its monthly limit is reached (src/util/mem0limit.js): the guard stops runs until Mem0's reset date (one day
+ * from now when Mem0 gave none). Setting the figures again (npm run mem0:usage -- --set=…) clears it. Never throws.
+ */
+export function recordMem0Limit(info, { config = null, now } = {}) {
+  const file = config ? join(dataDir(config), USAGE_FILE) : target?.file
+  if (!file || !info) return
+  try {
+    const t = (now ?? target?.now ?? Date.now)()
+    const v = current(file, t)
+    const until = info.reset_at && Date.parse(info.reset_at) > t ? info.reset_at : new Date(t + 24 * 3600 * 1000).toISOString()
+    v.blocked = { kind: info.kind, limit: info.limit, used: info.used, until, at: new Date(t).toISOString() }
+    mkdirSync(join(file, '..'), { recursive: true })
+    writeFileSync(file, JSON.stringify(v))
+  } catch {}
 }
 
 /** Adds n requests of a kind (reads | searches | writes). Never throws. */
@@ -107,12 +126,20 @@ export function usageStatus(config, { now = Date.now } = {}) {
   const own = levelOf(pct)
   const level = RANK[adds.level] > RANK[own] ? adds.level : own
   const limited = level === 'ok' ? null : RANK[adds.level] > RANK[own] ? 'adds' : 'retrievals'
+  // Mem0 itself said the limit is reached: stop until Mem0's reset date, whatever the estimate says.
+  if (v.blocked) {
+    const b = v.blocked
+    const isAdds = b.kind === 'adds'
+    const shown = isAdds ? { used, limit, pct } : { used: Math.max(used, b.used ?? limit), limit: b.limit ?? limit, pct: 100 }
+    return { month: v.month, ...shown, level: 'stop', limited: isAdds ? 'adds' : 'retrievals', blocked: b, adds: isAdds ? { ...adds, used: Math.max(addUsed, b.used ?? addLimit), limit: b.limit ?? addLimit, pct: 100, level: 'stop' } : adds, warn_pct: warn, stop_pct: stop, resets_on: b.until, seed: v.seed, seed_adds: v.seed_adds, total: v.total, days: v.days }
+  }
   return { month: v.month, used, limit, pct, level, limited, adds, warn_pct: warn, stop_pct: stop, resets_on: resetsOn(t), seed: v.seed, seed_adds: v.seed_adds, total: v.total, days: v.days }
 }
 
 /** "Mem0 retrieval quota almost used: 960/1000. Runs paused until 1 Nov 2026 or a higher limit." */
 export function stopMessage(u) {
   const date = new Date(u.resets_on).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+  if (u.blocked) return `Mem0's monthly ${u.blocked.kind === 'adds' ? 'add' : 'retrieval'} limit is reached (Mem0 says ${u.blocked.used ?? '?'} of ${u.blocked.limit ?? '?'}). Runs paused until Mem0 resets it on ${date}, or a higher limit in Mem0 (then set the figures again: npm run mem0:usage -- --set=<n>).`
   if (u.limited === 'adds') return `Mem0 add quota almost used: ${u.adds.used}/${u.adds.limit}. Runs paused until ${date} or a higher limit (MEM0_MONTHLY_ADD_LIMIT).`
   return `Mem0 retrieval quota almost used: ${u.used}/${u.limit}. Runs paused until ${date} or a higher limit (MEM0_MONTHLY_LIMIT).`
 }
