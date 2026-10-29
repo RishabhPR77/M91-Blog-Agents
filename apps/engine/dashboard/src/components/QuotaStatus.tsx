@@ -9,6 +9,14 @@ const resetDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { d
 /** "Mem0 619/1000 · adds 146/10000" with the reset date in the tooltip. */
 export function QuotaPill({ usage }: { usage?: Mem0Usage }) {
   if (!usage) return null
+  // viaSocket AI memory: no monthly cap, paid per call. The month's calls and their cost.
+  if (usage.backend === 'viasocket') {
+    return (
+      <span className="pill pill-gray" data-testid="mem0-usage" title={`viaSocket memory this month (calls this engine made): ${usage.used} reads, ${usage.adds?.used ?? 0} writes. No monthly cap; paid per call (reads $0.002, writes $0.10 per 1,000).`}>
+        Memory {usage.used} reads · {usage.adds?.used ?? 0} writes · ≈${(usage.cost_usd ?? 0).toFixed(2)}
+      </span>
+    )
+  }
   const tone = usage.level === 'stop' ? 'pill-red' : usage.level === 'warn' ? 'pill-amber' : 'pill-gray'
   return (
     <span className={`pill ${tone}`} data-testid="mem0-usage" title={`Mem0 this month (estimate; the Mem0 console has the exact figures): retrievals (reads and searches) ${usage.used}/${usage.limit}${usage.adds ? `, adds (writes) ${usage.adds.used}/${usage.adds.limit}` : ''}. Resets on ${resetDate(usage.resets_on)}.`}>

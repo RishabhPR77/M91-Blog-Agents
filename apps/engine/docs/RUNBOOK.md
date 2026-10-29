@@ -194,6 +194,13 @@ npm run publish -- --brief-id=<brief id> --draft
    - **"Mem0 quota almost used"**: see the next section.
 3. Slack and M91 send an alert when a run fails, so you do not have to watch it.
 
+## Where the engine keeps its data
+
+The engine keeps its records in **viaSocket AI memory** (`MEMORY_BACKEND=viasocket`, the default): there is no monthly
+limit, and each call costs a fraction of a cent (the header shows this month's reads, writes and cost). The local and
+the hosted engine use the same memory, so they see the same posts. `MEMORY_BACKEND=mem0` switches back to Mem0; the
+banner below is about Mem0 only.
+
 ## The Mem0 quota banner
 
 Mem0 (where the engine keeps its data) has two monthly limits on your plan: 1,000 **retrievals** (reads and

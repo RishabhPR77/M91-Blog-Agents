@@ -437,7 +437,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       // With the login on, a caller without a session learns only that the engine is up and how to log in.
       if (auth && !authed(req)) return send(res, 200, { ok: true, login: loginMode })
       const u = config ? usageStatus(config, { now }) : null
-      return send(res, 200, { ok: true, ...(auth && { login: loginMode }), version: VERSION, run_in_progress: isRunning(), ...(store?.isIndex && { index: store.status() }), ...(u && { mem0_usage: { month: u.month, used: u.used, limit: u.limit, pct: u.pct, level: u.level, limited: u.limited, adds: u.adds, warn_pct: u.warn_pct, stop_pct: u.stop_pct, resets_on: u.resets_on, total: u.total, blocked: u.blocked ?? null } }) })
+      return send(res, 200, { ok: true, ...(auth && { login: loginMode }), version: VERSION, run_in_progress: isRunning(), ...(store?.isIndex && { index: store.status() }), ...(u && { mem0_usage: { month: u.month, used: u.used, limit: u.limit, pct: u.pct, level: u.level, limited: u.limited, adds: u.adds, warn_pct: u.warn_pct, stop_pct: u.stop_pct, resets_on: u.resets_on, total: u.total, blocked: u.blocked ?? null, backend: u.backend ?? 'mem0', cost_usd: u.cost_usd ?? null } }) })
     }
 
     if (path === '/api/login' && method === 'POST') {

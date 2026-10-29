@@ -14,6 +14,7 @@ import { configureUsage } from './util/mem0usage.js'
 import { createWorkStore } from './workstore.js'
 import { mem0LimitOf, Mem0LimitError } from './util/mem0limit.js'
 import { recordMem0Limit } from './util/mem0usage.js'
+import { createVsMemoryStore } from './vsmemory.js'
 
 export const RECORD_TYPES = Object.freeze([
   'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'draft',
@@ -144,13 +145,13 @@ export function clearStoreCache() {
 }
 
 /**
- * The engine's store: Mem0, with the run's work in progress kept in a local file (WORK_STORE=local, workstore.js).
- * WORK_STORE=mem0: Mem0 only. Same options as createMem0Store.
+ * The engine's store: viaSocket AI memory (MEMORY_BACKEND=viasocket, vsmemory.js) or Mem0 (MEMORY_BACKEND=mem0), with
+ * the run's work in progress kept in a local file (WORK_STORE=local, workstore.js). WORK_STORE=mem0: the backend only.
  */
 export function createStore(opts = {}) {
-  const mem0 = createMem0Store(opts)
   const config = opts.config ?? getConfig()
-  return config.runtime?.workStore === 'mem0' ? mem0 : createWorkStore(mem0, { config, now: opts.now })
+  const base = config.memory?.backend === 'viasocket' ? createVsMemoryStore({ ...opts, config }) : createMem0Store({ ...opts, config })
+  return config.runtime?.workStore === 'mem0' ? base : createWorkStore(base, { config, now: opts.now })
 }
 
 // cacheTtlMs (default STORE_CACHE_TTL_MS) and now are injectable for tests.
@@ -428,7 +429,7 @@ export function createMem0Store({ config = getConfig(), clientFactory = defaultC
     return { message: res?.message ?? null, event_id: eventId }
   }
 
-  return { dryRun, writeKey, agentId, createRecord, updateRecord, getRecord, getRecords, getOne, searchSimilar, addLesson, deleteRecord, listAgentMemories, deleteAllForAgent }
+  return { backend: 'mem0', dryRun, writeKey, agentId, createRecord, updateRecord, getRecord, getRecords, getOne, searchSimilar, addLesson, deleteRecord, listAgentMemories, deleteAllForAgent }
 }
 
 let defaultStore

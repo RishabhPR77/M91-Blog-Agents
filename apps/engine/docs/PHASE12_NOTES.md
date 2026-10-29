@@ -469,3 +469,29 @@ separately). Now the store turns that error into a clear one (no retry), the gua
 date and pauses runs until then (also past the 1st), the API answers 429 `mem0_quota` with the plain message, and the
 dashboard banner says it. Setting the figures again (`npm run mem0:usage -- --set=<n>`) clears it, after the limit is
 raised in Mem0.
+
+## viaSocket AI memory instead of Mem0 (MEMORY_BACKEND=viasocket, the default)
+
+Mem0's plan allows 1,000 retrievals a month, and the engine hit it on 2026-10-28 (reset 2026-11-19). The latest
+viaSocket skill (2026-10-28.4) offers **viaSocket AI memory** (https://memory-api.viasocket.com/guide.md): no monthly
+cap, paid per successful call (reads $0.002, writes $0.10 per 1,000), signed in with the VIASOCKET_* keys the engine
+already has. It is now the engine's record store.
+
+- `src/vsmemory.js`, the same interface as the Mem0 store. Every call goes through `viasocket-apps` (0.11.0):
+  `viasocket.user(VIASOCKET_SYSTEM_USER_ID).memory.call(…)`, which signs the embed token and keeps the memory token
+  fresh. The engine writes in its own space (the token's `me`); the local and the hosted engine share it.
+- One record = one note at `<MEMORY_ROOT>/<type>/<id>` (MEMORY_ROOT=m91-blog), written with `PUT /notes`: saved
+  exactly as sent, never merged; saving again updates the same path, and viaSocket keeps every version. The note body
+  is the record as JSON; its title (`type|brief|status|version`) lets a list skip notes without opening them. Ids look
+  like `vm_<type>_<20 hex>`.
+- Lists: `GET /index` on the type's folder (500 a page), then `GET /open` for the notes that may match, 8 at a time.
+  The engine's index loads them once and keeps them current. Search: `POST /search` in the folder. Delete:
+  `DELETE /notes`. The reset (`npm run reset:all`) deletes every note under MEMORY_ROOT, one call each (deletes are
+  free), never anything else in the space.
+- Network errors and 5xx are tried twice more; a 4xx is not.
+- The quota guard never stops runs on viaSocket memory: the header shows the month's reads, writes and their cost
+  ("Memory 120 reads · 30 writes · ≈$0.00"). `MEM0_API_KEY` is needed only with `MEMORY_BACKEND=mem0`.
+- `MEMORY_BACKEND=mem0` brings Mem0 back (the code is unchanged). The Mem0 records are not copied: they cannot be read
+  until Mem0 resets. The first runs on viaSocket memory start fresh (guides sync, the Scout reads the M91 facts, the
+  roadmap is generated again); drafts in progress stay in the local work store.
+- The repo's `viasocket-check.mjs` is the latest from viaSocket (0 FAIL, 0 WARN over 102 files).

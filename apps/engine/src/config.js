@@ -90,6 +90,8 @@ const DEFAULTS = {
   // TEST-ONLY CLI commands (npm run test:await); never available through the API
   ALLOW_TEST_COMMANDS: 'false',
   // Phase 3.5: dashboard API
+  // The record store: viasocket (viaSocket AI memory, no monthly cap) or mem0. MEMORY_ROOT: the folder in viaSocket's space.
+  MEMORY_BACKEND: 'viasocket', MEMORY_ROOT: 'm91-blog',
   // The editor (what the next run writes): editor = news, tutorials and no near-repeats decide; roadmap = the next slot.
   NEXT_PICK: 'editor', NEXT_SIMILARITY: '0.6', NEXT_NEWS_GAP_DAYS: '7', NEXT_TUTORIAL_EVERY: '3',
   // Published guides (msg91.com/guide): the M91 posts already live, read before each full run (no AI).
@@ -239,6 +241,7 @@ export function loadConfig(env = process.env) {
   const hosted = Boolean(env.APP_NAME?.trim() && env.DATA_DIR?.trim())
   const hostedDir = hosted ? env.DATA_DIR.trim() : null
   const dashboardAuthSetting = bool('DASHBOARD_AUTH')
+  const memoryBackend = oneOf('MEMORY_BACKEND', ['viasocket', 'mem0'])
   const dashboardAuth = hosted ? true : dashboardAuthSetting
   const adminUsername = str('ADMIN_USERNAME')
   const adminHash = str('ADMIN_PASSWORD_HASH')
@@ -354,8 +357,13 @@ export function loadConfig(env = process.env) {
       linkedinMaxChars: int('PROMO_LINKEDIN_MAX_CHARS', { min: 100, max: 3000 }),
       xPostMaxChars: int('PROMO_X_POST_MAX_CHARS', { min: 50, max: 280 })
     },
+    memory: {
+      backend: memoryBackend,
+      root: str('MEMORY_ROOT', { required: true })
+    },
     mem0: {
-      apiKey: str('MEM0_API_KEY', { required: true }),
+      // Only the Mem0 backend needs it (MEMORY_BACKEND=mem0).
+      apiKey: str('MEM0_API_KEY', { required: memoryBackend === 'mem0' }),
       // Not used by the v3 SDK (the API key is project-scoped); kept for reference.
       orgId: str('MEM0_ORG_ID'),
       projectId: str('MEM0_PROJECT_ID'),

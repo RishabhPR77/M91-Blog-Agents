@@ -141,7 +141,9 @@ test('the real repo packages clean, with the Dockerfile, .env files, data and ex
 
 test('env names: required, needed, only-if-set and optional — names only, from the template; Embarko-set keys are never listed', () => {
   const { required, needed, onlyIfSet, optional, secrets } = envNames()
-  for (const k of ['MEM0_API_KEY', 'VIASOCKET_EMBED_SECRET', 'PIPELINE_TRIGGER_KEY', 'ADMIN_USERNAME', 'ADMIN_PASSWORD_HASH']) assert.ok(required.includes(k), k)
+  for (const k of ['VIASOCKET_EMBED_SECRET', 'PIPELINE_TRIGGER_KEY', 'ADMIN_USERNAME', 'ADMIN_PASSWORD_HASH']) assert.ok(required.includes(k), k)
+  // viaSocket memory is the default store: the Mem0 key is needed only with MEMORY_BACKEND=mem0.
+  assert.ok(!required.includes('MEM0_API_KEY') && onlyIfSet.includes('MEM0_API_KEY'))
   assert.deepEqual(needed.sort(), ['M91_ALERT_WEBHOOK_URL', 'M91_CTA_URL', 'SLACK_POST_WEBHOOK_URL', 'WEBHOOK_SHARED_KEY'])
   assert.ok(onlyIfSet.includes('MEM0_ORG_ID') && onlyIfSet.includes('DOCSTAR_API_KEY'))
   assert.ok(optional.includes('MEM0_AGENT_ID') && optional.includes('PUBLISH_TARGET'))

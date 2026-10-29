@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global process, console, fetch */
+/* global process, console, fetch, AbortSignal */
 /**
  * viasocket-check.mjs — checks a viaSocket integration's code for what reading it cannot show.
  *
@@ -7,6 +7,8 @@
  *   node viasocket-check.mjs [folder or file ...]      defaults to the current folder
  *
  * It finds every viaSocket id and URL the code hard-codes and checks each against the live catalog:
+ *   - a slug passed to serviceIdFor() names a real app (slugs are case-sensitive), and its app's
+ *     action and trigger ids are then checked like the rest
  *   - a service_id names a real app — not the app's name, its slug, or the id with a name joined on
  *   - an action's or trigger's id sits where the call takes that kind of id (the two ids look alike:
  *     run, list-options and subscribe-event take the version id; everything else the plain one)
@@ -22,7 +24,9 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { basename, extname, join, relative } from 'node:path'
 
 const CATALOG = 'https://flow.sokt.io/func/scriK4LFg2kc'
-const SEARCH_HINT = 'find the id with the app search (GET https://flow.sokt.io/func/scri12BSufQM?key=<app name>) and copy it exactly'
+const SLUG_URL = 'https://plug-service.viasocket.com/api/v1/plugins/recommend/services'
+const SEARCH_HINT =
+  "find the app's slug with searchApps(name) — https://flow.viasocket.com/documentation/apps-api.md — and copy its appslugname exactly"
 const CONNECT_SCRIPT = process.env.VIASOCKET_CONNECT_SCRIPT || 'https://flow.viasocket.com/connect.js'
 const API = process.env.VIASOCKET_API_URL || 'https://flow-api.viasocket.com'
 const EMBED_TOKEN = process.env.VIASOCKET_TEST_EMBED_TOKEN
@@ -63,7 +67,10 @@ const KNOWN_URL_PREFIXES = [
   'https://flow.viasocket.com/documentation/',
   'https://dev-flow.viasocket.com/documentation/',
   'https://embed.viasocket.com/',
+  'https://memory-api.viasocket.com/',
   'https://plug-service.viasocket.com/api/v1/plugins/all',
+  'https://plug-service.viasocket.com/api/v1/plugins/recommend/services',
+  'https://plug-service.viasocket.com/plugins/search',
   'https://viasocket.com/',
   'https://www.viasocket.com/'
 ]
@@ -74,7 +81,17 @@ const VIASOCKET_URL = /https?:\/\/[a-z0-9.-]*(?:viasocket\.com|sokt\.io)[^\s'"`<
 const SECRET_LITERAL = /VIASOCKET_EMBED_SECRET\s*[=:]\s*["'][^"'\n]{6,}["']/
 const EXPECTS_VERSION = /list-options|subscribe-event|update-subscribed-event|version/i
 const EXPECTS_PLAIN = /filteredActions|filteredServices|service_action_functions|action_id|trigger_id|actionId|triggerId|open\s*:/
-const EXPECTS_SERVICE = /service_id|serviceId|\/enable\//
+const EXPECTS_SERVICE = /service_id|serviceId(?!For)|\/enable\//
+/** A slug the code names: serviceIdFor('slack'), serviceIds['slack'], listEvents('slack'), the slug argument of
+ * findEnabledApp / enableApp, slug: 'slack', VIASOCKET_APP_SLUG = 'slack'. */
+const SLUG_USE =
+  /(?:serviceIdFor\s*\(\s*|versionIdFor\s*\(\s*|serviceIds\s*\[\s*|listEvents\s*\(\s*|(?:findEnabledApp|enableApp)\s*\([^()'"`]*?,\s*|\bslug\s*[:=]\s*|APP_SLUG\s*[:=]\s*)(["'`])([A-Za-z0-9_-]+)\1/g
+/** versionIdFor('slack', 'send-message', 'V107'): checked against the version the catalog publishes. */
+const VERSION_USE = /versionIdFor\s*\(\s*(["'`])([A-Za-z0-9_-]+)\1\s*,\s*(["'`])([A-Za-z0-9_-]+)\3\s*,\s*(["'`])([^"'`]+)\5/g
+/** The event argument of versionIdFor(serviceId or slug, event, …): a plain action_id / trigger_id, or a page path. */
+const EVENT_ARG = /versionIdFor\s*\([^,()]*(?:\([^()]*\))?[^,()]*,\s*(["'`])([A-Za-z0-9_-]+)\1/g
+/** The token endpoint's ?apps=slack,google-sheets */
+const SLUG_LIST = /[?&]apps=([A-Za-z0-9_,-]+)/g
 
 const findings = { FAIL: 0, WARN: 0 }
 const say = (level, where, text) => {
@@ -105,6 +122,8 @@ const scannable = (file) => {
 const roots = process.argv.slice(2).length ? process.argv.slice(2) : ['.']
 const ids = new Map() // id → [{ where, expects }]
 const urls = []
+const slugs = new Map() // slug → [where]
+const versionUses = [] // { slug, event, version, where }
 let filesScanned = 0
 let mentionsConnect = false
 
@@ -128,9 +147,24 @@ for (const root of roots) {
           `'${match[2]}' is an id with something joined on — a service_id is the bare id (${match[2].split(/[_-]/)[0]}?); ${SEARCH_HINT}`
         )
       }
+      for (const match of line.matchAll(SLUG_USE)) {
+        if (!slugs.has(match[2])) slugs.set(match[2], [])
+        slugs.get(match[2]).push(at)
+      }
+      for (const match of line.matchAll(VERSION_USE)) versionUses.push({ slug: match[2], event: match[4], version: match[6], where: at })
+      for (const match of line.matchAll(SLUG_LIST)) {
+        for (const slug of match[1].split(',').filter(Boolean)) {
+          if (!slugs.has(slug)) slugs.set(slug, [])
+          slugs.get(slug).push(at)
+        }
+      }
       for (const match of line.matchAll(ID)) {
-        const version = EXPECTS_VERSION.test(line)
-        const plain = EXPECTS_PLAIN.test(line)
+        // A few slugs look like ids (rowzffkpcszo); one handed to serviceIdFor is a slug, checked below.
+        if ([...line.matchAll(SLUG_USE)].some((use) => use[2] === match[0])) continue
+        // versionIdFor(app, 'row1jrbor', 'V107') names the event by its plain id; the version id is what it returns.
+        const eventArg = [...line.matchAll(EVENT_ARG)].some((use) => use[2] === match[0])
+        const version = !eventArg && EXPECTS_VERSION.test(line)
+        const plain = eventArg || EXPECTS_PLAIN.test(line)
         const expects =
           EXPECTS_SERVICE.test(line) && !version && !plain ? 'service' : version && !plain ? 'version' : plain && !version ? 'plain' : null
         if (!ids.has(match[0])) ids.set(match[0], [])
@@ -147,11 +181,12 @@ if (!filesScanned) {
 
 // ---- URLs -----------------------------------------------------------------------------------
 for (const { where, url } of urls) {
-  if (KNOWN_URL_PREFIXES.some((prefix) => url.startsWith(prefix))) continue
+  // A base URL in a constant (`https://flow-api.viasocket.com`) counts as its prefix.
+  if (KNOWN_URL_PREFIXES.some((prefix) => `${url}/`.startsWith(prefix))) continue
   say(
     'FAIL',
     where,
-    `${url} is a viasocket URL built by hand — the connect popup is opened only by openViasocketConnection (${CONNECT_SCRIPT}); the prebuilt UI by viaSocket.mount; the API is ${API}`
+    `${url} is a viasocket URL built by hand — the connect popup is opened only by openViasocketConnection (${CONNECT_SCRIPT}); the prebuilt UI by viaSocket.mount; the API is ${API}; AI memory is https://memory-api.viasocket.com`
   )
 }
 
@@ -171,15 +206,39 @@ const lookup = async (serviceId) => {
   }
 }
 
+// ---- slugs, resolved the way serviceIdFor() resolves them ------------------------------------------
+const resolveSlug = async (slug) => {
+  try {
+    const res = await fetch(`${SLUG_URL}?service=${encodeURIComponent(slug)}`, { signal: AbortSignal.timeout(30000) })
+    const body = await res.json()
+    return { serviceId: body?.data?.plugins?.[slug]?.rowid || null }
+  } catch (error) {
+    return { error }
+  }
+}
+const slugServiceIds = new Set()
+const serviceIdOfSlug = new Map()
+for (const [slug, places] of slugs) {
+  const { serviceId, error } = await resolveSlug(slug)
+  // A known slug answers in well under a second; only an unknown one runs into the 30 s timeout.
+  if (error && error?.name !== 'TimeoutError') say('WARN', places[0], `slug '${slug}' could not be checked (${error?.message})`)
+  else if (!serviceId) say('FAIL', places[0], `'${slug}' is no app's slug — slugs are case-sensitive and copied exactly; ${SEARCH_HINT}`)
+  else {
+    say('PASS', '', `slug ${slug} resolves to ${serviceId} (${places.length} place${places.length === 1 ? '' : 's'})`)
+    slugServiceIds.add(serviceId)
+    serviceIdOfSlug.set(slug, serviceId)
+  }
+}
+
 const services = new Map() // service_id → { name, actions, triggers }
-const batch = [...ids.keys()]
+const batch = [...new Set([...ids.keys(), ...slugServiceIds])]
 for (let i = 0; i < batch.length; i += 6) {
   const results = await Promise.all(batch.slice(i, i + 6).map((id) => lookup(id).then((app) => [id, app])))
   for (const [id, app] of results) if (app) services.set(id, app)
 }
 const kinds = new Map() // id → { kind, app, pair }
 for (const [serviceId, app] of services) {
-  kinds.set(serviceId, { kind: 'service', app: app.service.name })
+  if (ids.has(serviceId)) kinds.set(serviceId, { kind: 'service', app: app.service.name })
   for (const action of app.actions || []) {
     kinds.set(action.action_id, {
       kind: 'plain',
@@ -214,6 +273,28 @@ for (const [serviceId, app] of services) {
   }
 }
 
+// ---- versions named in code: the event exists and the version is the published one ---------------
+const eventPath = (name) =>
+  `${name || ''}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+for (const use of versionUses) {
+  const app = services.get(serviceIdOfSlug.get(use.slug))
+  if (!app) continue // the slug itself was reported above
+  const all = [...(app.actions || []), ...(app.triggers || [])]
+  const byId = all.filter((e) => e.action_id === use.event || e.trigger_id === use.event)
+  const found = byId.length ? byId : all.filter((e) => eventPath(e.name) === use.event)
+  if (found.length !== 1) say('FAIL', use.where, `'${use.event}' is no single event of ${use.slug}: use the path or id its app page lists`)
+  else if (found[0].versionid && found[0].versionid !== use.version)
+    say(
+      'FAIL',
+      use.where,
+      `${use.slug}/${use.event} is published as ${found[0].versionid}, not ${use.version}: reread its page and update the code`
+    )
+  else say('PASS', '', `${use.slug}/${use.event} ${use.version} is the published version`)
+}
+
 const appNames = [...services.values()].map((app) => app.service.name)
 for (const [id, uses] of ids) {
   const known = kinds.get(id)
@@ -224,7 +305,7 @@ for (const [id, uses] of ids) {
       say(
         'WARN',
         uses[0].where,
-        `'${id}' is not an id of ${appNames.length ? appNames.join(', ') : 'any app whose service_id appears in the code'} — a typo, or an app whose service_id is missing from the code (used in ${uses.length} place${uses.length === 1 ? '' : 's'})`
+        `'${id}' is not an id of ${appNames.length ? appNames.join(', ') : 'any app whose slug or service_id appears in the code'} — a typo, or an app whose slug is missing from the code (used in ${uses.length} place${uses.length === 1 ? '' : 's'})`
       )
     continue
   }
@@ -282,5 +363,5 @@ console.log(
     : `0 FAIL, ${findings.WARN} WARN over ${filesScanned} file${filesScanned === 1 ? '' : 's'} — paste this output in your report`
 )
 process.exit(findings.FAIL ? 1 : 0)
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="b7e28821-64bd-5cca-b641-b61d2fc021b4")}catch(e){}}();
-//# debugId=b7e28821-64bd-5cca-b641-b61d2fc021b4
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="13085d9b-6906-56f8-ac35-296d44d1a2c0")}catch(e){}}();
+//# debugId=13085d9b-6906-56f8-ac35-296d44d1a2c0

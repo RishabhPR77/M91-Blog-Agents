@@ -112,6 +112,13 @@ export function resetsOn(t) {
 export function usageStatus(config, { now = Date.now } = {}) {
   const t = now()
   const v = current(join(dataDir(config), USAGE_FILE), t)
+  // viaSocket AI memory has no monthly cap (paid per call): never a stop, only the month's calls and their cost.
+  if (config?.memory?.backend === 'viasocket') {
+    const reads = v.total.reads + v.total.searches
+    const writes = v.total.writes
+    const cost = Math.round(((reads * 0.002 + writes * 0.1) / 1000) * 10000) / 10000
+    return { backend: 'viasocket', month: v.month, used: reads, limit: 0, pct: 0, level: 'ok', limited: null, adds: { used: writes, limit: 0, pct: 0, level: 'ok' }, cost_usd: cost, warn_pct: 0, stop_pct: 0, resets_on: resetsOn(t), seed: 0, seed_adds: 0, total: v.total, days: v.days }
+  }
   const warn = config?.mem0?.warnPct ?? 80
   const stop = config?.mem0?.stopPct ?? 95
   const pctOf = (used, limit) => (limit > 0 ? Math.round((used / limit) * 1000) / 10 : 0)
