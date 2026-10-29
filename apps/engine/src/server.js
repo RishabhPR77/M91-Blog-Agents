@@ -23,13 +23,10 @@ import { reviewOfDraft, hardChecksPassed } from './approval.js'
 import { lessonText } from './lessons.js'
 import { isInteractive, latestGuideDoc } from './experience/index.js'
 import { buildPreview, readPreview, previewDir, PREVIEW_ROOT, PreviewError } from './publisher/preview.js'
-import { loadRoadmap } from './roadmap/model.js'
-import { roadmapProblems } from './roadmap/checks.js'
-import { pickTarget } from './roadmap/pick.js'
-import { approveRoadmap, editSlot, moveSlot, setSkipped, decideProposed, setCovered, RoadmapError } from './roadmap/actions.js'
+import { pickTarget } from './weekly/pick.js'
+import { pickOfBrief } from './weekly/editor.js'
 import { listGuides } from './guides/sync.js'
 import { buildJourney } from './journey.js'
-import { knowledgeMap } from './roadmap/knowledge.js'
 import { listOpportunities, nextTimely, applyAction, isExpired, OPEN_STATUSES, TimelyError } from './timely/model.js'
 import { istDate } from './util/time.js'
 import { previewExport, latestExport, ExportError } from './export/index.js'
@@ -76,7 +73,7 @@ export function publicSettings(config) {
     models: {
       scout: { ...agent(sc), research_delivery: sc.researchDelivery },
       strategist: agent(st), writer: agent(config.writer), reviewer: agent(config.reviewer), promo: agent(config.promo),
-      ...(config.planner && { planner: agent(config.planner) }),
+      ...(config.editor?.service && { editor: agent(config.editor) }),
       ...(config.designer && { designer: agent(config.designer) })
     },
     scout: {
@@ -118,9 +115,9 @@ export function publicSettings(config) {
       max_components: config.designer.maxComponents, max_repairs: config.designer.maxRepairs, interactive_default: config.designer.interactiveDefault,
       max_designer_revisions: config.limits?.maxDesignerRevisions ?? null, promo_enabled: Boolean(config.promo?.enabled)
     },
-    // Phase 12: the roadmap (runs follow it) and rapid response (off).
-    roadmap: { enabled: Boolean(config.roadmap?.enabled), rapid_response_enabled: Boolean(config.scout?.rapidResponseEnabled) },
-    // The timely lane (on with RAPID_RESPONSE_ENABLED and the roadmap).
+    // The weekly editor: how far back the questions go, how many candidates, how many real signals each needs.
+    weekly: config.editor && { question_days: config.editor.questionDays, questions_max: config.editor.questionsMax, candidates: config.editor.candidates, min_evidence: config.editor.minEvidence, similarity: config.editor.similarity },
+    // The news check (RAPID_RESPONSE_ENABLED): its cards are the editor's news; Write now makes one the next post.
     timely: config.timely && { enabled: Boolean(config.timely.enabled), check_on_run: config.timely.checkOnRun, window_days: config.timely.windowDays, max_per_week: config.timely.maxPerWeek },
     built_modes: [...BUILT_MODES],
     decision_modes: [...DECISION_MODES],
@@ -311,17 +308,15 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     const of = async (type) => (await store.getRecords({ type, ...(briefId && type !== 'run' && { brief_id: briefId }) })).filter(want)
     const [briefs, drafts, reviews, exportsAll, published, runs] = await Promise.all(['brief', 'draft', 'review', 'markdown_export', 'published_post', 'run'].map(of))
     const runsOf = runs.filter((r) => r.payload?.brief_id)
-    const rm = config?.roadmap?.enabled ? (await loadRoadmap(store))?.payload ?? null : null
-    const slots = rm ? rm.stages.flatMap((st) => st.slots) : []
+    const picks = (await store.getRecords({ type: 'weekly_pick' })).map((r) => r.payload).filter((p) => p?.brief_id)
     const ids = new Set([...briefs, ...drafts, ...runsOf].map(idOf).filter(Boolean))
     const group = (list, id) => list.filter((r) => idOf(r) === id)
     const posts = [...ids].map((id) => {
       const bs = group(briefs, id)
-      const slotId = bs.find((b) => b.payload?.slot_id)?.payload?.slot_id
-      const slot = slots.find((s) => s.slot_id === slotId || s.brief_id === id) ?? null
+      const pick = picks.find((p) => p.brief_id === id) ?? null
       const ds = group(drafts, id).sort((a, b) => draftBriefVersion(b) - draftBriefVersion(a) || (draftVersion(b) ?? 0) - (draftVersion(a) ?? 0))
       const exp = group(exportsAll, id).sort((a, b) => String(b.createdAt ?? b.date).localeCompare(String(a.createdAt ?? a.date)))[0] ?? null
-      const j = buildJourney({ briefs: bs, drafts: ds, reviews: group(reviews, id), exportRec: exp, published: group(published, id), runs: group(runsOf, id), target: config?.publish?.target ?? 'embarko', slot })
+      const j = buildJourney({ briefs: bs, drafts: ds, reviews: group(reviews, id), exportRec: exp, published: group(published, id), runs: group(runsOf, id), target: config?.publish?.target ?? 'embarko', pick })
       return { brief_id: id, ...j, updated_at: j.runs[0]?.started_at ?? null }
     })
     return posts.sort((a, b) => String(b.updated_at ?? b.brief_id).localeCompare(String(a.updated_at ?? a.brief_id))).slice(0, limit)
@@ -352,8 +347,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       },
       review: review && { total: review.total, pass: review.pass, outcome: review.outcome ?? (review.pass ? 'pass' : 'revise'), gates: review.gates, areas: review.areas, feedback: review.feedback, summary: review.summary, sources_checked: review.sources_checked },
       checks: p.checks?.results ?? [],
-      // Phase 12: the roadmap slot of this post and the earlier posts it builds on (from the engine's index).
-      slot: config?.roadmap?.enabled ? await slotOfBrief(briefId, d) : null,
+      // Why this post: the weekly editor's reason, its evidence and the runners-up (null for a pinned or Write now post).
+      pick: await pickOfBrief(store, briefId),
       // Phase 10 D1: the page preview built for this brief, if any (read from disk, no Mem0).
       preview: readPreview(briefId, previewRoot),
       // Counter prompts used for this brief: writing changes (human_feedback) and design changes (C5).
@@ -375,24 +370,6 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     }
   }
 
-  /** The roadmap slot a brief belongs to, with its stage and the slots it needs (and their posts), or null. */
-  async function slotOfBrief(briefId, draftRec) {
-    const rm = (await loadRoadmap(store))?.payload
-    if (!rm) return null
-    const brief = (await store.getRecords({ type: 'brief', brief_id: briefId })).sort((a, b) => (b.payload?.brief_version ?? 0) - (a.payload?.brief_version ?? 0))[0]
-    const id = brief?.payload?.slot_id || rm.stages.flatMap((st) => st.slots).find((s) => s.brief_id === briefId)?.slot_id
-    if (!id) return null
-    const st = rm.stages.find((x) => x.slots.some((s) => s.slot_id === id))
-    const s = st.slots.find((x) => x.slot_id === id)
-    const all = new Map(rm.stages.flatMap((x) => x.slots.map((y) => [y.slot_id, y])))
-    const known = new Map((await knowledgeMap(store)).map((k) => [k.slot_id, k]))
-    return {
-      slot_id: s.slot_id, title_idea: s.title_idea, question: s.question, teaches: s.teaches, status: s.status,
-      stage: { number: st.number, name: st.name, level: st.level },
-      builds_on: (s.needs ?? []).map((n) => ({ slot_id: n, title: known.get(n)?.title ?? all.get(n)?.title_idea ?? n, status: all.get(n)?.status ?? 'unknown', brief_id: all.get(n)?.brief_id || null })),
-      why_today: brief?.payload?.why_today ?? null, terms_to_define: brief?.payload?.terms_to_define ?? []
-    }
-  }
 
   async function readJson(req) {
     const chunks = []
@@ -594,7 +571,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         return {
           record_id: r.id, opportunity_id: p.opportunity_id, status, title: p.title, what_happened: p.what_happened, source_url: p.source_url, outlet: p.outlet,
           published_date: p.published_date, why_m91: p.why_m91, urgency: p.urgency, urgency_reason: p.urgency_reason, topic_group: p.topic_group ?? null,
-          found_at: p.found_at ?? null, brief_id: p.brief_id || null, slot_id: p.slot_id ?? null, written_at: p.written_at ?? null
+          found_at: p.found_at ?? null, brief_id: p.brief_id || null, written_at: p.written_at ?? null
         }
       }).sort((a, b) => String(b.published_date).localeCompare(String(a.published_date)) || String(b.found_at).localeCompare(String(a.found_at)))
       const t = config?.timely?.enabled ? await nextTimely(store, { config, now }) : { record: null, waiting: null, reason: null }
@@ -607,84 +584,42 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         opportunities: cards
       })
     }
-    // A card action: { action: "write_now" | "add_to_roadmap" (with stage 1–5) | "dismiss" }. No AI call.
+    // A card action: { action: "write_now" | "dismiss" }. No AI call.
     if (seg[1] === 'timely' && seg[2] && seg.length === 3 && method === 'POST') {
-      if (!config?.timely?.enabled) throw new ApiError(409, 'timely_off', 'the timely lane is off (RAPID_RESPONSE_ENABLED=false, or the roadmap is off)')
+      if (!config?.timely?.enabled) throw new ApiError(409, 'timely_off', 'the news check is off (RAPID_RESPONSE_ENABLED=false)')
       if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: decide when it has finished')
       const body = await readJson(req)
       try {
-        const rec = await applyAction(store, decodeURIComponent(seg[2]), body.action, { stage: body.stage, now })
-        return send(res, 200, { opportunity: { record_id: rec.id, opportunity_id: rec.payload?.opportunity_id, status: rec.status, slot_id: rec.payload?.slot_id ?? null } })
+        const rec = await applyAction(store, decodeURIComponent(seg[2]), body.action, { now })
+        return send(res, 200, { opportunity: { record_id: rec.id, opportunity_id: rec.payload?.opportunity_id, status: rec.status } })
       } catch (error) {
         if (error instanceof TimelyError) throw new ApiError(error.status, error.code, error.message)
         throw error
       }
     }
 
-    // Phase 12: the roadmap. GET it (with what is next and any problems); approve it; change slots. Every change
-    // is checked by the roadmap rules and saves the one roadmap record (about 2 Mem0 requests). Generate: POST
-    // /api/runs with mode "roadmap".
     // The M91 guides already live on msg91.com/guide (from the index; sync them with the run mode "guides").
     if (path === '/api/guides' && method === 'GET') {
       const guides = await listGuides(store)
-      const rec = await loadRoadmap(store)
-      const coveredBy = new Map((rec?.payload?.stages ?? []).flatMap((st) => st.slots).filter((s) => s.status === 'covered' && s.covered_by?.url).map((s) => [s.covered_by.url, s.slot_id]))
-      const since = rec?.payload?.generated_at ?? null
-      return send(res, 200, {
-        guides: guides.map((g) => ({ url: g.url, title: g.title, published_at: g.published_at ?? null, summary: g.summary ?? '', headings: g.headings ?? [], words: g.words ?? null, synced_at: g.synced_at ?? null, covers: coveredBy.get(g.url) ?? null })),
-        // Guides saved after the roadmap was generated: regenerate it (or mark slots covered) so the Planner sees them.
-        newer_than_roadmap: since ? guides.filter((g) => String(g.synced_at ?? '') > String(since)).length : 0
-      })
+      return send(res, 200, { guides: guides.map((g) => ({ url: g.url, title: g.title, published_at: g.published_at ?? null, summary: g.summary ?? '', headings: g.headings ?? [], words: g.words ?? null, synced_at: g.synced_at ?? null })) })
     }
-    if (seg[1] === 'roadmap') {
-      if (path === '/api/roadmap' && method === 'GET') {
-        const rec = await loadRoadmap(store)
-        let next = rec?.payload ? await pickTarget(store, { now, config }) : { kind: 'none', reason: 'there is no roadmap yet: generate it' }
-        // One click: the run plans the roadmap and approves it itself, then writes the first post.
-        if (next.kind === 'none' && config?.roadmap?.autoPlan) {
-          if (!rec?.payload) next = { kind: 'plan', reason: 'the run plans the roadmap first (1–2 more AI calls), approves it, then writes the first post' }
-          else if (next.reason === 'Approve the roadmap first' && config.roadmap.autoApprove && !roadmapProblems(rec.payload).length) next = { kind: 'plan', reason: 'the run approves the roadmap, then writes its first post' }
-        }
-        const compactNext = {
-          ...(next.kind === 'slot' ? { kind: 'slot', slot_id: next.slot.slot_id, title_idea: next.slot.title_idea, stage: next.stage }
-            : next.kind === 'pinned' ? { kind: 'pinned', topic: next.pin.topic, pinned_id: next.pin.pinned_id }
-              : next.kind === 'timely' ? { kind: 'timely', title: next.opportunity.title, opportunity_id: next.opportunity.opportunity_id, outlet: next.opportunity.outlet }
-                : next.kind === 'plan' ? { kind: 'plan', reason: next.reason }
-                  : { kind: 'none', reason: next.reason }),
-          // The timely lane: a Write now card that waits, and why.
-          ...(next.timelyWaiting && { timely_waiting: next.timelyWaiting }),
-          // The editor: why this one, and the topics it left out as repeats.
-          ...(next.why && { why: next.why }),
-          ...(next.skipped?.length && { skipped: next.skipped })
-        }
-        return send(res, 200, { roadmap: rec?.payload ?? null, record_id: rec?.id ?? null, next: compactNext, problems: rec?.payload ? roadmapProblems(rec.payload) : [] })
-      }
-      if (method === 'POST') {
-        if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: change the roadmap when it has finished')
-        const body = await readJson(req)
-        try {
-          let rec
-          if (path === '/api/roadmap/approve') rec = await approveRoadmap(store, { now })
-          else if (seg[2] === 'slots' && seg[3] && seg.length === 4) rec = await editSlot(store, seg[3], body, { now })
-          else if (seg[2] === 'slots' && seg[3] && seg[4] === 'move' && seg.length === 5) rec = await moveSlot(store, seg[3], body.direction, { now })
-          else if (seg[2] === 'slots' && seg[3] && seg[4] === 'skip' && seg.length === 5) {
-            if (typeof body.skipped !== 'boolean') throw new ApiError(400, 'bad_params', 'skipped must be true or false')
-            rec = await setSkipped(store, seg[3], body.skipped, { now })
-          } else if (seg[2] === 'slots' && seg[3] && (seg[4] === 'accept' || seg[4] === 'reject') && seg.length === 5) rec = await decideProposed(store, seg[3], seg[4] === 'accept', { now })
-          else if (seg[2] === 'slots' && seg[3] && seg[4] === 'cover' && seg.length === 5) {
-            // { guide_url } marks a planned slot covered by that published guide; { guide_url: null } undoes it.
-            if (body.guide_url !== null && typeof body.guide_url !== 'string') throw new ApiError(400, 'bad_params', 'guide_url must be a published guide URL, or null')
-            const guide = body.guide_url ? (await listGuides(store)).find((g) => g.url === body.guide_url) : null
-            if (body.guide_url && !guide) throw new ApiError(404, 'unknown_guide', `no published guide ${body.guide_url}: sync the guides first`)
-            rec = await setCovered(store, seg[3], guide, { now })
-          }
-          else return fail(res, 404, 'not_found', `no route ${method} ${path}`)
-          return send(res, 200, { roadmap: rec.payload, record_id: rec.id })
-        } catch (error) {
-          if (error instanceof RoadmapError) throw new ApiError(error.status, error.code, error.message)
-          throw error
-        }
-      }
+
+    // The weekly editor: what the next run does first (a due pinned topic, a Write now card, else the editor decides
+    // at run time from that week's signals) and its latest decisions, newest first. No AI call.
+    if (path === '/api/weekly' && method === 'GET') {
+      const next = await pickTarget(store, { now, config })
+      const picks = (await store.getRecords({ type: 'weekly_pick' })).map((r) => ({ record_id: r.id, status: r.status, ...r.payload }))
+        .sort((a, b) => String(b.chosen_at).localeCompare(String(a.chosen_at))).slice(0, 8)
+      return send(res, 200, {
+        next: {
+          ...(next.kind === 'pinned' ? { kind: 'pinned', topic: next.pin.topic, pinned_id: next.pin.pinned_id }
+            : next.kind === 'timely' ? { kind: 'timely', title: next.opportunity.title, opportunity_id: next.opportunity.opportunity_id, outlet: next.opportunity.outlet }
+              : { kind: 'editor' }),
+          ...(next.timelyWaiting && { timely_waiting: next.timelyWaiting })
+        },
+        model: config?.editor?.service ? { service: config.editor.service, model: config.editor.model } : null,
+        picks
+      })
     }
 
     // Phase 10 D1: the page preview of a brief's newest draft. POST builds it (no AI, nothing saved or deployed);

@@ -1,8 +1,6 @@
 // The "Start here" line of a timely post: code puts it at the top of the body (the first line after the TL;DR), so
-// a reader who arrives from the news finds the first post of the learning path. With PUBLISH_TARGET=none there is
+// a reader who arrives from the news finds our first approved post (the Starter). With PUBLISH_TARGET=none there is
 // no public URL yet, so it names the Starter post (bold); a link comes once posts have URLs.
-
-import { loadRoadmap } from '../roadmap/model.js'
 
 export const START_HERE_PREFIX = 'New to M91? Start here:'
 export const START_HERE_RE = /^\s*New to M91\? Start here:/i
@@ -10,14 +8,11 @@ export const START_HERE_RE = /^\s*New to M91\? Start here:/i
 /** Does this brief get the line? A rapid-response post while the timely lane is on. */
 export const needsStartHere = (brief, config) => Boolean(config?.timely?.enabled) && brief?.post_type === 'rapid_response'
 
-/** The Starter post: the first approved post of stage 0 (knowledge map), else its approved slot's title. */
+/** The Starter post: our first approved post that is not itself a timely post (knowledge map), or null. */
 export async function starterPost(store) {
-  const known = (await store.getRecords({ type: 'knowledge' })).map((r) => r.payload).filter((k) => k?.stage === 0 && k.title)
+  const known = (await store.getRecords({ type: 'knowledge' })).map((r) => r.payload).filter((k) => k?.title && k.kind !== 'timely')
     .sort((a, b) => String(a.approved_at ?? '').localeCompare(String(b.approved_at ?? '')))
-  if (known.length) return { title: known[0].title, link: known[0].link ?? null, export_slug: known[0].export_slug ?? null }
-  const rec = await loadRoadmap(store)
-  const slot = rec?.payload?.stages?.find((st) => st.number === 0)?.slots?.find((s) => s.status === 'approved')
-  return slot ? { title: slot.title_idea, link: null, export_slug: null } : null
+  return known.length ? { title: known[0].title, link: known[0].link ?? null, export_slug: known[0].export_slug ?? null } : null
 }
 
 /** The one line: a link when the Starter post has a public URL, else its title in bold. */

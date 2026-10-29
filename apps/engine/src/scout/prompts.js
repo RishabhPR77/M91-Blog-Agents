@@ -130,7 +130,22 @@ For each claim return up to 2 results with:
 - "note": one sentence on what exactly the source says, in your own words.
 If you find nothing, return the claim with an empty results list.`
 
-// Phase 12: the focused Scout researches only the post the roadmap chose (POST TO RESEARCH).
+// The focused Scout researches only the post this run writes (POST TO RESEARCH).
+// The weekly editor's input: what people asked recently, across every topic M91 helps with (one web-search call).
+export const WEEK_QUESTIONS = `Task: find real questions people asked in the last {{days}} days (today is {{today}}) about the topics below, where M91 can genuinely help (use the M91 FACTS in the message):
+{{topic_groups}}
+
+Search like a researcher: Reddit, Hacker News, Stack Overflow, GitHub issues and discussions, developer forums, product communities. Prefer questions with visible engagement and questions about new tools, releases or incidents.
+
+Return up to {{questions_max}} questions, the most useful for a guide first. Each with:
+- "question": the question in plain, simple words (rewrite it; never copy a long sentence),
+- "source_url": the exact page where it was asked,
+- "where": the site (for example "Reddit r/devops", "GitHub issue in langchain-ai/langgraph"),
+- "posted_date": YYYY-MM-DD as shown on the page, or "" when no date is shown,
+- "demand_evidence": the visible sign of demand (upvotes, comments, answers, duplicates); "none visible" if none. Never estimate search volumes,
+- "topic_group": 1 to 5.
+Skip questions older than {{days}} days. Return an empty list if you find nothing real.`
+
 export const SLOT_QUESTIONS = `Task: find the real questions people ask about ONE planned post: the POST TO RESEARCH in the message.
 
 Search like a real user would: Google-style questions, Reddit, Stack Overflow, GitHub issues and discussions, Hacker News. Prefer questions asked recently.
@@ -138,8 +153,7 @@ Search like a real user would: Google-style questions, Reddit, Stack Overflow, G
 Return:
 - "main_question": the reader's question in plain, simple words. Keep the post's question unless people clearly ask it another way.
 - "related_questions": up to {{questions_max}} real questions people ask about this post's topic, each with "question" (plain words), "source_url" (where you saw it) and "demand_evidence" (the visible sign of demand: upvotes, comments, answers; "none visible" if none). Never estimate search volumes.
-- "demand": "level" (high, medium or low) and a one-sentence "reason" based only on what you saw.
-- "off_roadmap": topics people clearly and strongly ask about that are NOT in ROADMAP and fit M91 (use M91 FACTS). At most 2, often none. Each with "title_idea", "question" (ending with "?"), "stage" (1 to 5, from the stage names in ROADMAP), "teaches" (1 to 3 concepts), "evidence_url" and "demand_evidence". Comparisons and migrations only in stage 5.`
+- "demand": "level" (high, medium or low) and a one-sentence "reason" based only on what you saw.`
 
 export const SLOT_SOURCES = `Task: find authoritative sources a writer can cite for ONE planned post: the POST TO RESEARCH in the message.
 Prefer, in this order: official documentation (the M91 docs in M91 FACTS first), the company's own blog or announcements, standards bodies or regulators, reputable publications.
@@ -177,7 +191,7 @@ export function buildPrompt(task, values) {
 export const MESSAGE_MAX = 50000
 const CUT_NOTE = '\n[… cut to fit the message size limit]'
 // Sections that can lose their tail without breaking anything, cut first.
-const CUTTABLE = ['docs', 'skillRepo', 'alreadyCovered', 'roadmap', 'facts']
+const CUTTABLE = ['docs', 'skillRepo', 'alreadyCovered', 'facts']
 
 /**
  * buildMessage, guaranteed ≤ max characters: trims cuttable sections (largest share first, in
@@ -206,7 +220,7 @@ export function buildMessage(sections) {
     ['today', 'TODAY'], ['facts', 'M91 FACTS (summary)'], ['alreadyCovered', 'ALREADY COVERED'], ['competitors', 'COMPETITORS'],
     ['questions', 'QUESTIONS'], ['docs', 'M91 DOCS'], ['skillRepo', 'M91 SKILL REPO'], ['claims', 'CLAIMS'],
     // Phase 12: the focused Scout.
-    ['slot', 'POST TO RESEARCH'], ['roadmap', 'ROADMAP'],
+    ['slot', 'POST TO RESEARCH'],
     // The timely lane: events already found or written about (the news check skips them).
     ['knownEvents', 'KNOWN EVENTS']
   ]

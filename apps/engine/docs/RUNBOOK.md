@@ -17,23 +17,39 @@ The header at the top of the dashboard shows:
 
 Leave the terminal window open while you work: closing it stops the engine.
 
-## The roadmap (Phase 12)
+## What each run writes: the weekly editor
 
-Runs follow a roadmap: a learning path from "what M91 is" to comparisons and migrations, in 6 stages.
-Nothing runs until the roadmap is approved.
+One post goes out each week (the cron calls `POST /run` once a week), so each run decides what is most useful **now**.
+There is no roadmap. A full run does this before it writes:
 
-1. Go to **Roadmap** and click **Generate** (1–2 AI calls, about 5–8 Mem0 requests). The roadmap comes back
-   as a draft.
-2. Read the stages and slots. Change what you like: **Edit** a slot, **Move** it up or down, **Skip** it.
-   Proposed slots (found by the Scout, with the demand it saw) wait for **Accept** or **Reject**.
-3. Click **Approve roadmap**. Problems (if any) are listed and block the approval.
+1. **This week's news:** the news check finds real events of the last `TIMELY_WINDOW_DAYS` days where M91 helps
+   (1 AI call; it saves them as news cards).
+2. **What readers already have:** it reads the guides live on msg91.com/guide (no AI).
+3. **What comes first:** a pinned topic that is due, then a news card you chose with **Write now**. Otherwise:
+4. **This week's questions:** the Scout finds real questions people asked in the last `EDITOR_QUESTION_DAYS` days on
+   Reddit, Hacker News, GitHub, Stack Overflow and forums (1 web-search call). Dead pages and old questions are dropped.
+5. **The editor** (1 call, `EDITOR_AI_MODEL`, a strong model) weighs the questions, the news, M91's new integrations,
+   your pinned ideas, the live guides and our recent posts. It proposes `EDITOR_CANDIDATES` posts, scores each on
+   demand, timeliness, M91 fit, gap and variety, and picks one. Often the best post is a lasting question made timely
+   by this week's news: the post opens with the news (the "hook") and then answers the question.
+6. **Code checks the pick:** it must cite at least `EDITOR_MIN_EVIDENCE` real signals, a hook must be a real news
+   item of this week, and it must not repeat a live guide or an earlier post. If the editor's first choice fails, its
+   best runner-up that passes is taken; if the call fails, code picks the strongest question itself. A weekly run
+   always writes something unless every signal repeats a live guide.
 
-The slot marked **Next up** is what the next full run writes. Slots already written are locked.
+Then the Scout researches the pick, the Strategist plans it (format, angle, hook), the Writer writes it and the AI
+reviews it, as before. You see why on the post page (**Why this post**: the reason, the signals with links, the
+hook) and on **This week**, with the runners-up. **Pin for next week** on a runner-up makes it next week's post.
 
-## Timely posts (the timely lane)
+To see the editor's latest decisions in a terminal (no AI), run this in `apps/engine`:
 
-News that M91 could help with shows up as cards in **Roadmap → Timely opportunities**. A badge on Control
-shows how many are open.
+```bash
+npm run weekly
+```
+
+## This week's news
+
+News cards show up on **This week**. A badge on Control shows how many are open.
 
 1. **Find events:** every full run checks the news first. You can also click **Check news** (1 AI call), or
    run this in `apps/engine`:
@@ -42,68 +58,49 @@ shows how many are open.
 npm run timely -- --check
 ```
 
-2. **Decide on each card:**
-   - **Write now:** the next run writes it before the roadmap's next slot. It does not use up a slot.
-   - **Add to roadmap:** it becomes a planned slot in the stage you pick.
+2. **Decide on a card if you want to** (you do not have to; the editor reads them anyway):
+   - **Write now:** the next run writes a post about it (at most `TIMELY_MAX_PER_WEEK` per 7 days).
    - **Dismiss:** the card goes away.
-3. **Run the full pipeline** as usual. A Write now card waits in two cases: until the Starter (stage 0) has an
-   approved post, and while `TIMELY_MAX_PER_WEEK` timely posts were already written this week. Control and the
-   Roadmap page say why.
-4. **Approve it** like any post. A timely post starts with "New to M91? Start here: …" and credits its source
-   ("reported by …").
+3. A Write now post starts with "New to M91? Start here: …" (our first approved post) and credits its source.
 
-Cards you don't act on expire `TIMELY_WINDOW_DAYS` after the event.
+Cards expire `TIMELY_WINDOW_DAYS` after the event.
 
 ## Published guides (msg91.com/guide)
 
 The engine knows which M91 guides are already live on msg91.com/guide, including the ones you write by hand. It
-reads them before each full run (no AI calls; one Mem0 add per new guide). Posts about other MSG91 products are
-ignored. You can also read them now: **Roadmap** page, **Published guides**, **Sync guides**.
+reads them before each full run (no AI calls; one memory add per new guide). Posts about other MSG91 products are
+ignored. You can also read them now: **This week**, **Published guides**, **Sync guides**.
 
-What it changes:
-- The roadmap does not write a post that a live guide already covers. When the Planner regenerates the roadmap, it
-  marks those slots **covered**. You can also mark a planned slot yourself with **Covered by a guide…**, and undo it
-  with **Not covered**. When the page says guides were published after the roadmap was made, regenerate it.
-- New posts link to the earlier guides ("New to M91? Start with …") and never explain again what they already explain.
+What it changes: the editor never picks a topic a live guide already answers, and new posts link to the guides
+instead of explaining again what they already explain.
 
 ## One click
 
-Click **Write the next post** on Control. That is all: if there is no roadmap yet, the run plans it (1–2 AI calls) and
-approves it, then writes the next post and waits for your review. The card shows what comes next and why, each
-step's AI model and the cost. The single agents (Scout, Strategist, Writer, Reviewer) and the other actions are under
-**Run one agent, or another action**. You can still open the **Roadmap** page to read or change the plan.
+Click **Write the next post** on Control. That is all: the editor decides the topic when the run starts, then the
+post is researched, planned, written and reviewed, and waits for your review. The card says what the next run writes
+about, shows the last pick and why, each step's AI model and the cost. The single agents (Scout, Strategist, Writer,
+Reviewer) and the other actions are under **Run one agent, or another action**.
 
 Every post has one page (open it from Approvals, from **Posts & runs**, or from a run). On top is its journey:
 Topic → Research → Plan → Draft → AI review → You → Export → Published. A step turns green when it is done, whichever
 run did it, so the writing run and the approve run show on the same bar. **Posts & runs** lists the posts this way
 ("By post"); "All runs" is the old table.
 
-## What the next run writes
-
-You do not pick topics. Each full run decides, and **Next up** (Roadmap page and Control) says what and why:
-- a pinned topic that is due, or a news card you chose with **Write now**, first;
-- else **news** when a fresh, relevant story was found and no news post went out in the last 7 days;
-- else a **tutorial** when the last two posts were not tutorials;
-- else the **next roadmap slot**.
-
-A topic that repeats a published guide or another post is left out, and Next up lists it with the post it repeats.
-If every ready topic repeats something, mark those slots **Covered by a guide** or edit them.
-
 ## Run the pipeline
 
-1. Go to **Control**. Above **Run full pipeline** you see **Next up**: the slot this run will write. If it
-   says "Approve the roadmap first" or that there is nothing to write, the button is blocked.
+1. Go to **Control**. On **Write the next post** you see what the next run writes about (a pinned topic, a Write now
+   card, or "the editor decides when the run starts") and the last pick.
 2. Pick a preset:
-   - **Normal run** (the default): research for the slot, up to 2 Writer revisions. About 5–12 AI calls and
-     20–35 Mem0 requests.
+   - **Normal run** (the default): the news check, this week's questions, the editor, research for the pick, up to 2
+     Writer revisions. About 10–22 AI calls and 33–50 memory requests.
    - **Low-cost test run**: one question group and fewer calls. About 9–14 AI calls and 25–35 Mem0 requests.
      Use it to try something out.
 3. Check **Dry run**. When it is ticked, the AI is still called (credits are used), but nothing is saved and
    nothing is sent to Slack or M91. For a real post, untick it.
-4. Click **Run full pipeline**. A box shows the preset, the expected AI calls and the expected Mem0 requests.
+4. Click **Write the next post**. A box shows the preset, the expected AI calls and the expected Mem0 requests.
    Click **Start the run**.
-5. The **Live run** page opens. You see each step as it happens: Scout (research), Strategist (the brief),
-   Writer (the draft), checks, and Reviewer (the score). A full run takes 15–30 minutes.
+5. The **Live run** page opens. You see each step as it happens: the news check and this week's questions (Scout),
+   the editor's pick, Scout (research), Strategist (the brief), Writer (the draft), checks, and Reviewer (the score). A full run takes 15–30 minutes.
 6. When the Reviewer passes the draft, the run ends with **Waiting for your approval**. Slack gets a
    message. If the draft does not pass within the limits, the run ends as failed (see "When a run fails").
    - The draft goes back to the Writer only for a **major** problem: wrong or invented facts, an unlinked or
@@ -117,9 +114,9 @@ If every ready topic repeats something, mark those slots **Covered by a guide** 
 1. Go to **Approvals** and open the draft.
 2. On the left is the post as readers will see it (with its words, reading time and reading grade). On the right is
    the AI review: the score, what the Reviewer says in one line, its notes (**Show in post** marks the quoted
-   sentence in the post), the scores by area and the content checks in one line (click it for the table). The
-   **Roadmap** card (under "More about this post") shows the slot, its stage and the earlier posts it builds on.
-   **Compare versions** shows what changed from the previous version.
+   sentence in the post), the scores by area and the content checks in one line (click it for the table). **Why this
+   post** (above the post) shows the weekly editor's reason, the signals it used and the news hook. **Compare
+   versions** shows what changed from the previous version.
 3. Choose one of these:
    - **Approve and publish** (while `PUBLISH_TARGET` is `docstar` or `embarko`): one run approves the post, saves
      its final **Markdown export** and sends it to Docstar (or the blog). No AI calls. You stay on the post page
@@ -131,8 +128,8 @@ If every ready topic repeats something, mark those slots **Covered by a guide** 
      turn that off. This uses 2–4 AI calls. The new version comes back to Approvals. With the Experience
      Designer on, there is also **Change the design**.
    - **Review this version**: one Reviewer check of this version, without a rewrite.
-   - **Reject the topic**: the brief and the draft are rejected, and the topic is never picked again. Its
-     roadmap slot is marked skipped.
+   - **Reject the topic**: the brief and the draft are rejected, and the topic is never picked again. A news card
+     it used is dismissed.
 
 ## Get the Markdown file (Phase 11)
 
@@ -258,8 +255,8 @@ If the page says some types are not loaded, click **Load all types** (about 1 Me
 Listing and filtering cost 0 requests.
 
 To delete, tick rows (or use the bin on one row) and click **Delete selected**. The dialog lists every record and
-the cost: 1 Mem0 request per record. Records with a lock (published posts, current facts and style notes, the
-approved roadmap, exports of approved posts) cannot be deleted; lessons, open pinned topics and the records of an
+the cost: 1 Mem0 request per record. Records with a lock (published posts, current facts and style notes,
+what approved posts taught, exports of approved posts) cannot be deleted; lessons, open pinned topics and the records of an
 approved post need the extra tick. Deleting waits until no run is in progress and does nothing while DRY_RUN is on.
 
 ## On Embarko: log in, redeploy, roll back

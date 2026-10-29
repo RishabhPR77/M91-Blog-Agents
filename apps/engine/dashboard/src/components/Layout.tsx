@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Activity, BookOpen, Database, FileDown, Gauge, History, Inbox, Lightbulb, LogOut, Map as MapIcon, Menu, Monitor, Moon, Newspaper, Pin, Settings as SettingsIcon, Sun, X } from 'lucide-react'
+import { Activity, BookOpen, Database, FileDown, Gauge, History, Inbox, Lightbulb, LogOut, CalendarDays, Menu, Monitor, Moon, Newspaper, Pin, Settings as SettingsIcon, Sun, X } from 'lucide-react'
 import { api } from '../api/client'
 import { keys, useApprovals, useHealth, useRuns, useSettings } from '../api/queries'
 import { openEventStream } from '../api/sse'
@@ -34,7 +34,7 @@ function useGlobalLive(online: boolean) {
           qc.invalidateQueries({ queryKey: keys.approvals })
           qc.invalidateQueries({ queryKey: keys.health })
           qc.invalidateQueries({ queryKey: keys.posts })
-          qc.invalidateQueries({ queryKey: ['roadmap'] })
+          qc.invalidateQueries({ queryKey: ['weekly'] })
           qc.invalidateQueries({ queryKey: ['guides'] })
           qc.invalidateQueries({ queryKey: ['timely'] })
           // The post pages: their journey bars turn green as the steps finish.
@@ -84,8 +84,8 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/', label: 'Control', icon: <Gauge size={18} />, end: true },
     ...(activeRun ? [{ to: `/runs/${activeRun.run_id}`, label: 'Live run', icon: <Activity size={18} className="text-sky-500" /> }] : []),
     { to: '/approvals', label: 'Approvals', icon: <Inbox size={18} />, badge: waiting },
-    // Phase 12: the learning path.
-    ...(settings.data?.roadmap?.enabled ? [{ to: '/roadmap', label: 'Roadmap', icon: <MapIcon size={18} /> }] : []),
+    // The weekly editor: what the next run writes, its decisions, this week's news and the live guides.
+    { to: '/week', label: 'This week', icon: <CalendarDays size={18} /> },
     { to: '/runs', label: 'Posts & runs', icon: <History size={18} />, end: true },
     { to: '/content', label: 'Content', icon: <BookOpen size={18} /> },
     // What Mem0 holds, why a record may not be useful, and clean-up.

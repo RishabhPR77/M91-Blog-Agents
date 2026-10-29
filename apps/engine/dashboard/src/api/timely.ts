@@ -1,5 +1,5 @@
 // The timely lane (GET /api/timely and the card actions). One query key: every action and every run event
-// refreshes the Roadmap page's cards and the badge on Control.
+// refreshes the This week page's cards and the badge on Control.
 import { useQuery } from '@tanstack/react-query'
 import { api } from './client'
 
@@ -19,7 +19,6 @@ export type TimelyCard = {
   topic_group: number | null
   found_at: string | null
   brief_id: string | null
-  slot_id: string | null
   written_at: string | null
 }
 export type TimelyResponse = {
@@ -30,7 +29,7 @@ export type TimelyResponse = {
   waiting: { opportunity_id: string; title: string; reason: string } | null
   opportunities: TimelyCard[]
 }
-export type TimelyAction = 'write_now' | 'add_to_roadmap' | 'dismiss'
+export type TimelyAction = 'write_now' | 'dismiss'
 
 export const timelyKey = ['timely'] as const
 

@@ -31,6 +31,12 @@ export const stubAgents = {
     }
   },
 
+  // The weekly editor: a fixed pick (no signals, no AI).
+  async editor() {
+    const question = 'When should an AI agent call a human?'
+    return { model: STUB_MODEL, output: { pick: { pick_id: 'W-stub', title: question, question, format: 'explainer', angle: 'a stub pick', why_now: 'a stub pick', hook: null, evidence: [] }, reason: 'stub pick', chosen_by: 'stub', warnings: [] } }
+  },
+
   // Phase 2: receives the real ScoutResult (or the stub leads above) and logs what it got.
   async strategist({ leads, briefId }) {
     if (leads?.mode === 'research') {

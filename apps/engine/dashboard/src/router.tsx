@@ -19,7 +19,7 @@ const Lessons = lazy(() => import('./pages/Lessons'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Posts = lazy(() => import('./pages/Posts'))
 const Exports = lazy(() => import('./pages/Exports'))
-const Roadmap = lazy(() => import('./pages/Roadmap'))
+const Week = lazy(() => import('./pages/Week'))
 
 export function AppRoutes() {
   return (
@@ -43,7 +43,8 @@ export function AppRoutes() {
                 <Route path="/lessons" element={<Lessons />} />
                 <Route path="/posts" element={<Posts />} />
                 <Route path="/exports" element={<Exports />} />
-                <Route path="/roadmap" element={<Roadmap />} />
+                <Route path="/week" element={<Week />} />
+                <Route path="/roadmap" element={<Week />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<NotYet title="Not found" task="no task: this address does not exist" />} />
               </Routes>

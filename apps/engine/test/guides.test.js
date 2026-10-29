@@ -1,6 +1,6 @@
 // Published guides (msg91.com/guide): the parser, the sync (M91 posts only, MSG91 posts ignored, one Mem0 add per new
-// guide), the guides run mode and the sync before a full run, the covered slot status, the Planner's input, the
-// knowledge map, the Strategist's links, the API, and the new SEO checks and prompt lines. A local test server stands
+// guide), the guides run mode and the sync before a full run (before the weekly editor decides), the knowledge map,
+// the Strategist's links, the API, and the new SEO checks and prompt lines. A local test server stands
 // in for msg91.com: no real network, no AI, no Mem0.
 import { test, beforeEach, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -9,13 +9,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseFeed, parseListing, parseGuidePage, canonicalGuideUrl, m91Mentions, syncGuides, listGuides, guidesSummary, SEEN_FILE } from '../src/guides/sync.js'
-import { nextSlot } from '../src/roadmap/pick.js'
-import { loadRoadmap, saveRoadmap } from '../src/roadmap/model.js'
-import { setCovered, RoadmapError } from '../src/roadmap/actions.js'
-import { knowledgeMap } from '../src/roadmap/knowledge.js'
-import { roadmapFromAnswer } from '../src/planner/index.js'
-import { buildPlannerMessage, PLANNER_PROMPT } from '../src/planner/prompts.js'
-import { planner_roadmap, plannerSchemaErrors } from '../src/planner/schemas.js'
+import { knowledgeMap } from '../src/knowledge.js'
 import { buildInputs } from '../src/strategist/inputs.js'
 import { PLAN as STRATEGIST_PROMPT } from '../src/strategist/prompts.js'
 import { runContentChecks, urlKey, FAQ_MIN, M91_LINKS_MAX } from '../src/checks/content.js'
@@ -26,7 +20,6 @@ import { stubAgents } from '../src/agents/stubs.js'
 import { resetEvents, replay } from '../src/events.js'
 import { setSink } from '../src/util/log.js'
 import { fakeConfig, memoryStore, fakeNotifier, mockReviewer } from './helpers.js'
-import { goodAnswer, goodRoadmap } from './roadmap/fixtures.js'
 import { seededStore, NOW as SNOW } from './strategist/fixtures.js'
 
 beforeEach(() => resetEvents())
@@ -164,85 +157,42 @@ test('run mode "guides": 0 AI calls, the guides saved, one summary line', async 
   }
 })
 
-test('a full run reads the guides first; a slot covered by a guide is done, so the run writes the next one', async () => {
+test('a full run reads the guides first, before the weekly editor decides (so it never repeats a live guide)', async () => {
   const restore = quiet()
   const store = memoryStore()
-  const rm = { ...goodRoadmap(), status: 'approved' }
-  const s01 = rm.stages[0].slots.find((s) => s.slot_id === 's0-1')
-  s01.status = 'covered'
-  s01.covered_by = { url: U(APPROVAL), title: 'What Happens When Your Software Needs a Human Approval?' }
-  await saveRoadmap(store, rm)
-  const config = fakeConfig(guideEnv({ DRY_RUN: 'false', ROADMAP_ENABLED: 'true', GUIDES_SYNC_ON_RUN: 'true' }))
+  const config = fakeConfig(guideEnv({ DRY_RUN: 'false', GUIDES_SYNC_ON_RUN: 'true' }))
   const realFetch = globalThis.fetch
   globalThis.fetch = (url, init) => realFetch(String(url).replace('https://msg91.com', BASE), init)
   try {
-    const m = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => ({ ...stubAgents, reviewer: mockReviewer() }) })
+    let guidesSeen = null
+    const editor = async (ctx) => { guidesSeen = (await listGuides(store)).length; return stubAgents.editor(ctx) }
+    const m = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => ({ ...stubAgents, editor, reviewer: mockReviewer() }) })
     const { run_id } = await m.startRun({ mode: 'full' })
     const r = await m.wait(run_id)
     assert.equal(r.status, 'succeeded', r.run?.result_summary)
-    const msgs = replay(run_id).filter((e) => e.type === 'step.output').map((e) => e.message)
-    const gi = msgs.findIndex((x) => /^published guides: 3 known, 3 new/.test(x))
-    const ni = msgs.findIndex((x) => /^Next up: stage 0 \(Starter\) · s0-2/.test(x))
-    assert.ok(gi >= 0 && ni > gi, JSON.stringify(msgs))
-    assert.equal((await loadRoadmap(store)).payload.stages[0].slots.find((s) => s.slot_id === 's0-2').status, 'in_review')
+    const events = replay(run_id)
+    const gi = events.findIndex((e) => e.type === 'step.output' && /^published guides: 3 known, 3 new/.test(e.message))
+    const ei = events.findIndex((e) => e.type === 'step.started' && e.step === 'editor')
+    assert.ok(gi >= 0 && ei > gi, 'the guides are synced before the editor runs')
+    assert.equal(guidesSeen, 3)
   } finally {
     globalThis.fetch = realFetch
     restore()
   }
 })
 
-// ---------- covered slots ----------
-
 const guideRec = (store, slug, title, extra = {}) => store.createRecord({ type: 'published_guide', status: 'live', payload: { url: U(slug), slug, title, summary: `${title} in short.`, published_at: '2026-10-20T13:00:00.000Z', keywords: ['M91', 'human approval'], headings: ['What Is M91?'], synced_at: '2026-10-28T06:00:00Z', ...extra } })
-
-test('covered: done for the picker and for "needs"; setCovered marks a planned slot and undoes it; other statuses are refused', async () => {
-  const store = memoryStore()
-  await saveRoadmap(store, { ...goodRoadmap(), status: 'approved' })
-  assert.equal(nextSlot((await loadRoadmap(store)).payload).slot.slot_id, 's0-1')
-  const guide = { url: U(APPROVAL), title: 'What Happens When Your Software Needs a Human Approval?' }
-  const rec = await setCovered(store, 's0-1', guide)
-  const s = rec.payload.stages[0].slots.find((x) => x.slot_id === 's0-1')
-  assert.deepEqual([s.status, s.covered_by], ['covered', guide])
-  assert.equal(nextSlot(rec.payload).slot.slot_id, 's0-2', 's0-2 needs s0-1, which is covered (done)')
-  await assert.rejects(setCovered(store, 's0-1', guide), (e) => e instanceof RoadmapError && e.code === 'slot_locked')
-  const undone = await setCovered(store, 's0-1', null)
-  const u = undone.payload.stages[0].slots.find((x) => x.slot_id === 's0-1')
-  assert.deepEqual([u.status, u.covered_by], ['planned', undefined])
-  await assert.rejects(setCovered(store, 's0-2', null), (e) => e.code === 'bad_params')
-})
-
-test('Planner: PUBLISHED GUIDES in the message, the "covered" answer applied to known guides and planned slots only, covered slots kept on regenerate', () => {
-  const guides = [{ url: U(APPROVAL), title: 'What Happens When Your Software Needs a Human Approval?', summary: 'M91 reaches the right person.', headings: ['What Is M91?', 'How M91 Works'] }]
-  const msg = buildPlannerMessage({ factsText: 'facts', existing: null, guides })
-  assert.match(msg, /--- PUBLISHED GUIDES \(already live\) ---\n- What Happens When Your Software Needs a Human Approval\? \| https:\/\/msg91\.com\/guide\/what-happens-when-your-software-needs-a-human-approval- \| M91 reaches the right person\. \| sections: What Is M91\?; How M91 Works/)
-  assert.match(buildPlannerMessage({ factsText: 'f' }), /--- PUBLISHED GUIDES \(already live\) ---\n\(none\)$/)
-  assert.match(PLANNER_PROMPT, /PUBLISHED GUIDES are posts already live on the blog/)
-  assert.ok(planner_roadmap.schema.required.includes('covered'))
-  assert.deepEqual(plannerSchemaErrors(goodAnswer()), [])
-  const answer = { ...goodAnswer(), covered: [{ slot_id: 's0-1', guide_url: U(APPROVAL) }, { slot_id: 's0-2', guide_url: 'https://msg91.com/guide/made-up' }, { slot_id: 's9-9', guide_url: U(APPROVAL) }] }
-  const rm = roadmapFromAnswer(answer, null, guides)
-  const slot = (r, id) => r.stages.flatMap((s) => s.slots).find((s) => s.slot_id === id)
-  assert.deepEqual([slot(rm, 's0-1').status, slot(rm, 's0-1').covered_by.url], ['covered', U(APPROVAL)])
-  assert.equal(slot(rm, 's0-2').status, 'planned', 'an unknown guide URL is ignored')
-  // Regenerate: the covered slot stays exactly as it is, and the message marks it LOCKED.
-  const again = roadmapFromAnswer({ ...goodAnswer(), covered: [] }, rm, guides)
-  assert.equal(slot(again, 's0-1').status, 'covered')
-  assert.match(buildPlannerMessage({ factsText: 'f', existing: rm, guides }), /s0-1 \[LOCKED, covered by "What Happens When Your Software Needs a Human Approval\?"\]/)
-})
 
 // ---------- what the agents get ----------
 
-test('knowledge map: the guides join the approved posts, without duplicates, with the slot they cover', async () => {
+test('knowledge map: the guides join the approved posts, without duplicates', async () => {
   const store = memoryStore()
-  await store.createRecord({ type: 'knowledge', status: 'current', payload: { brief_id: 'B-1', title: 'How the M91 Alert Flow Moves an Alert From Software to a Person', slot_id: 's0-2', stage: 0, concepts: ['alert'], terms_defined: [], summary: 'x', link: null, export_slug: FLOW, approved_at: '2026-10-23T08:00:00Z' } })
+  await store.createRecord({ type: 'knowledge', status: 'current', payload: { brief_id: 'B-1', title: 'How the M91 Alert Flow Moves an Alert From Software to a Person', concepts: ['alert'], terms_defined: [], summary: 'x', link: null, export_slug: FLOW, approved_at: '2026-10-23T08:00:00Z' } })
   await guideRec(store, APPROVAL, 'What Happens When Your Software Needs a Human Approval?')
   await guideRec(store, FLOW, 'How the M91 Alert Flow Moves an Alert From Software to a Person')
-  const rm = { ...goodRoadmap(), status: 'approved' }
-  Object.assign(rm.stages[0].slots[0], { status: 'covered', covered_by: { url: U(APPROVAL), title: 'x' } })
-  await saveRoadmap(store, rm)
   const map = await knowledgeMap(store)
   assert.deepEqual(map.map((k) => k.title), ['What Happens When Your Software Needs a Human Approval?', 'How the M91 Alert Flow Moves an Alert From Software to a Person'], 'oldest first, the engine\'s own post once')
-  assert.deepEqual([map[0].link, map[0].slot_id, map[0].source], [U(APPROVAL), 's0-1', 'published_guide'])
+  assert.deepEqual([map[0].link, map[0].source], [U(APPROVAL), 'published_guide'])
 })
 
 test('Strategist: the guides are PUBLISHED POSTS (internal links) and ALREADY COVERED', async () => {
@@ -254,33 +204,19 @@ test('Strategist: the guides are PUBLISHED POSTS (internal links) and ALREADY CO
   assert.ok(inputs.alreadyCovered.some((l) => l.includes('What Happens When Your Software Needs a Human Approval? — published guide')))
 })
 
-test('API: GET /api/guides (and how many are newer than the roadmap); POST cover marks and undoes; an unknown guide is refused', async () => {
+test('API: GET /api/guides lists the live guides; the roadmap endpoints are gone', async () => {
   const restore = quiet()
   const store = memoryStore()
-  await saveRoadmap(store, { ...goodRoadmap(), status: 'approved', generated_at: '2026-10-22T10:00:00+05:30' })
   await guideRec(store, APPROVAL, 'What Happens When Your Software Needs a Human Approval?')
-  const config = fakeConfig({ ROADMAP_ENABLED: 'true' })
+  const config = fakeConfig()
   const manager = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => stubAgents })
   const srv = createServer({ triggerKey: 'fake-trigger-key-0123456789', manager, store, config })
   await new Promise((r) => srv.listen(0, '127.0.0.1', r))
   const base = `http://127.0.0.1:${srv.address().port}`
-  const call = async (method, path, body) => {
-    const res = await fetch(base + path, { method, headers: { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
-    return { status: res.status, json: await res.json() }
-  }
   try {
-    let g = await call('GET', '/api/guides')
-    assert.equal(g.status, 200)
-    assert.deepEqual(g.json.guides.map((x) => [x.title, x.covers]), [['What Happens When Your Software Needs a Human Approval?', null]])
-    assert.equal(g.json.newer_than_roadmap, 1)
-    const c = await call('POST', '/api/roadmap/slots/s0-1/cover', { guide_url: U(APPROVAL) })
-    assert.equal(c.status, 200)
-    assert.equal(c.json.roadmap.stages[0].slots[0].status, 'covered')
-    g = await call('GET', '/api/guides')
-    assert.equal(g.json.guides[0].covers, 's0-1')
-    assert.equal((await call('POST', '/api/roadmap/slots/s0-2/cover', { guide_url: 'https://msg91.com/guide/nope' })).json.error.code, 'unknown_guide')
-    assert.equal((await call('POST', '/api/roadmap/slots/s0-2/cover', { guide_url: 5 })).status, 400)
-    assert.equal((await call('POST', '/api/roadmap/slots/s0-1/cover', { guide_url: null })).json.roadmap.stages[0].slots[0].status, 'planned')
+    const g = await (await fetch(`${base}/api/guides`)).json()
+    assert.deepEqual(g.guides.map((x) => [x.title, x.url]), [['What Happens When Your Software Needs a Human Approval?', U(APPROVAL)]])
+    assert.equal((await fetch(`${base}/api/roadmap`)).status, 404)
   } finally {
     await new Promise((r) => srv.close(r))
     restore()

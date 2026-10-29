@@ -48,22 +48,24 @@ test('judgeRecords: dead statuses, dry runs, rejected and superseded briefs, bri
   assert.deepEqual(reasons(j, fine), [])
 })
 
-test('judgeRecords: protection — published posts, current facts/tone, approved roadmap, approved posts and their exports', () => {
+test('judgeRecords: protection — published posts, current facts/tone, approved posts and their exports, the editor’s picks', () => {
   const post = rec('published_post', { briefId: B1, status: 'published', payload: { brief_id: B1 } })
   const draft = rec('draft', { briefId: B1, status: 'approved', version: 1 })
   const brief = rec('brief', { briefId: B1, status: 'approved', version: 1, payload: { brief_version: 1 } })
   const exp = rec('markdown_export', { briefId: B1, status: 'final', version: 1 })
   const facts = rec('m91_facts', { status: 'current' })
   const oldFacts = rec('m91_facts', { status: 'old' })
-  const roadmap = rec('roadmap', { status: 'approved' })
-  const draftRoadmap = rec('roadmap', { status: 'proposed' })
+  const pick = rec('weekly_pick', { status: 'written' })
+  const oldRoadmap = rec('roadmap', { status: 'approved' })
   const lesson = rec('lesson', { payload: 'Explain jargon.' })
   const pin = rec('pinned_topic', { status: 'open' })
   const know = rec('knowledge', { status: 'current' })
-  const j = judgeRecords([post, draft, brief, exp, facts, oldFacts, roadmap, draftRoadmap, lesson, pin, know], { now: NOW })
+  const j = judgeRecords([post, draft, brief, exp, facts, oldFacts, pick, oldRoadmap, lesson, pin, know], { now: NOW })
   const p = (r) => j.get(r.id).protection
-  assert.deepEqual([post, exp, facts, roadmap, know].map(p), ['never', 'never', 'never', 'never', 'never'])
-  assert.deepEqual([draft, brief, draftRoadmap, lesson, pin].map(p), ['confirm', 'confirm', 'confirm', 'confirm', 'confirm'])
+  assert.deepEqual([post, exp, facts, know].map(p), ['never', 'never', 'never', 'never'])
+  assert.deepEqual([draft, brief, pick, lesson, pin].map(p), ['confirm', 'confirm', 'confirm', 'confirm', 'confirm'])
+  // A roadmap from before the weekly editor is no longer protected: it can be cleaned up.
+  assert.equal(p(oldRoadmap), null)
   assert.equal(p(oldFacts), null)
   assert.deepEqual(reasons(j, oldFacts), ['status'])
 })

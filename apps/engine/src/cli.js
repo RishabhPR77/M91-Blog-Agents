@@ -130,14 +130,15 @@ export function printDesigner(d, print = console.log) {
   if (d.error) print(`NO GUIDE: ${d.error}`)
 }
 
-/** The roadmap, stage by stage: each slot with its status, question, what it teaches and what it needs. */
-export function printRoadmap(roadmap, print = console.log) {
-  print(`--- Roadmap · ${roadmap.status}${roadmap.approved_at ? ` (approved ${roadmap.approved_at.slice(0, 10)})` : ''} · ${roadmap.model_used ?? ''} ---`)
-  for (const st of roadmap.stages) {
-    print(`Stage ${st.number}: ${st.name} (${st.level})`)
-    for (const s of st.slots) print(`  ${s.slot_id.padEnd(5)} [${s.status}] ${s.title_idea}\n         ${s.question} · teaches: ${s.teaches.join(', ')}${s.needs.length ? ` · needs: ${s.needs.join(', ')}` : ''}${s.brief_id ? ` · brief ${s.brief_id}` : ''}`)
+/** The weekly editor's decisions, newest first: the pick, why, its hook and evidence, and the runners-up. */
+export function printPicks(picks, print = console.log) {
+  for (const p of picks) {
+    print(`--- ${p.date} · ${p.chosen_by} · ${p.model ?? ''}${p.brief_id ? ` · brief ${p.brief_id}` : ''} ---`)
+    print(`PICK [${p.pick.format}] ${p.pick.title}\n  ${p.pick.question}\n  why: ${p.reason}`)
+    if (p.pick.hook) print(`  hook: ${p.pick.hook.title} (${p.pick.hook.outlet}, ${p.pick.hook.published_date})`)
+    for (const e of p.pick.evidence ?? []) print(`  ${e.id} ${e.kind}: ${e.text}${e.url ? ` <${e.url}>` : ''}`)
+    for (const r of p.runners_up ?? []) print(`  runner-up [${r.format}] ${r.title}${r.left_out ? ` (left out: ${r.left_out})` : ''}`)
   }
-  if (roadmap.notes) print(`Notes: ${roadmap.notes}`)
 }
 
 /** A review in full: gates and areas with evidence, total, feedback with quote_found, sources, lessons. */
@@ -413,7 +414,7 @@ async function main() {
   // The timely lane. --check: the news check (1 AI call, a run). --list: the cards. --write-now / --dismiss <id>,
   // --add <id> --stage <1–5>: your decision on a card (no AI). Through the engine when it runs.
   if (args._[0] === 'timely') {
-    const usage = 'usage: npm run timely -- --check | --list | --write-now <id> | --dismiss <id> | --add <id> --stage <1-5>'
+    const usage = 'usage: npm run timely -- --check | --list | --write-now <id> | --dismiss <id>'
     if (args.check) {
       const result = await startAndWait(config, { mode: 'timely_check' })
       console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)
@@ -422,12 +423,11 @@ async function main() {
       return
     }
     const engine = await engineUrl(config)
-    const action = args['write-now'] ? ['write_now', args['write-now']] : args.dismiss ? ['dismiss', args.dismiss] : args.add ? ['add_to_roadmap', args.add] : null
+    const action = args['write-now'] ? ['write_now', args['write-now']] : args.dismiss ? ['dismiss', args.dismiss] : null
     if (action) {
       if (typeof action[1] !== 'string') throw new Error(usage)
-      const body = { action: action[0], ...(action[0] === 'add_to_roadmap' && { stage: Number(args.stage) }) }
-      const out = engine ? (await engineApi.timelyAction(engine, action[1], body)).opportunity : await applyAction(store, action[1], body.action, { stage: body.stage })
-      console.log(`${action[1]}: ${out.status}${out.slot_id ?? out.payload?.slot_id ? ` (slot ${out.slot_id ?? out.payload.slot_id})` : ''}`)
+      const out = engine ? (await engineApi.timelyAction(engine, action[1], { action: action[0] })).opportunity : await applyAction(store, action[1], action[0])
+      console.log(`${action[1]}: ${out.status}`)
       return
     }
     if (!args.list) throw new Error(usage)
@@ -524,23 +524,11 @@ async function main() {
     return
   }
 
-  // Phase 12: npm run roadmap -- --generate (1 AI call, +1 for the M91 facts when there are none) | --show | --approve
-  if (args._[0] === 'roadmap') {
-    if (args.generate) {
-      const result = await startAndWait(config, { mode: 'roadmap' })
-      if (result.output?.roadmap) printRoadmap(result.output.roadmap)
-      console.log(`${result.status}: ${result.run?.result_summary ?? result.output?.summary_line ?? result.error ?? ''}`)
-      process.exitCode = result.status === 'succeeded' ? 0 : 1
-      return
-    }
-    const { withMem0Count, mem0Requests } = await import('./util/mem0count.js')
-    const { loadRoadmap } = await import('./roadmap/model.js')
-    const { approveRoadmap } = await import('./roadmap/actions.js')
-    const { counts, result } = withMem0Count(async () => (args.approve ? approveRoadmap(store) : loadRoadmap(store)))
-    const rec = await result
-    if (!rec?.payload) console.log('No roadmap yet: npm run roadmap -- --generate')
-    else printRoadmap(rec.payload)
-    console.log(`Mem0 requests: ${mem0Requests(counts)}`)
+  // npm run weekly: the weekly editor's latest decisions (why each post was chosen). No AI call.
+  if (args._[0] === 'weekly') {
+    const picks = (await store.getRecords({ type: 'weekly_pick' })).map((r) => r.payload).filter(Boolean).sort((a, b) => String(b.chosen_at).localeCompare(String(a.chosen_at))).slice(0, Number(args.last ?? 5) || 5)
+    if (!picks.length) console.log('No weekly picks yet: the next full run (npm run pipeline) decides the first one.')
+    else printPicks(picks)
     return
   }
 

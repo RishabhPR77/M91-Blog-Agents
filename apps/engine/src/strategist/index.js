@@ -5,7 +5,7 @@ import { log } from '../util/log.js'
 import { istIso } from '../util/time.js'
 import { newBriefId, newStrategistThreadId } from '../util/ids.js'
 import { createViaSocketClient, TruncatedError } from '../viasocket.js'
-import { strategist_brief, strategist_brief_slot } from './schemas.js'
+import { strategist_brief, strategist_brief_target } from './schemas.js'
 import { buildPlanPrompt, repairTail, rebriefTail, TRUNCATED_PROBLEM } from './prompts.js'
 import { buildInputs, buildStrategistMessage, InputsError } from './inputs.js'
 import { validateBrief, autoFix, findProblems } from './checks.js'
@@ -93,7 +93,7 @@ export async function runStrategist(params = {}, deps = {}) {
     const started = now()
     let res = null
     try {
-      res = await aiSend({ agent: 'strategist', prompt, message, jsonSchema: inputs.target ? strategist_brief_slot : strategist_brief, threadId: newStrategistThreadId(runId, callName), retries: config.viasocket.maxRetries })
+      res = await aiSend({ agent: 'strategist', prompt, message, jsonSchema: inputs.target ? strategist_brief_target : strategist_brief, threadId: newStrategistThreadId(runId, callName), retries: config.viasocket.maxRetries })
     } catch (error) {
       if (error instanceof CancelledError) throw error
       const meta = { call: callName, model: st.model, delivery: st.delivery, ms: now() - started }
@@ -110,7 +110,7 @@ export async function runStrategist(params = {}, deps = {}) {
     }
     if (res) {
       if (res.recoveredFromHistory) warnings.push(`${callName}: sync call hit the gateway timeout (502); the answer was read from the thread history`)
-      const v = validateBrief(res.content, { slot: Boolean(inputs.target) })
+      const v = validateBrief(res.content, { target: Boolean(inputs.target) })
       let fixes = []
       if (v.errors.length) problems = v.errors
       else {
@@ -132,6 +132,8 @@ export async function runStrategist(params = {}, deps = {}) {
 
   // Save first, then update leads.
   const final = finalizeBrief(brief, { briefId, briefVersion, runId, config, now })
+  // The weekly editor's pick stays on the brief: the post page shows why this post, and the next editor sees its format.
+  if (inputs.target?.weekly) final.weekly = { pick_id: inputs.target.pick_id, format: inputs.target.format, why_now: inputs.target.why_now, hook: inputs.target.hook?.title ?? null }
   if (config.runtime.dryRun) log.info('DRY_RUN: brief not saved', { brief: final })
   const rec = await saveBrief(store, final)
 

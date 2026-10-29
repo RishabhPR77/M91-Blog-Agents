@@ -1,19 +1,17 @@
-// The timely lane (next to the roadmap): timely_opportunity records, their statuses and the person's actions, and
-// the rules that decide when a timely post may be written. Code only, no AI.
+// The news cards: timely_opportunity records, their statuses and the person's actions, and the rules that decide
+// when a Write now card is written. Code only, no AI. The weekly editor reads the open cards as this week's news.
 //
 // Statuses: proposed (found by a news check) → write_now (you clicked Write now; the next run writes it) →
-// written (approved). Or added_to_roadmap (it became a planned slot), dismissed, expired (TIMELY_WINDOW_DAYS after
-// the event's date, if still proposed or write_now and not being written).
+// written (approved). Or dismissed, expired (TIMELY_WINDOW_DAYS after the event's date, if still proposed or
+// write_now and not being written). added_to_roadmap is kept only so older cards still load.
 
 import { istDate, istIso } from '../util/time.js'
 import { daysAgo } from '../scout/checks.js'
-import { loadRoadmap, saveRoadmap } from '../roadmap/model.js'
-import { roadmapProblems } from '../roadmap/checks.js'
 import { log } from '../util/log.js'
 
 export const TIMELY_STATUSES = Object.freeze(['proposed', 'write_now', 'added_to_roadmap', 'dismissed', 'written', 'expired'])
 export const OPEN_STATUSES = Object.freeze(['proposed', 'write_now'])
-export const ACTIONS = Object.freeze(['write_now', 'add_to_roadmap', 'dismiss'])
+export const ACTIONS = Object.freeze(['write_now', 'dismiss'])
 
 export class TimelyError extends Error {
   constructor(code, message, status = 400) {
@@ -49,12 +47,6 @@ export async function expireOld(store, { config, now = Date.now }) {
   return n
 }
 
-/** The Starter (stage 0) has at least one approved post. */
-export async function starterApproved(store) {
-  const rec = await loadRoadmap(store)
-  return Boolean(rec?.payload?.stages?.find((st) => st.number === 0)?.slots?.some((s) => s.status === 'approved'))
-}
-
 /** Timely posts written (approved) or being written in the last 7 days. */
 export function timelyThisWeek(records, { now = Date.now }) {
   const since = now() - 7 * 86400000
@@ -74,7 +66,6 @@ export async function nextTimely(store, { config, now = Date.now }) {
     .filter((r) => r.status === 'write_now' && !r.payload?.brief_id && !isExpired(r, { today, windowDays: config.timely.windowDays }))
     .sort((a, b) => String(a.payload?.write_now_at ?? '').localeCompare(String(b.payload?.write_now_at ?? '')))
   if (!ready.length) return { record: null, waiting: null, reason: null }
-  if (!(await starterApproved(store))) return { record: null, waiting: ready[0], reason: 'Timely posts start once the Starter (stage 0) has an approved post' }
   const done = timelyThisWeek(all, { now })
   if (done >= config.timely.maxPerWeek) return { record: null, waiting: ready[0], reason: `TIMELY_MAX_PER_WEEK (${config.timely.maxPerWeek}) timely post${config.timely.maxPerWeek === 1 ? '' : 's'} already written in the last 7 days` }
   return { record: ready[0], waiting: null, reason: null }
@@ -83,48 +74,19 @@ export async function nextTimely(store, { config, now = Date.now }) {
 /** The opportunity as the run's target (what the Scout, Strategist and Writer get). */
 export const timelyTarget = (rec) => ({ kind: 'timely', opportunity: { record_id: rec.id, ...rec.payload } })
 
-/**
- * The person's action on a card: write_now | add_to_roadmap (with stage) | dismiss. One write (two for
- * add_to_roadmap: the roadmap and the card). Returns the updated card.
- */
-export async function applyAction(store, id, action, { stage, now = Date.now } = {}) {
+/** The person's action on a card: write_now | dismiss (one write). Returns the updated card. */
+export async function applyAction(store, id, action, { now = Date.now } = {}) {
   if (!ACTIONS.includes(action)) throw new TimelyError('bad_params', `action must be one of ${ACTIONS.join(', ')}`)
   const rec = (await listOpportunities(store)).find((r) => r.id === id || r.payload?.opportunity_id === id)
   if (!rec) throw new TimelyError('not_found', `no timely opportunity ${id}`, 404)
   if (rec.payload?.brief_id) throw new TimelyError('in_progress', `${rec.payload.title} is being written (brief ${rec.payload.brief_id})`, 409)
-  const allowed = { write_now: ['proposed'], add_to_roadmap: ['proposed', 'write_now'], dismiss: ['proposed', 'write_now'] }[action]
+  const allowed = { write_now: ['proposed'], dismiss: ['proposed', 'write_now'] }[action]
   if (!allowed.includes(rec.status)) throw new TimelyError('bad_status', `${rec.payload?.title ?? id} is ${rec.status}: ${action.replace(/_/g, ' ')} is not possible`, 409)
   const at = istIso(new Date(now()))
-  let payload = { ...rec.payload }
-  let status = action === 'write_now' ? 'write_now' : action === 'dismiss' ? 'dismissed' : 'added_to_roadmap'
-  if (action === 'write_now') payload.write_now_at = at
-  if (action === 'dismiss') payload.dismissed_at = at
-  if (action === 'add_to_roadmap') {
-    const slotId = await addSlot(store, rec.payload, Number(stage), { now })
-    payload = { ...payload, slot_id: slotId, added_at: at }
-  }
+  const payload = { ...rec.payload, ...(action === 'write_now' ? { write_now_at: at } : { dismissed_at: at }) }
+  const status = action === 'write_now' ? 'write_now' : 'dismissed'
   await store.updateRecord(rec.id, payload, { status }, { known: rec })
   return { ...rec, status, payload }
-}
-
-/** Adds a planned slot for the card in the stage picked (the roadmap's checks apply). Returns its slot id. */
-async function addSlot(store, opp, stageNumber, { now }) {
-  if (!Number.isInteger(stageNumber) || stageNumber < 1 || stageNumber > 5) throw new TimelyError('bad_params', 'pick a stage from 1 to 5')
-  const rec = await loadRoadmap(store)
-  if (!rec?.payload) throw new TimelyError('no_roadmap', 'there is no roadmap yet: generate it first', 409)
-  const roadmap = structuredClone(rec.payload)
-  const st = roadmap.stages.find((x) => x.number === stageNumber)
-  if (!st) throw new TimelyError('bad_params', `the roadmap has no stage ${stageNumber}`)
-  const used = new Set(st.slots.map((s) => s.slot_id))
-  let n = 1
-  while (used.has(`s${st.number}-${n}`)) n++
-  const question = /\?$/.test(opp.title) ? opp.title : `What does "${opp.title}" mean for teams that need a person to decide in time?`
-  // One concept to start with (the roadmap needs 1–5); edit it on the Roadmap page.
-  st.slots.push({ slot_id: `s${st.number}-${n}`, title_idea: String(opp.title).slice(0, 90), question, teaches: [String(opp.title).slice(0, 80)], needs: [], status: 'planned', brief_id: '', from_opportunity: opp.opportunity_id, evidence_url: opp.source_url })
-  const problems = roadmapProblems(roadmap)
-  if (problems.length) throw new TimelyError('roadmap_problem', `not added to stage ${stageNumber}: ${problems[0]}`, 409)
-  await saveRoadmap(store, roadmap, rec, { now })
-  return `s${st.number}-${n}`
 }
 
 /** A run starts writing the card (brief id saved). Never throws. */

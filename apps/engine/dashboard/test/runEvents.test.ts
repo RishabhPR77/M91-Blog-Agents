@@ -14,7 +14,7 @@ describe('runEvents reducer: the recorded full run (hand-written in the engine f
     expect([s.mode, s.trigger, s.dryRun, s.ms, s.briefId]).toEqual(['full', 'manual', true, 353000, '261019-0900-ABCD'])
     expect(s.resultSummary).toBe('awaiting human approval (v2, score 86)')
     expect(s.totals).toEqual({ aiCalls: 7, retries: 3 })
-    expect(byName(s)).toEqual({ scout: 'done', strategist: 'done', writer: 'done', checks: 'done', reviewer: 'done', promo: 'skipped', designer: 'skipped', export: 'skipped', publisher: 'skipped' })
+    expect(byName(s)).toEqual({ editor: 'skipped', scout: 'done', strategist: 'done', writer: 'done', checks: 'done', reviewer: 'done', promo: 'skipped', designer: 'skipped', export: 'skipped', publisher: 'skipped' })
     expect(s.source).toBe('live')
   })
 

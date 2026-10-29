@@ -1,7 +1,7 @@
 // Inputs for the Strategist, gathered by code from Mem0 (Phase 3 brief, section 6). Never by the AI.
 
 import { istDate } from '../util/time.js'
-import { knowledgeMap, knowledgeForPrompt } from '../roadmap/knowledge.js'
+import { knowledgeMap, knowledgeForPrompt } from '../knowledge.js'
 import { storyDateRule } from '../scout/checks.js'
 import { MESSAGE_MAX } from '../scout/prompts.js'
 import { listGuides, guidesAsPublishedPosts } from '../guides/sync.js'
@@ -82,16 +82,16 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
   if (!factsRec) throw new InputsError(`No m91_facts record for today (${today}). Run the Scout first (npm run scout, or npm run strategist -- --with-scout).`)
   const facts = { can: factsRec.payload.can ?? [], cannot: factsRec.payload.cannot ?? [], integrations: factsRec.payload.integrations ?? [] }
 
-  // Phase 12: a roadmap slot (or a due pinned topic) is the only lead of the run.
-  const slotTarget = target?.kind === 'slot' ? target : null
+  // The weekly editor's pick (or a due pinned topic) is the only lead of the run; its cluster was made by the Scout.
+  const weeklyTarget = target?.kind === 'weekly' ? target : null
   const pinTarget = target?.kind === 'pinned' ? target : null
-  // The timely lane: a card you chose with Write now; its story lead (made by the Scout) is the run's only lead.
+  // A news card you chose with Write now; its story lead (made by the Scout) is the run's only lead.
   const timelyTarget = target?.kind === 'timely' ? target : null
-  const forTarget = (r) => (slotTarget ? r.payload?.slot_id === slotTarget.slot.slot_id : pinTarget ? r.payload?.pinned_id === pinTarget.pin.pinned_id : timelyTarget ? r.payload?.opportunity_id === timelyTarget.opportunity.opportunity_id : true)
+  const forTarget = (r) => (weeklyTarget ? r.payload?.pick_id === weeklyTarget.pick.pick_id : pinTarget ? r.payload?.pinned_id === pinTarget.pin.pinned_id : timelyTarget ? r.payload?.opportunity_id === timelyTarget.opportunity.opportunity_id : true)
 
   // Pinned topics due.
   const pinnedDue = (await records('pinned_topic'))
-    .filter((r) => !slotTarget && !timelyTarget && (!pinTarget || r.payload?.pinned_id === pinTarget.pin.pinned_id))
+    .filter((r) => !weeklyTarget && !timelyTarget && (!pinTarget || r.payload?.pinned_id === pinTarget.pin.pinned_id))
     .filter((r) => usable(r) && String(r.payload?.target_date) <= today)
     .sort((a, b) => (a.payload.priority === 'high' ? -1 : 0) - (b.payload.priority === 'high' ? -1 : 0) || String(a.payload.target_date).localeCompare(String(b.payload.target_date)))
 
@@ -107,7 +107,7 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
   const topIds = (scoutResult?.top_clusters ?? []).map((c) => c.cluster_id)
   const clusters = (await records('question_cluster'))
     .filter(usable)
-    .filter((r) => !target || ((slotTarget || timelyTarget) && forTarget(r)))
+    .filter((r) => !target || ((weeklyTarget || timelyTarget) && forTarget(r)))
     .sort((a, b) => {
       const ia = topIds.indexOf(a.payload?.cluster_id)
       const ib = topIds.indexOf(b.payload?.cluster_id)
@@ -115,7 +115,7 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     })
     .slice(0, 8)
 
-  const tutorials = (await records('tutorial_lead')).filter(usable).filter((r) => !target || (slotTarget && forTarget(r))).slice(0, 5)
+  const tutorials = (await records('tutorial_lead')).filter(usable).filter((r) => !target || (weeklyTarget && forTarget(r))).slice(0, 5)
 
   // Style notes: newest current profile per topic group within STYLE_REUSE_DAYS.
   const styleNotes = []
@@ -173,7 +173,7 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
   for (const r of tutorials) for (const s of [...(r.payload.steps_outline ?? []), ...(r.payload.supporting_facts ?? [])]) allowed.add(urlKey(s.source_url))
   allowed.delete('')
 
-  // Phase 12: the knowledge map (what the reader already learned) and the slot's own sources.
+  // The knowledge map (what readers can already read) and this post's own sources.
   const knowledge = target ? await knowledgeMap(store) : []
   const slotSources = []
   if (target && forBriefId === null && scoutResult?.source_pack_id) {
@@ -181,7 +181,9 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     for (const c of pack?.payload?.claims ?? []) for (const r of c.results ?? []) if (r.verdict === 'supports') slotSources.push({ url: r.url, publisher: r.publisher, what_it_covers: r.note })
   }
   for (const s of slotSources) allowed.add(urlKey(s.url))
-  // The roadmap decides the topic, not the group balance.
+  // The weekly pick's news hook (its source loaded when the news check found it).
+  if (weeklyTarget?.pick.hook?.source_url) allowed.add(urlKey(weeklyTarget.pick.hook.source_url))
+  // The weekly editor (or the person) decided the topic, not the group balance.
   const blocked = target ? null : blockedGroup(recentBriefs)
   return {
     today,
@@ -205,8 +207,8 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     leadIndex,
     allowedUrls: allowed,
     leadCount: leadIndex.size,
-    // Phase 12
-    target: slotTarget ? { slot_id: slotTarget.slot.slot_id, title_idea: slotTarget.slot.title_idea, question: slotTarget.slot.question, teaches: slotTarget.slot.teaches ?? [], needs: slotTarget.slot.needs ?? [], stage: slotTarget.stage } : pinTarget ? { pinned_id: pinTarget.pin.pinned_id, topic: pinTarget.pin.topic }
+    // The post this run writes.
+    target: weeklyTarget ? weeklyForPrompt(weeklyTarget.pick) : pinTarget ? { pinned_id: pinTarget.pin.pinned_id, topic: pinTarget.pin.topic }
       : timelyTarget ? (({ opportunity_id, title, what_happened, outlet, published_date, source_url, why_m91, urgency }) => ({ timely: true, opportunity_id, title, what_happened, outlet, published_date, source_url, why_m91, urgency }))(timelyTarget.opportunity)
       : null,
     knowledge: knowledgeForPrompt(knowledge),
@@ -215,6 +217,13 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
 }
 
 const json = (v) => JSON.stringify(v)
+
+/** The weekly pick as the Strategist gets it: the question, format, angle, why now, the hook and the demand. */
+export const weeklyForPrompt = (p) => ({
+  weekly: true, pick_id: p.pick_id, title: p.title, question: p.question, format: p.format, angle: p.angle, why_now: p.why_now,
+  hook: p.hook ? { title: p.hook.title, what_happened: p.hook.what_happened, outlet: p.hook.outlet, published_date: p.hook.published_date, source_url: p.hook.source_url } : null,
+  demand: (p.evidence ?? []).filter((e) => e.kind === 'question').map((e) => ({ question: e.text, where: e.where ?? null, demand: e.demand ?? null }))
+})
 const listOrNone = (arr) => (arr.length ? json(arr) : 'none')
 
 /** The message (brief 9.4), kept under viaSocket's 50,000-character limit by trimming the least important lists. */
@@ -222,7 +231,7 @@ export function buildStrategistMessage(inputs, tail = '', max = MESSAGE_MAX) {
   const take = { other: 10, covered: 60, clusters: 8, tutorials: 5 }
   const build = () => [
     '--- TODAY ---', inputs.today,
-    ...(inputs.target ? [inputs.target.timely ? '--- POST TO PLAN (a timely post about a real event) ---' : '--- POST TO PLAN (from the roadmap) ---', json(inputs.target), '--- KNOWLEDGE MAP (what the reader already learned, newest first) ---', listOrNone(inputs.knowledge ?? []), '--- SOURCES FOR THIS POST ---', listOrNone(inputs.slotSources ?? [])] : []),
+    ...(inputs.target ? [inputs.target.timely ? '--- POST TO PLAN (a timely post about a real event) ---' : inputs.target.weekly ? '--- POST TO PLAN (this week\'s post, chosen by the editor) ---' : '--- POST TO PLAN (a pinned topic) ---', json(inputs.target), '--- KNOWLEDGE MAP (what the reader already learned, newest first) ---', listOrNone(inputs.knowledge ?? []), '--- SOURCES FOR THIS POST ---', listOrNone(inputs.slotSources ?? [])] : []),
     '--- PINNED TOPICS DUE ---', listOrNone(inputs.pinnedDue),
     '--- RAPID-RESPONSE STORIES ---', listOrNone(inputs.rapidStories),
     '--- OTHER STORIES ---', listOrNone(inputs.otherStories.slice(0, take.other)),

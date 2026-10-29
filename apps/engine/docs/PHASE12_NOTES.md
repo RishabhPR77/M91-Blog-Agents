@@ -528,3 +528,30 @@ already has. It is now the engine's record store.
   run and the run options below; single agents under **Run one agent**; the latest posts with small journey bars.
 - **Look:** one accent colour (indigo) in light mode; dark mode is a neutral graphite theme (no blue tint, readable
   grey text, quiet tinted badges). Screenshots: `docs/screenshots/redesign/` (a seeded local engine, no AI).
+
+## The weekly editor (in place of the roadmap)
+
+One post a week (the cron), so each run decides what is most useful now instead of following a plan made weeks ago.
+
+- **Removed:** the Roadmap Planner (`src/planner/`), the roadmap and its slots, stages and approval (`src/roadmap/`),
+  the "roadmap" run mode, `/api/roadmap*`, the Roadmap page, "Add to roadmap" on news cards, the Starter-stage rule,
+  and the settings `ROADMAP_*`, `PLANNER_*`, `NEXT_PICK`, `NEXT_NEWS_GAP_DAYS`, `NEXT_TUTORIAL_EVERY`. Old `roadmap`
+  records stay listable on the Memory page (no longer protected) so they can be cleaned up.
+- **New:** `src/weekly/` — `signals.js` (this week's questions, fresh news cards, M91's new integrations against a
+  week-old fact sheet, integrations, pinned ideas, live guides, our recent posts), `editor.js` (1 call to
+  `EDITOR_AI_MODEL`, default `openai` / `gpt-5.5`; code checks real evidence, real hooks and near-repeats; runner-up
+  and code fallbacks; one `weekly_pick` record per decision, linked to its brief), `pick.js` (pins, then Write now,
+  else the editor), `repeats.js`. Scout gains the `week` call (questions asked in the last `EDITOR_QUESTION_DAYS`
+  days); its focused research takes the pick (format, angle, hook) and records the question pages as citable sources.
+  The Strategist plans the pick (`TARGET_RULES`: follow the format and angle, open with the hook, `news` from the
+  hook's source) and keeps `weekly` on the brief. The knowledge map (`src/knowledge.js`) is saved on every approval.
+- **Order of a full run:** news check → guide sync → pins / Write now → this week's questions → editor → focused
+  Scout → Strategist → Writer → Designer → Reviewer. A failed questions call is a warning; a failed editor call falls
+  back to code's pick.
+- **Cost:** about 3 Scout calls instead of 8, plus 1 editor call; 33 memory requests for a full run (31 before),
+  approve 15 (12): the knowledge record and the post's news card are updated on every approval.
+- **API:** `GET /api/weekly` (what the next run does, the latest picks); `/api/approvals/:id` has `pick`; settings
+  have `weekly` and `models.editor`. CLI: `npm run weekly`.
+- **Dashboard:** **This week** (in place of Roadmap: next run, the editor's decisions with reasons, signals, hook and
+  runners-up with **Pin for next week**, the news cards, the live guides); **Why this post** on the post page; the
+  topic line and last pick on Control; the Editor step in the run tracker.

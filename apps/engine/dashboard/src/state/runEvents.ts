@@ -9,7 +9,7 @@ import type { EngineEvent } from '../api/sse'
 
 // Phase 10: the Experience Designer runs after each draft, before the Reviewer; the promo pack only on approval (if on).
 // Phase 11: export (the Markdown export saved on approve) comes before the publisher.
-export const PIPELINE = ['scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer', 'promo', 'export', 'publisher'] as const
+export const PIPELINE = ['editor', 'scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer', 'promo', 'export', 'publisher'] as const
 export const MAX_LOG = 5000
 
 export type StepStatus = 'waiting' | 'running' | 'done' | 'failed' | 'cancelled' | 'skipped'

@@ -74,8 +74,8 @@ export function judgeRecords(records, { now = Date.now(), staleDays = DEFAULT_ST
     if (c.drafts.some((d) => LIVE_POST.has(d.status)) || (c.newest && LIVE_POST.has(c.newest.status))) c.live = true
   }
 
-  // Everything that refers to records: briefs (cluster/story/tutorial ids), runs (record ids), the roadmap, knowledge.
-  const refText = [...of('brief'), ...of('run'), ...of('roadmap'), ...of('knowledge'), ...of('draft')].map((r) => JSON.stringify(r.payload ?? '')).join('\n')
+  // Everything that refers to records: briefs (cluster/story/tutorial ids), runs (record ids), knowledge, the editor's picks.
+  const refText = [...of('brief'), ...of('run'), ...of('knowledge'), ...of('weekly_pick'), ...of('draft')].map((r) => JSON.stringify(r.payload ?? '')).join('\n')
   const referenced = (r) => refText.includes(r.id) || (keyIdOf(r.payload) && refText.includes(keyIdOf(r.payload)))
 
   // 1. Test data and broken version numbering (the cleanup command's rules).
@@ -121,10 +121,10 @@ export function judgeRecords(records, { now = Date.now(), staleDays = DEFAULT_ST
     // Protection.
     if (r.type === 'published_post') r.status === 'published' || r.status === 'publishing' ? protect(r, 'never', 'a published post') : protect(r, 'confirm', 'a blog post record')
     if ((r.type === 'm91_facts' || r.type === 'tone_profile') && r.status === 'current') protect(r, 'never', `the current ${r.type === 'm91_facts' ? 'M91 facts' : 'style notes'}`)
-    if (r.type === 'roadmap') r.status === 'approved' ? protect(r, 'never', 'the approved roadmap') : protect(r, 'confirm', 'the roadmap')
-    if (r.type === 'knowledge' && r.status === 'current') protect(r, 'never', 'what an approved post taught (the roadmap uses it)')
+    if (r.type === 'knowledge' && r.status === 'current') protect(r, 'never', 'what an approved post taught (later posts link to it)')
+    if (r.type === 'weekly_pick' && r.status === 'written') protect(r, 'confirm', 'why a post was chosen (its post page shows it)')
     if (r.type === 'markdown_export' && r.briefId && briefs.get(r.briefId)?.live) protect(r, 'never', "an approved post's export")
-    if (r.type === 'published_guide' && r.status === 'live') protect(r, 'confirm', 'a guide that is live on msg91.com/guide (the roadmap and the links use it)')
+    if (r.type === 'published_guide' && r.status === 'live') protect(r, 'confirm', 'a guide that is live on msg91.com/guide (the editor and the links use it)')
     if (r.type === 'lesson') protect(r, 'confirm', 'a lesson the agents learn from')
     if (r.type === 'pinned_topic' && r.status === 'open') protect(r, 'confirm', 'an open pinned topic')
     if (['brief', 'draft', 'review'].includes(r.type) && r.briefId && briefs.get(r.briefId)?.live) protect(r, 'confirm', 'part of an approved or published post')

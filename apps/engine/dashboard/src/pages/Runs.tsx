@@ -1,5 +1,5 @@
 // /runs — "By post": one row per post with its journey (every run that worked on it, in one bar), and the runs that
-// belong to no post (roadmap, guides, news). "All runs": every run, with status and mode filters; a row opens the
+// belong to no post (guides, news). "All runs": every run, with status and mode filters; a row opens the
 // run page (also for finished runs).
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'

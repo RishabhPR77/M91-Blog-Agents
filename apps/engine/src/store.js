@@ -19,8 +19,9 @@ import { createVsMemoryStore } from './vsmemory.js'
 export const RECORD_TYPES = Object.freeze([
   'question_cluster', 'story_lead', 'tutorial_lead', 'tone_profile', 'brief', 'draft',
   'review', 'promo_pack', 'run_log', 'lesson', 'lock', 'm91_facts', 'source_pack', 'pinned_topic', 'run', 'setting', 'published_post', 'block_doc', 'guide_doc', 'markdown_export',
-  // Phase 12: the learning path (one record) and one knowledge record per approved post.
-  'roadmap', 'knowledge', 'timely_opportunity',
+  // One knowledge record per approved post, the news cards, and the weekly editor's decisions. 'roadmap' is kept
+  // only so records from before the weekly editor can still be listed and cleaned up.
+  'roadmap', 'knowledge', 'timely_opportunity', 'weekly_pick',
   // The M91 guides already live on msg91.com/guide (src/guides/sync.js).
   'published_guide'
 ])

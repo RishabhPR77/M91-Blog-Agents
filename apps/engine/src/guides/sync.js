@@ -215,8 +215,8 @@ export async function syncGuides({ store, config, fetchImpl = globalThis.fetch, 
 export const guidesAsPublishedPosts = (guides) => guides.map((g) => ({ title: g.title, url: g.url, topic_group: null, summary: String(g.summary ?? g.description ?? '').slice(0, 200) }))
 
 /** The guides as knowledge-map entries (what readers can already read). */
-export const guidesAsKnowledge = (guides, coveredBy = new Map()) => guides.map((g) => ({
-  brief_id: null, title: g.title, slot_id: coveredBy.get(g.url) ?? null, stage: null, stage_name: null,
+export const guidesAsKnowledge = (guides) => guides.map((g) => ({
+  brief_id: null, title: g.title,
   concepts: (g.keywords ?? []).slice(0, 6), terms_defined: [], summary: String(g.summary ?? g.description ?? '').slice(0, 200),
   link: g.url, export_slug: null, approved_at: g.published_at ?? null, source: 'published_guide'
 }))

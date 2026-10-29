@@ -12,14 +12,14 @@ import { tmpdir } from 'node:os'
 import { defaultAgents } from '../../src/orchestrator.js'
 import { subscribe } from '../../src/events.js'
 import { fakeConfig, memoryStore, fakeNotifier } from '../helpers.js'
-import { fakeAi as scoutAi, fakeWeb, fakeChecker, LLMS } from '../scout/fixtures.js'
-import { seededStore, fakeAi as strategistAi, CTA } from '../strategist/fixtures.js'
+import { fakeAi as scoutAi, fakeWeb, fakeChecker, LLMS, VALID } from '../scout/fixtures.js'
+import { seededStore, fakeAi as strategistAi, validBrief, CTA } from '../strategist/fixtures.js'
 import { fakeAi as writerAi, draftAnswer, GOOD_MD } from '../writer/fixtures.js'
 import { fakeReviewerAi, reviewAnswer, item } from '../reviewer/fixtures.js'
 import { plainPlan } from './plain-plan.js'
 
 const NOW = Date.parse('2026-10-17T08:35:00Z')
-const STEPS = ['scout', 'strategist', 'writer', 'checks', 'reviewer', 'promo', 'designer', 'publisher']
+const STEPS = ['scout', 'editor', 'strategist', 'writer', 'checks', 'reviewer', 'promo', 'designer', 'publisher']
 
 /** A fake Mem0 account: sync adds answer results[].id and an event id (like the docs' infer=false answer). */
 function countingMem0(count) {
@@ -124,7 +124,12 @@ export async function measureFullRun(env = {}, { decisions = false } = {}) {
   }
   const store = () => createStore({ config, clientFactory: async () => mem0, fetch, sleepFn: async () => {} })
 
-  const ai = { scout: scoutAi(), strategist: strategistAi(), writer: writerAi({ revise: draftAnswer({ revision_notes: [{ feedback_quote: 'q', what_changed: 'w' }] }) }) }
+  // The Strategist plans the editor's pick: its lead is the cluster the focused Scout just made (an id made by code).
+  const pickBrief = (n, opts) => validBrief({ lead: { kind: 'cluster', id: opts.message.match(/--- QUESTION CLUSTERS ---\n\[\{"cluster_id":"([^"]+)"/)?.[1] ?? 'C-1' }, terms_to_define: [], why_today: 'People asked this week.' })
+  // The focused Scout finds the pick's question asked in a GitHub issue (the post cites it).
+  const ai = { scout: scoutAi({ 'questions-slot': { ...VALID.scout_slot_questions, related_questions: [{ question: 'How does agent approval work?', source_url: 'https://github.com/example/agents/issues/1', demand_evidence: '12 comments' }] } }), strategist: strategistAi({ plan: pickBrief, repair: pickBrief }), writer: writerAi({ revise: draftAnswer({ revision_notes: [{ feedback_quote: 'q', what_changed: 'w' }] }) }) }
+  // The weekly editor: one candidate built from this week's question and an M91 integration.
+  ai.editor = async (opts) => done(opts, { candidates: [{ title: 'When should an AI agent call a human?', question: 'When should an AI agent call a human?', format: 'explainer', angle: 'a phone call, not a chat ping', hook_id: '', evidence_ids: ['q1', 'i1'], why_now: 'asked this week', scores: { demand: 4, timeliness: 3, m91_fit: 5, gap: 4, variety: 3 } }], choice: 0, reason: 'People asked this week.' })
   const quote = GOOD_MD.split('\n').find((l) => l.startsWith('Agent approval means')).split('. ')[0] + '.'
   ai.reviewer = fakeReviewerAi([reviewAnswer({ scores: { simplicity: 5 }, gates: { no_invented_content: false }, feedback: [item({ quote, severity: 'must' })] }), reviewAnswer()])
   ai.promo = async (opts) => done(opts, PACK)

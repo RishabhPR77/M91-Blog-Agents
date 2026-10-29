@@ -15,9 +15,9 @@ export type AgentModel = { service?: string; model?: string; delivery?: string; 
 
 export type Settings = {
   version: string
-  /** Phase 12: the roadmap (runs follow it) and rapid response. */
-  roadmap?: { enabled: boolean; rapid_response_enabled: boolean }
-  /** The timely lane (on with RAPID_RESPONSE_ENABLED and the roadmap). */
+  /** The weekly editor: how far back the questions go, how many candidates, how many real signals each needs. */
+  weekly?: { question_days: number; questions_max: number; candidates: number; min_evidence: number; similarity: number }
+  /** The news check (RAPID_RESPONSE_ENABLED): its cards are the editor's news; Write now makes one the next post. */
   timely?: { enabled: boolean; check_on_run: boolean; window_days: number; max_per_week: number }
   models: Record<string, AgentModel>
   scout: Record<string, unknown> & { question_groups?: number[]; max_calls?: number }

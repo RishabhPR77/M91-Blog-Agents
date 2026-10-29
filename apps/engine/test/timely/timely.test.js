@@ -1,11 +1,10 @@
-// The timely lane: the news check (Scout timely mode), dedupe, expiry, the picking order with the Starter rule and the
-// weekly cap, the card actions, a timely post through the Scout and Strategist, the Start-here line, approval and the
-// API. Fakes only: no AI, no Mem0, no network.
+// The news cards: the news check (Scout timely mode), dedupe, expiry, the picking order (pins, then a Write now card
+// with the weekly cap, else the weekly editor), the card actions, a Write now post through the Scout and Strategist,
+// the Start-here line, approval and the API. Fakes only: no AI, no Mem0, no network.
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { runScout } from '../../src/scout/index.js'
-import { saveRoadmap, loadRoadmap } from '../../src/roadmap/model.js'
-import { pickTarget } from '../../src/roadmap/pick.js'
+import { pickTarget } from '../../src/weekly/pick.js'
 import { runPipeline } from '../../src/orchestrator.js'
 import { stubAgents } from '../../src/agents/stubs.js'
 import { resetEvents } from '../../src/events.js'
@@ -19,14 +18,14 @@ import { isExpired, expireOld, nextTimely, applyAction, markWriting, releaseWrit
 import { withStartHere, starterPost, startHereLine, needsStartHere } from '../../src/timely/starthere.js'
 import { fakeConfig, memoryStore, fakeNotifier, mockReviewer } from '../helpers.js'
 import { fakeChecker } from '../scout/fixtures.js'
-import { goodRoadmap, FACTS } from '../roadmap/fixtures.js'
+import { FACTS } from '../weekly/fixtures.js'
 
 beforeEach(() => resetEvents())
 const quiet = () => setSink(() => {})
 const NOW = Date.parse('2026-10-22T06:00:00Z')
 const now = () => NOW
 const TODAY = '2026-10-22'
-const cfg = (env = {}) => fakeConfig({ ROADMAP_ENABLED: 'true', RAPID_RESPONSE_ENABLED: 'true', DRY_RUN: 'false', ...env })
+const cfg = (env = {}) => fakeConfig({ RAPID_RESPONSE_ENABLED: 'true', TIMELY_CHECK_ON_RUN: 'true', DRY_RUN: 'false', ...env })
 
 const EVENT = (over = {}) => ({
   title: 'An AI agent refunded the wrong orders', what_happened: 'A shop\'s AI agent sent refunds without a check. The company paused it.', source_url: 'https://news.example.com/refunds',
@@ -48,16 +47,9 @@ function fakeAi(answers) {
   return send
 }
 
-const approvedRoadmap = (starterDone = true) => {
-  const rm = { ...goodRoadmap(), status: 'approved' }
-  if (starterDone) rm.stages[0].slots[0].status = 'approved'
-  return rm
-}
-
-async function seed({ starterDone = true, cards = [] } = {}) {
+async function seed({ cards = [] } = {}) {
   const store = memoryStore()
   await store.createRecord({ type: 'm91_facts', payload: { ...FACTS, research_at: null }, status: 'current', date: '2026-10-20' })
-  await saveRoadmap(store, approvedRoadmap(starterDone))
   for (const c of cards) await store.createRecord({ type: 'timely_opportunity', payload: { opportunity_id: c.id, brief_id: '', ...EVENT(), ...c.payload }, status: c.status ?? 'proposed', date: TODAY })
   return store
 }
@@ -114,23 +106,15 @@ test('expiry: a proposed or write_now card expires TIMELY_WINDOW_DAYS after the 
 
 // ---------- picking ----------
 
-test('picking: pinned topics due → one write_now card → the roadmap\'s next slot; a timely post never uses a slot', async () => {
+test('picking: pinned topics due → one write_now card → else the weekly editor decides', async () => {
   const store = await seed({ cards: [{ id: 'O-1', status: 'write_now', payload: { write_now_at: '2026-10-21T10:00:00+05:30' } }] })
   let t = await pickTarget(store, { now, config: cfg() })
   assert.deepEqual([t.kind, t.opportunity.opportunity_id], ['timely', 'O-1'])
-  // Without the lane (no config), the roadmap is picked as before.
-  assert.equal((await pickTarget(store, { now })).kind, 'slot')
+  // Without the news cards (no config), the editor decides.
+  assert.equal((await pickTarget(store, { now })).kind, 'editor')
   await store.createRecord({ type: 'pinned_topic', payload: { pinned_id: 'PIN-1', topic: 'Due now', target_date: '2026-01-01' }, status: 'open' })
   t = await pickTarget(store, { now, config: cfg() })
   assert.equal(t.kind, 'pinned')
-})
-
-test('the Starter rule: no timely post until stage 0 has an approved post (the card waits, with the reason)', async () => {
-  const store = await seed({ starterDone: false, cards: [{ id: 'O-1', status: 'write_now' }] })
-  const t = await pickTarget(store, { now, config: cfg() })
-  assert.equal(t.kind, 'slot')
-  assert.equal(t.slot.slot_id, 's0-1')
-  assert.deepEqual(t.timelyWaiting, { title: EVENT().title, opportunity_id: 'O-1', reason: 'Timely posts start once the Starter (stage 0) has an approved post' })
 })
 
 test('the weekly cap: at most TIMELY_MAX_PER_WEEK timely posts per 7 days (written or being written)', async () => {
@@ -150,20 +134,16 @@ test('the weekly cap: at most TIMELY_MAX_PER_WEEK timely posts per 7 days (writt
 
 // ---------- card actions ----------
 
-test('actions: Write now, Dismiss, Add to roadmap (a planned slot in the chosen stage); wrong status or in progress → 409', async () => {
-  const store = await seed({ cards: [{ id: 'O-1' }, { id: 'O-2' }, { id: 'O-3', payload: { title: 'Approvals for payouts over a limit', source_url: 'https://news.example.com/payouts' } }, { id: 'O-4', status: 'write_now', payload: { brief_id: '261022-0900-ABCD' } }] })
+test('actions: Write now and Dismiss; wrong status or in progress → 409; Add to roadmap is gone', async () => {
+  const store = await seed({ cards: [{ id: 'O-1' }, { id: 'O-2' }, { id: 'O-4', status: 'write_now', payload: { brief_id: '261022-0900-ABCD' } }] })
   assert.equal((await applyAction(store, 'O-1', 'write_now', { now })).status, 'write_now')
   assert.ok(card(store, 'O-1').payload.write_now_at)
   await assert.rejects(applyAction(store, 'O-1', 'write_now'), (e) => e.code === 'bad_status' && e.status === 409)
   assert.equal((await applyAction(store, 'O-2', 'dismiss', { now })).status, 'dismissed')
-  const added = await applyAction(store, 'O-3', 'add_to_roadmap', { stage: 3, now })
-  assert.equal(added.status, 'added_to_roadmap')
-  const slot = (await loadRoadmap(store)).payload.stages[3].slots.find((s) => s.slot_id === added.payload.slot_id)
-  assert.deepEqual([slot.status, slot.title_idea, slot.from_opportunity], ['planned', 'Approvals for payouts over a limit', 'O-3'])
   await assert.rejects(applyAction(store, 'O-4', 'dismiss'), (e) => e.code === 'in_progress')
   await assert.rejects(applyAction(store, 'O-9', 'dismiss'), (e) => e.status === 404)
   await assert.rejects(applyAction(store, 'O-1', 'publish'), (e) => e.code === 'bad_params')
-  await assert.rejects(applyAction(store, 'O-1', 'add_to_roadmap', { stage: 0 }), (e) => e.code === 'bad_params')
+  await assert.rejects(applyAction(store, 'O-1', 'add_to_roadmap'), (e) => e.code === 'bad_params')
 })
 
 test('a run writes the card: brief id held while writing, released when the run fails; approval → written, rejection → dismissed', async () => {
@@ -184,7 +164,7 @@ test('a run writes the card: brief id held while writing, released when the run 
   assert.deepEqual(await finishTimely(store2, 'no-such-brief', 'approved', { now }), { ok: false })
 })
 
-test('the pipeline: the news check runs first (TIMELY_CHECK_ON_RUN), then a write_now card is written; a slot stays planned', async () => {
+test('the pipeline: the news check runs first (TIMELY_CHECK_ON_RUN), then a write_now card is written (no editor call)', async () => {
   const restore = quiet()
   const store = await seed({ cards: [{ id: 'O-1', status: 'write_now' }] })
   const seen = []
@@ -193,8 +173,6 @@ test('the pipeline: the news check runs first (TIMELY_CHECK_ON_RUN), then a writ
   assert.equal(r.state, 'awaiting_human')
   assert.deepEqual(seen, [{ mode: 'timely', target: null }, { mode: 'slot', target: 'timely' }])
   assert.equal(card(store, 'O-1').payload.brief_id, r.briefId)
-  const rm = (await loadRoadmap(store)).payload
-  assert.equal(rm.stages.flatMap((s) => s.slots).filter((s) => s.status !== 'planned' && s.status !== 'approved').length, 0, 'no slot is drafting or in review')
   // TIMELY_CHECK_ON_RUN=false: no news check; a failed check is only a warning.
   const store2 = await seed()
   const seen2 = []
@@ -205,7 +183,7 @@ test('the pipeline: the news check runs first (TIMELY_CHECK_ON_RUN), then a writ
   const seen3 = []
   await runPipeline({ config: cfg({ TIMELY_CHECK_ON_RUN: 'false' }), store: await seed(), notifier: fakeNotifier(), agents: { ...stubAgents, reviewer: mockReviewer(), scout: async (ctx) => { seen3.push(ctx.scoutMode); return stubAgents.scout(ctx) } }, now })
   restore()
-  assert.deepEqual(seen3, ['slot'])
+  assert.deepEqual(seen3, ['week', 'slot'], 'no news check; no card, so the editor decides from this week\'s questions')
 })
 
 test('a failed timely run releases the card (still write_now, no brief id)', async () => {
@@ -225,11 +203,11 @@ test('the focused Scout for a timely card: the event\'s source first, a story le
   const store = await seed()
   await store.createRecord({ type: 'm91_facts', payload: { ...FACTS, research_at: null }, status: 'current', date: TODAY })
   const opp = { record_id: 'r1', opportunity_id: 'O-1', ...EVENT() }
-  const ai = fakeAi({ 'questions-slot': { main_question: 'q?', related_questions: [], demand: { level: 'low', reason: 'r' }, off_roadmap: [] }, 'sources-slot': { sources: [] } })
+  const ai = fakeAi({ 'questions-slot': { main_question: 'q?', related_questions: [], demand: { level: 'low', reason: 'r' } }, 'sources-slot': { sources: [] } })
   const out = await runScout({ mode: 'slot', runId: 'R-261022-1200-ABCD', briefId: '261022-1200-ABCD', target: { kind: 'timely', opportunity: opp } }, { config: cfg(), store, aiSend: ai, urlChecker: fakeChecker(), now })
   restore()
   assert.equal(out.target.opportunity_id, 'O-1')
-  assert.match(ai.calls[0].message, /A timely post about a real event \(outside the roadmap\)\nEvent: .* Reported by Example News on 2026-10-20: https:\/\/news\.example\.com\/refunds/)
+  assert.match(ai.calls[0].message, /A timely post about a real event\nEvent: .* Reported by Example News on 2026-10-20: https:\/\/news\.example\.com\/refunds/)
   const pack = store.byType('source_pack')[0]
   assert.equal(pack.payload.claims[0].results[0].url, 'https://news.example.com/refunds')
   const story = store.byType('story_lead')[0]
@@ -262,12 +240,13 @@ test('the Start-here line: right after the TL;DR, once (a line the Writer wrote 
   assert.equal(withStartHere(out, starter), out, 'idempotent')
   assert.equal(startHereLine({ title: 'What M91 is', link: 'https://docs.example.com/m91' }), 'New to M91? Start here: [What M91 is](https://docs.example.com/m91).')
   assert.match(withStartHere('# T\n\nText.', starter), /^# T\n\nNew to M91\? Start here: \*\*What M91 is\*\*\.\n\nText\.$/)
-  // starterPost: the first approved stage-0 post of the knowledge map, else the approved Starter slot.
+  // starterPost: our first approved post that is not itself a timely post.
   const store = await seed()
-  assert.equal((await starterPost(store)).title, approvedRoadmap().stages[0].slots[0].title_idea)
-  await store.createRecord({ type: 'knowledge', payload: { title: 'What M91 is', stage: 0, approved_at: '2026-10-20T10:00:00+05:30', link: null }, status: 'current' })
+  assert.equal(await starterPost(store), null)
+  await store.createRecord({ type: 'knowledge', payload: { title: 'A timely post', kind: 'timely', approved_at: '2026-10-19T10:00:00+05:30', link: null }, status: 'current' })
+  await store.createRecord({ type: 'knowledge', payload: { title: 'What M91 is', approved_at: '2026-10-20T10:00:00+05:30', link: null }, status: 'current' })
+  await store.createRecord({ type: 'knowledge', payload: { title: 'A later post', approved_at: '2026-10-21T10:00:00+05:30', link: null }, status: 'current' })
   assert.equal((await starterPost(store)).title, 'What M91 is')
-  assert.equal(await starterPost(await seed({ starterDone: false })), null)
   // The hard check, only for rapid-response posts while the lane is on.
   const brief = { post_type: 'rapid_response', news: { is_news_based: false } }
   assert.equal(needsStartHere(brief, cfg()), true)
@@ -280,9 +259,9 @@ test('the Start-here line: right after the TL;DR, once (a line the Writer wrote 
 
 // ---------- API ----------
 
-test('API: GET /api/timely (cards, open count, the waiting reason); POST an action; 409 while the lane is off', async () => {
+test('API: GET /api/timely (cards, open count, the next and waiting card); POST an action; 409 while the lane is off', async () => {
   const restore = quiet()
-  const store = await seed({ starterDone: false, cards: [{ id: 'O-1', status: 'write_now' }, { id: 'O-2' }, { id: 'O-OLD', payload: { published_date: '2026-10-01' } }] })
+  const store = await seed({ cards: [{ id: 'O-1', status: 'write_now' }, { id: 'O-2' }, { id: 'O-OLD', payload: { published_date: '2026-10-01' } }, { id: 'O-DONE', status: 'written', payload: { written_at: '2026-10-20T10:00:00+05:30' } }] })
   const config = cfg()
   const manager = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => ({ ...stubAgents, reviewer: mockReviewer() }), now })
   const server = createServer({ triggerKey: 'fake-trigger-key-0123456789', manager, store, config, now })
@@ -292,15 +271,15 @@ test('API: GET /api/timely (cards, open count, the waiting reason); POST an acti
     const t = await (await fetch(`${base}/api/timely`)).json()
     assert.equal(t.enabled, true)
     assert.equal(t.open, 2)
-    assert.deepEqual(t.waiting, { opportunity_id: 'O-1', title: EVENT().title, reason: 'Timely posts start once the Starter (stage 0) has an approved post' })
+    assert.deepEqual(t.waiting, { opportunity_id: 'O-1', title: EVENT().title, reason: 'TIMELY_MAX_PER_WEEK (1) timely post already written in the last 7 days' })
     assert.equal(t.opportunities.find((o) => o.opportunity_id === 'O-OLD').status, 'expired', 'shown as expired before a run marks it')
     const res = await fetch(`${base}/api/timely/O-2`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'dismiss' }) })
     assert.equal(res.status, 200)
     assert.equal((await res.json()).opportunity.status, 'dismissed')
     const bad = await fetch(`${base}/api/timely/O-2`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'write_now' }) })
     assert.equal(bad.status, 409)
-    const roadmap = await (await fetch(`${base}/api/roadmap`)).json()
-    assert.equal(roadmap.next.timely_waiting.opportunity_id, 'O-1')
+    const weekly = await (await fetch(`${base}/api/weekly`)).json()
+    assert.deepEqual([weekly.next.kind, weekly.next.timely_waiting.opportunity_id], ['editor', 'O-1'])
     const s = await (await fetch(`${base}/api/settings`)).json()
     assert.deepEqual(s.timely, { enabled: true, check_on_run: true, window_days: 7, max_per_week: 1 })
     assert.ok(s.built_modes.includes('timely_check'))

@@ -42,15 +42,15 @@ export const strategist_brief = {
 }
 
 /**
- * Phase 12: the brief of one roadmap slot. The same fields, plus slot_id (exactly the slot planned) and
+ * The brief of a post already chosen (the weekly pick, a pinned topic or a Write now card). The same fields, plus
  * terms_to_define (the technical words this post explains the first time; the knowledge map keeps them).
  */
-export const strategist_brief_slot = {
-  name: 'strategist_brief_slot',
+export const strategist_brief_target = {
+  name: 'strategist_brief_target',
   strict: true,
   schema: {
     ...strategist_brief.schema,
-    required: [...strategist_brief.schema.required, 'slot_id', 'terms_to_define'],
-    properties: { ...strategist_brief.schema.properties, slot_id: str, terms_to_define: arr(str) }
+    required: [...strategist_brief.schema.required, 'terms_to_define'],
+    properties: { ...strategist_brief.schema.properties, terms_to_define: arr(str) }
   }
 }

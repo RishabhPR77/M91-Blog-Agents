@@ -28,17 +28,19 @@ export default function Settings() {
             <dt className="text-slate-500">Built run modes</dt><dd data-testid="setting-built-modes">{modes?.join(', ') ?? 'not reported (restart the engine)'}</dd>
           </dl>
         </Card>
-        <Card title="Roadmap">
-          {d.roadmap ? (
+        <Card title="Weekly editor">
+          {d.weekly ? (
             <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
-              <dt className="text-slate-500">Runs follow the roadmap</dt><dd data-testid="setting-roadmap">{yes(d.roadmap.enabled)} (ROADMAP_ENABLED)</dd>
-              <dt className="text-slate-500">Roadmap Planner model</dt><dd className="font-mono text-xs">{d.models.planner ? `${d.models.planner.service} · ${d.models.planner.model} · ${d.models.planner.delivery}` : 'not reported'}</dd>
-              <dt className="text-slate-500">Timely lane</dt><dd data-testid="setting-timely">{d.timely ? `${yes(d.timely.enabled)} (RAPID_RESPONSE_ENABLED)` : `${yes(d.roadmap.rapid_response_enabled)} (RAPID_RESPONSE_ENABLED)`}</dd>
+              <dt className="text-slate-500">Editor model</dt><dd className="font-mono text-xs" data-testid="setting-editor-model">{d.models.editor ? `${d.models.editor.service} · ${d.models.editor.model} · ${d.models.editor.delivery}` : 'not reported'}</dd>
+              <dt className="text-slate-500">Questions from the last</dt><dd>{d.weekly.question_days} days, up to {d.weekly.questions_max} (EDITOR_QUESTION_DAYS, EDITOR_QUESTIONS_MAX)</dd>
+              <dt className="text-slate-500">Candidates weighed</dt><dd>{d.weekly.candidates} (EDITOR_CANDIDATES)</dd>
+              <dt className="text-slate-500">Real signals per post</dt><dd>at least {d.weekly.min_evidence} (EDITOR_MIN_EVIDENCE)</dd>
+              <dt className="text-slate-500">News check</dt><dd data-testid="setting-timely">{d.timely ? `${yes(d.timely.enabled)} (RAPID_RESPONSE_ENABLED)` : 'not reported'}</dd>
               {d.timely && <><dt className="text-slate-500">News check on every run</dt><dd>{yes(d.timely.check_on_run)} (TIMELY_CHECK_ON_RUN)</dd>
-              <dt className="text-slate-500">Timely window</dt><dd>{d.timely.window_days} days (TIMELY_WINDOW_DAYS)</dd>
-              <dt className="text-slate-500">Timely posts per 7 days</dt><dd>at most {d.timely.max_per_week} (TIMELY_MAX_PER_WEEK)</dd></>}
+              <dt className="text-slate-500">News window</dt><dd>{d.timely.window_days} days (TIMELY_WINDOW_DAYS)</dd>
+              <dt className="text-slate-500">Write now posts per 7 days</dt><dd>at most {d.timely.max_per_week} (TIMELY_MAX_PER_WEEK)</dd></>}
             </dl>
-          ) : <p className="text-sm text-slate-500">Not reported by this engine (it predates Phase 12: restart it).</p>}
+          ) : <p className="text-sm text-slate-500">Not reported by this engine (it predates the weekly editor: restart it).</p>}
         </Card>
         <Card title="Approval">
           {d.approval ? (

@@ -54,10 +54,11 @@ export const VALID = {
   // Phase 12: the focused Scout.
   scout_slot_questions: {
     main_question: 'What is M91?', related_questions: [{ question: 'Why page a human?', source_url: 'https://reddit.example.com/r1', demand_evidence: '10 upvotes' }],
-    demand: { level: 'medium', reason: 'asked a few times' }, off_roadmap: []
+    demand: { level: 'medium', reason: 'asked a few times' }
   },
   scout_slot_sources: { sources: [{ url: DOC_INTRO, publisher: 'M91 docs', what_it_covers: 'What M91 does.', kind: 'docs' }] },
-  scout_timely: { events: [{ title: 'An agent refunded the wrong orders', what_happened: 'An AI agent sent refunds without a check. The company paused it.', source_url: 'https://news.example.com/refunds', outlet: 'Example News', published_date: '2026-10-20', why_m91: 'A person would have approved each refund.', urgency: 'high', urgency_reason: 'Teams are adding agents now.', topic_group: 2 }] }
+  scout_timely: { events: [{ title: 'An agent refunded the wrong orders', what_happened: 'An AI agent sent refunds without a check. The company paused it.', source_url: 'https://news.example.com/refunds', outlet: 'Example News', published_date: '2026-10-20', why_m91: 'A person would have approved each refund.', urgency: 'high', urgency_reason: 'Teams are adding agents now.', topic_group: 2 }] },
+  scout_week_questions: { questions: [{ question: 'How do I stop Claude Code running rm -rf?', source_url: 'https://reddit.example.com/r1', where: 'Reddit r/ClaudeAI', posted_date: '2026-10-19', demand_evidence: '320 upvotes', topic_group: 1 }] }
 }
 
 /** One invalid answer per schema. */
@@ -69,12 +70,13 @@ export const INVALID = {
   scout_clusters: { clusters: [{ main_question: 'q', extra: true }] },
   scout_style: { topic: 't', based_on: [], notes: {} },
   scout_sources: { claims: [{ claim: 'c', results: [{ url: 'u', publisher: 'p', verdict: 'maybe', note: 'n' }] }] },
-  scout_slot_questions: { main_question: 'q', related_questions: [], demand: { level: 'huge', reason: 'r' }, off_roadmap: [] },
+  scout_slot_questions: { main_question: 'q', related_questions: [], demand: { level: 'huge', reason: 'r' } },
   scout_slot_sources: { sources: [{ url: 'u', publisher: 'p', what_it_covers: 'w', kind: 'blog' }] },
-  scout_timely: { events: [{ title: 't', what_happened: 'w', source_url: 'u', outlet: 'o', published_date: 'd', why_m91: 'm', urgency: 'urgent', urgency_reason: 'r', topic_group: 1 }] }
+  scout_timely: { events: [{ title: 't', what_happened: 'w', source_url: 'u', outlet: 'o', published_date: 'd', why_m91: 'm', urgency: 'urgent', urgency_reason: 'r', topic_group: 1 }] },
+  scout_week_questions: { questions: [{ question: 'q', source_url: 'u', where: 'w', posted_date: '', demand_evidence: 'd', topic_group: 9 }] }
 }
 
-export const CALL_RE = /-(facts|questions-[1-5]|stories|tutorials|clusters|style|sources)-[a-z0-9]{4}$/
+export const CALL_RE = /-(facts|questions-[1-5]|questions-week|questions-slot|sources-slot|stories|tutorials|clusters|style|sources)-[a-z0-9]{4}$/
 
 /**
  * Fake aiSend. `answers[call]` is a value, an Error, or (n) => value|Error for the n-th attempt of that call.
@@ -85,7 +87,7 @@ export function fakeAi(answers = {}) {
   const attempts = {}
   const fn = async (opts) => {
     const call = opts.threadId.match(CALL_RE)?.[1] ?? 'unknown'
-    const group = call.startsWith('questions') ? 'questions' : call
+    const group = /^questions-\d$/.test(call) ? 'questions' : call
     attempts[call] = (attempts[call] ?? 0) + 1
     requests.push({ call, ...opts })
     let a = answers[call] ?? answers[group] ?? defaultAnswer(group)
@@ -106,7 +108,11 @@ function defaultAnswer(group) {
     tutorials: VALID.scout_tutorials,
     clusters: VALID.scout_clusters,
     style: VALID.scout_style,
-    sources: VALID.scout_sources
+    sources: VALID.scout_sources,
+    // The weekly editor's questions and the focused research of its pick.
+    'questions-week': VALID.scout_week_questions,
+    'questions-slot': VALID.scout_slot_questions,
+    'sources-slot': VALID.scout_slot_sources
   }[group]
 }
 

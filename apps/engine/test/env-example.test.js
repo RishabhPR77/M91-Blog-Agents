@@ -11,7 +11,7 @@ const entries = Object.fromEntries(example.split(/\r?\n/).filter((l) => /^[A-Z0-
 
 function keysReadByConfig() {
   const keys = new Set([...source.matchAll(/(?:str|int|bool|url|oneOf|num|list)\('([A-Z0-9_]+)'/g)].map((m) => m[1]))
-  for (const a of [...AGENTS, 'experience', 'planner']) for (const s of ['_AI_SERVICE', '_AI_MODEL', '_DELIVERY']) keys.add(a.toUpperCase() + s)
+  for (const a of [...AGENTS, 'experience', 'editor']) for (const s of ['_AI_SERVICE', '_AI_MODEL', '_DELIVERY']) keys.add(a.toUpperCase() + s)
   return keys
 }
 

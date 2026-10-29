@@ -281,6 +281,26 @@ describe('Request changes and reject', () => {
   })
 })
 
+describe('Why this post', () => {
+  it('shows the weekly editor’s reason, its signals and the news hook; no card for a pinned or Write now post', async () => {
+    const pick = {
+      pick_id: 'W-1', date: '2026-10-22', chosen_at: '2026-10-22T11:30:00+05:30', chosen_by: 'editor', model: 'gpt-5.5', brief_id: B, reason: 'People asked how to gate destructive agent actions this week.',
+      pick: { title: 'How to Gate Destructive AI Agent Actions', question: 'How do I gate destructive agent actions?', format: 'tutorial', angle: 'a', why_now: 'w', total: 20, hook: { title: 'An agent deleted a database', outlet: 'Example News', published_date: '2026-10-21', source_url: 'https://news.example.com/db' }, evidence: [{ id: 'q1', kind: 'question', text: 'How to stop rm -rf?', url: 'https://reddit.example.com/r1', where: 'Reddit' }] },
+      runners_up: []
+    }
+    const first = (mockFetch(routes(detail({ reviewed: true }, { review: REVIEW, pick: pick as ApprovalDetailData['pick'] }))), page())
+    const why = await screen.findByTestId('pick-W-1')
+    expect(within(why).getByTestId('pick-reason')).toHaveTextContent('Why this week: People asked how to gate destructive agent actions this week.')
+    expect(within(why).getByTestId('pick-hook')).toHaveTextContent('An agent deleted a database')
+    expect(within(why).getByRole('link', { name: 'How to stop rm -rf?' })).toHaveAttribute('href', 'https://reddit.example.com/r1')
+    first.unmount()
+    mockFetch(routes(detail({ reviewed: true }, { review: REVIEW, pick: null })))
+    page()
+    await screen.findByTestId('score-total')
+    expect(screen.queryByText('Why this post')).not.toBeInTheDocument()
+  })
+})
+
 describe('History, diff, checks, list', () => {
   it('Compare loads the earlier version and shows a word diff', async () => {
     mockFetch(routes(detail()))

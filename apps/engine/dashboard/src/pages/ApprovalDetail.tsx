@@ -19,7 +19,8 @@ import { MarkdownPreview } from '../components/MarkdownPreview'
 import { PublishCard } from '../components/PublishCard'
 import { InteractiveCard, type InteractiveInfo } from '../components/InteractiveCard'
 import { PreviewCard, type PreviewInfo } from '../components/PreviewCard'
-import { SlotCard, type SlotInfo } from '../components/SlotCard'
+import { PickCard } from '../components/PickCard'
+import type { WeeklyPick } from '../api/weekly'
 import { ExportCard } from '../components/ExportCard'
 import { flagsOf } from '../config/flags'
 import { Card, EmptyState, PageHeader } from '../components/Page'
@@ -47,8 +48,8 @@ export type ApprovalDetailData = {
   checks: CheckResult[]
   /** Phase 10: the interactive guide (null or missing from older engines). */
   interactive?: InteractiveInfo | null
-  /** Phase 12: the roadmap slot of this post (null without the roadmap). */
-  slot?: SlotInfo | null
+  /** Why this post: the weekly editor's decision (null for a pinned topic or a Write now card; missing: older engine). */
+  pick?: WeeklyPick | null
   /** Phase 10 D1: the page preview built for this brief (null: none yet; missing: older engine). */
   preview?: PreviewInfo | null
   /** Counter prompts used for this brief (writing and design); older engines: counted from earlier versions. */
@@ -227,6 +228,11 @@ export default function ApprovalDetail() {
         actions={<><StatusBadge status={d.draft.status} label={waiting ? 'waiting for you' : undefined} />{!reviewed && <span className="pill pill-amber" data-testid="not-reviewed">Not reviewed</span>}</>}
       />
       <JourneyCard journey={journey.data} />
+      {d.pick && (
+        <Card className="mb-4" title="Why this post">
+          <PickCard pick={d.pick} canPin={waiting} />
+        </Card>
+      )}
       {!waiting && <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900">This version is <strong>{d.draft.status.replace(/_/g, ' ')}</strong>. The decision buttons are only for a draft that waits for you.{d.draft.approved_unreviewed ? ' It was approved without a Reviewer pass.' : ''}</div>}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -366,7 +372,6 @@ export default function ApprovalDetail() {
       <h2 className="mt-8 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">More about this post</h2>
       <div className="grid items-start gap-4 md:grid-cols-2">
         <ExportCard briefId={d.brief_id} version={d.draft.version} status={d.draft.status} />
-        <SlotCard slot={d.slot} />
         {flags.blogOn && <PublishCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} title={d.draft.title} />}
         {flags.experienceOn && <InteractiveCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} info={d.interactive} />}
       </div>

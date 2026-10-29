@@ -33,7 +33,7 @@ export const usePostJourneys = (limit = 30) =>
 export const MODE_LABEL: Record<string, string> = {
   full: 'Write a post', scout: 'Research', strategist: 'Plan', writer: 'Write', reviewer: 'AI review', approve: 'Approve',
   human_revise: 'Your changes', reject_topic: 'Reject topic', approval_review: 'AI review', publish: 'Publish', unpublish: 'Unpublish',
-  designer: 'Design', export: 'Export', roadmap: 'Plan the roadmap', guides: 'Read published guides', timely_check: 'Check the news',
+  designer: 'Design', export: 'Export', guides: 'Read published guides', timely_check: 'Check the news',
   promo: 'Promo pack', set_index: 'Index setting', rebuild_blog: 'Rebuild blog'
 }
 export const modeLabel = (mode: string) => MODE_LABEL[mode] ?? mode.replace(/_/g, ' ')

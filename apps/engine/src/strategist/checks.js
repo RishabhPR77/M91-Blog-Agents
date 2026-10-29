@@ -1,7 +1,7 @@
 // Code checks on every brief (Phase 3 brief, section 10): safe automatic fixes, then a full problem list.
 
 import Ajv from 'ajv'
-import { strategist_brief, strategist_brief_slot } from './schemas.js'
+import { strategist_brief, strategist_brief_target } from './schemas.js'
 import { STANDING_CLAIMS, DEFAULT_CTA_TEXT } from './prompts.js'
 import { urlKey } from './inputs.js'
 import { storyDateRule } from '../scout/checks.js'
@@ -14,10 +14,10 @@ export const SUPPORTING_MAX = 14
 
 const ajv = new Ajv({ allErrors: true, strict: false })
 const validate = ajv.compile(strategist_brief.schema)
-const validateSlot = ajv.compile(strategist_brief_slot.schema)
+const validateTarget = ajv.compile(strategist_brief_target.schema)
 
 /** Schema check; rtlayer answers arrive as strings. Returns { value, errors }. */
-export function validateBrief(content, { slot = false } = {}) {
+export function validateBrief(content, { target = false } = {}) {
   let value = content
   if (typeof content === 'string') {
     try {
@@ -26,7 +26,7 @@ export function validateBrief(content, { slot = false } = {}) {
       return { value: null, errors: ['schema: the answer is not valid JSON'] }
     }
   }
-  const check = slot ? validateSlot : validate
+  const check = target ? validateTarget : validate
   if (check(value)) return { value, errors: [] }
   return { value: null, errors: check.errors.slice(0, 8).map((e) => `schema: ${e.instancePath || '/'} ${e.message}`) }
 }
@@ -54,11 +54,6 @@ export function autoFix(input, { config, inputs }) {
   const fixes = []
   const b = trimDeep(structuredClone(input))
   const hosts = config.scout.docsHosts
-  // Phase 12: the brief of a roadmap slot always carries exactly that slot (a safe fix, no repair call).
-  if (inputs?.target?.slot_id && b.slot_id !== inputs.target.slot_id) {
-    fixes.push(`set slot_id to ${inputs.target.slot_id} (the post planned)`)
-    b.slot_id = inputs.target.slot_id
-  }
   if (inputs?.target && !Array.isArray(b.terms_to_define)) b.terms_to_define = []
 
   // http → https for M91 docs hosts, everywhere in the brief.
@@ -179,11 +174,14 @@ export async function findProblems(b, { config, inputs, store, excludeBriefId = 
   if (b.titles[0] && b.titles[0].length > st.titleMaxChars) P(`titles[0] is ${b.titles[0].length} characters; the limit is ${st.titleMaxChars}`)
   b.titles.forEach((t, i) => { if (GENERIC_TITLE.some((re) => re.test(t))) P(`titles[${i}] is generic ("${t}"); name the exact situation, tool or mistake`) })
 
-  // Phase 12: the brief of one roadmap slot keeps that slot and names its terms.
-  if (inputs.target?.slot_id) {
-    if (b.slot_id !== inputs.target.slot_id) P(`slot_id must be exactly '${inputs.target.slot_id}' (the post planned in POST TO PLAN), not '${b.slot_id}'`)
+  // A post already chosen (the weekly pick or a pinned topic) names its terms and says why this week.
+  if (inputs.target && !inputs.target.timely) {
     if ((b.terms_to_define ?? []).length > 8) P(`terms_to_define has ${b.terms_to_define.length} items; at most 8`)
-    if (!String(b.why_today ?? '').trim()) P('why_today must say how this post builds on the previous one')
+    if (!String(b.why_today ?? '').trim()) P('why_today must say why this post matters this week')
+  }
+  // The weekly pick's news hook: the brief opens with it, from exactly its source.
+  if (inputs.target?.weekly && inputs.target.hook && (!b.news?.is_news_based || urlKey(b.news.source_url) !== urlKey(inputs.target.hook.source_url))) {
+    P(`news must be filled from the hook in POST TO PLAN (is_news_based true, source_url ${inputs.target.hook.source_url})`)
   }
 
   // Lead
@@ -193,7 +191,6 @@ export async function findProblems(b, { config, inputs, store, excludeBriefId = 
   if (KIND_FOR_TYPE[b.post_type] !== b.lead.kind) P(`post_type '${b.post_type}' needs a lead of kind '${KIND_FOR_TYPE[b.post_type]}', not '${b.lead.kind}'`)
   if (inputs.pinnedDue.length && b.post_type !== 'pinned') P(`a pinned topic is due (${inputs.pinnedDue[0].pinned_id}) but was not picked`)
   if (inputs.target?.timely && b.post_type !== 'rapid_response') P('a timely post must have post_type "rapid_response"')
-  if (inputs.target?.timely && b.slot_id) P('slot_id must be "" for a timely post (it is not a roadmap slot)')
   if (inputs.blockedGroup != null && b.topic_group === inputs.blockedGroup) P(`topic_group ${b.topic_group} is blocked (both of the 2 most recent briefs used it)`)
   if (lead?.kind === 'cluster' && lead.record.payload.update_candidate && !st.allowUpdateBriefs) P(`cluster '${b.lead.id}' is marked update_candidate and ALLOW_UPDATE_BRIEFS is false`)
 

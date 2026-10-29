@@ -36,17 +36,13 @@ export function fakeEnv(overrides = {}) {
     // Phase 10 behaviour in the existing tests (the defaults are the Phase 11 fallback: designer off, no publish).
     EXPERIENCE_ENABLED: 'true',
     PUBLISH_TARGET: 'embarko',
-    // Phase 12: the existing tests run without the roadmap and with rapid response (Phase 12 tests turn them on/off).
-    ROADMAP_ENABLED: 'false',
+    // News cards exist (rapid response on); the news check before each run has its own tests, so it is off here.
     RAPID_RESPONSE_ENABLED: 'true',
+    TIMELY_CHECK_ON_RUN: 'false',
     // The guide sync reads msg91.com: off in unit tests unless a test turns it on (with a fake fetch).
     GUIDES_SYNC_ON_RUN: 'false',
     // The older tests run on the Mem0 backend (its fake client); the viaSocket memory store has its own tests.
     MEMORY_BACKEND: 'mem0',
-    // The editor's choices are tested on their own; the older tests take the next roadmap slot.
-    NEXT_PICK: 'roadmap',
-    // The older tests have the roadmap gate (generate and approve by hand); the one-click flow has its own tests.
-    ROADMAP_AUTO_PLAN: 'false', ROADMAP_AUTO_APPROVE: 'false',
     // The existing tests keep every record in Mem0; the work store tests (and the full-run measure) use WORK_STORE=local.
     WORK_STORE: 'mem0',
     ...overrides

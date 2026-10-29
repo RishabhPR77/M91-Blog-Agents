@@ -206,14 +206,23 @@ test('DRY_RUN pipeline: the Strategist plans from the Scout\'s in-memory records
   assert.equal(recordsOf(store, 'brief').length, 0)
 })
 
-test('orchestrator: Scout stub → real Strategist → Writer stub; a pass marks the brief awaiting_human', async () => {
-  const cfg = config({ DRY_RUN: 'true' })
+/** The seeded store with C-1 as the editor's pick's cluster (the stub editor picks W-stub; the focused Scout made C-1). */
+async function pickedStore() {
   const store = await seededStore()
+  const c1 = recordsOf(store, 'question_cluster').find((r) => r.payload.cluster_id === 'C-1')
+  await store.updateRecord(c1.id, { ...c1.payload, pick_id: 'W-stub' }, {})
+  return store
+}
+
+test('orchestrator: Scout stub → stub editor → real Strategist → Writer stub; a pass marks the brief awaiting_human', async () => {
+  const cfg = config({ DRY_RUN: 'true' })
+  const store = await pickedStore()
   const notifier = fakeNotifier()
-  const agents = { ...defaultAgents({ config: cfg, store, notifier, agentDeps: { aiSend: fakeAi(), now } }), scout: stubAgents.scout, writer: stubAgents.writer, reviewer: mockReviewer() }
+  const targetBrief = validBrief({ terms_to_define: [], why_today: 'People asked this week.' })
+  const agents = { ...defaultAgents({ config: cfg, store, notifier, agentDeps: { aiSend: fakeAi({ plan: targetBrief }), now } }), scout: stubAgents.scout, editor: stubAgents.editor, writer: stubAgents.writer, reviewer: mockReviewer() }
   const r = await runPipeline({ config: cfg, store, notifier, agents, now, briefId: '261017-1405-ABCD' })
-  assert.equal(r.state, 'awaiting_human')
-  assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 5), ['scout', 'strategist', 'writer', 'designer', 'reviewer'])
+  assert.equal(r.state, 'awaiting_human', r.error)
+  assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 7), ['scout', 'editor', 'scout', 'strategist', 'writer', 'designer', 'reviewer'])
   const brief = recordsOf(store, 'brief')
   assert.equal(brief.length, 1)
   assert.equal(brief[0].status, 'awaiting_human')
@@ -222,11 +231,11 @@ test('orchestrator: Scout stub → real Strategist → Writer stub; a pass marks
 
 test('orchestrator: reviewer send_to strategist → re-brief version 2', async () => {
   const cfg = config({ DRY_RUN: 'true' })
-  const store = await seededStore()
+  const store = await pickedStore()
   let n = 0
   const agents = {
-    ...defaultAgents({ config: cfg, store, notifier: fakeNotifier(), agentDeps: { aiSend: fakeAi(), now } }),
-    scout: stubAgents.scout,
+    ...defaultAgents({ config: cfg, store, notifier: fakeNotifier(), agentDeps: { aiSend: fakeAi({ plan: validBrief({ terms_to_define: [], why_today: 'People asked this week.' }), rebrief: validBrief({ terms_to_define: [], why_today: 'A sharper angle.' }) }), now } }),
+    scout: stubAgents.scout, editor: stubAgents.editor,
     writer: stubAgents.writer,
     reviewer: async () => ({ model: 'stub', output: n++ === 0 ? { pass: false, total: 60, feedback: [{ area: 'angle', quote: '', problem: 'weak angle', fix: 'sharper angle', severity: 'must', send_to: 'strategist', claims: [] }] } : { pass: true, total: 90, feedback: [] } })
   }

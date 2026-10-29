@@ -28,7 +28,7 @@ function setup(env = {}, reviewer = mockReviewer()) {
     notifierFactory: () => notifier,
     agentsFactory: (rc, { store: st, notifier: nt }) => ({
       ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend: ai, urlChecker: okChecker(), now } }),
-      scout: stubAgents.scout,
+      scout: stubAgents.scout, editor: stubAgents.editor,
       promo: stubAgents.promo, designer: stubAgents.designer,
       reviewer,
       async strategist(ctx) {
@@ -48,7 +48,7 @@ test('reviewer passes: Strategist → Writer v1 → Reviewer → awaiting_human;
   const r = await s.manager.wait(run_id)
   restore()
   assert.equal(r.status, 'succeeded')
-  assert.deepEqual(r.run.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['checks', 'succeeded'], ['designer', 'succeeded'], ['reviewer', 'succeeded']])
+  assert.deepEqual(r.run.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['editor', 'succeeded'], ['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['checks', 'succeeded'], ['designer', 'succeeded'], ['reviewer', 'succeeded']])
   const writer = r.run.steps.find((x) => x.name === 'writer')
   assert.match(writer.summary, /^Draft v1: \d+ words · grade [\d.]+ · hard checks passed · repairs 0$/)
   assert.ok(writer.record_ids.length >= 1)
@@ -138,7 +138,7 @@ test('DRY_RUN pipeline with fail_once: the Writer works from the in-memory brief
     notifierFactory: () => fakeNotifier(),
     agentsFactory: (rc, { store: st, notifier: nt }) => ({
       ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend: ai, urlChecker: okChecker(), now } }),
-      scout: stubAgents.scout,
+      scout: stubAgents.scout, editor: stubAgents.editor,
       promo: stubAgents.promo, designer: stubAgents.designer,
       reviewer: mockReviewer(['fail', 'pass']),
       async strategist(ctx) {
@@ -172,7 +172,7 @@ test('the real Reviewer in the loop (DRY_RUN): fail with a quoted "must" item �
     notifierFactory: () => fakeNotifier(),
     agentsFactory: (rc, { store: st, notifier: nt }) => ({
       ...defaultAgents({ config: rc, store: st, notifier: nt, agentDeps: { aiSend, urlChecker: okChecker(), now } }),
-      scout: stubAgents.scout,
+      scout: stubAgents.scout, editor: stubAgents.editor,
       async strategist(ctx) {
         const b = brief({ brief_id: ctx.briefId })
         return { model: 'stub', output: { brief_id: ctx.briefId, brief_version: 1, record_id: 'dryrun-1', brief: b, title: b.titles[0], lead: b.lead, repairs_used: 0 } }

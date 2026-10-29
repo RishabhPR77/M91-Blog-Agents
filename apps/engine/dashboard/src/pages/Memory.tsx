@@ -13,7 +13,7 @@ import { toast } from '../components/Toasts'
 export const TYPE_LABELS: Record<string, string> = {
   brief: 'Briefs', draft: 'Drafts', review: 'Reviews', markdown_export: 'Exports', run: 'Runs', run_log: 'Run logs', lesson: 'Lessons',
   m91_facts: 'M91 facts', tone_profile: 'Style notes', question_cluster: 'Question clusters', story_lead: 'Stories', tutorial_lead: 'Tutorials',
-  source_pack: 'Source packs', timely_opportunity: 'Timely opportunities', roadmap: 'Roadmap', pinned_topic: 'Pinned topics', knowledge: 'Knowledge',
+  source_pack: 'Source packs', timely_opportunity: 'Timely opportunities', roadmap: 'Roadmap (old)', weekly_pick: 'Weekly picks', pinned_topic: 'Pinned topics', knowledge: 'Knowledge',
   published_post: 'Blog posts', promo_pack: 'Promo packs', guide_doc: 'Guides', block_doc: 'Block docs', setting: 'Settings', lock: 'Locks', unknown: 'Unknown'
 }
 const label = (t: string) => TYPE_LABELS[t] ?? t
@@ -241,7 +241,7 @@ export default function Memory() {
         onConfirm={loadAll}
         onCancel={() => setLoadAllOpen(false)}
       >
-        <p>Loads clusters, stories, tutorials, facts, style notes, source packs, guides, the roadmap and every other type into the engine's index. After this, every view here costs 0 requests.</p>
+        <p>Loads clusters, stories, tutorials, facts, style notes, source packs, guides, the editor's picks and every other type into the engine's index. After this, every view here costs 0 requests.</p>
       </ConfirmDialog>
     </>
   )

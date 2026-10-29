@@ -20,6 +20,7 @@ function scripted(reviews) {
     calls,
     agents: {
       scout: wrap('scout', stubAgents.scout),
+      editor: wrap('editor', stubAgents.editor),
       strategist: wrap('strategist', stubAgents.strategist),
       writer: wrap('writer', stubAgents.writer),
       reviewer: wrap('reviewer', async () => ({ model: 'stub', output: reviews[Math.min(i++, reviews.length - 1)] }))
@@ -78,7 +79,8 @@ test('happy path with stubs: a pass ends at awaiting_human, a step log per step 
   assert.equal(r.version, 1)
   assert.equal(store.byType('brief')[0].status, 'awaiting_human')
   // Phase 9 A2: the step log stays in the result (and the run record's timeline); only errors become run_log records.
-  assert.deepEqual(r.steps.map((l) => l.agent), ['scout', 'strategist', 'writer', 'designer', 'reviewer', 'orchestrator'])
+  // The weekly editor first: this week's questions (Scout), the editor's pick, then the Scout researches the pick.
+  assert.deepEqual(r.steps.map((l) => l.agent), ['scout', 'editor', 'scout', 'strategist', 'writer', 'designer', 'reviewer', 'orchestrator'])
   for (const l of r.steps) for (const k of ['time', 'agent', 'model', 'ms', 'result', 'error']) assert.ok(k in l, `step log has ${k}`)
   assert.equal(store.byType('run_log').length, 0, 'no run_log for successful steps')
   assert.equal(store.byType('brief').length, 1)
@@ -127,7 +129,7 @@ test('send_to scout: Scout runs in sources mode, then back to the Writer (strate
   s.agents.scout = async (ctx) => { modes.push(ctx.scoutMode); return scout(ctx) }
   const r = await runPipeline({ config: fakeConfig({ DRY_RUN: 'true' }), store: memoryStore(), notifier: fakeNotifier(), agents: s.agents })
   assert.match(r.error, /MAX_WRITER_REVISIONS/)
-  assert.deepEqual(modes, ['research', 'sources'])
+  assert.deepEqual(modes, ['week', 'slot', 'sources'])
   assert.equal(s.calls.filter((c) => c === 'strategist').length, 1)
   assert.equal(s.calls.filter((c) => c === 'writer').length, 4) // first, after the Scout, then 2 revisions with UNVERIFIED_FIX
 })

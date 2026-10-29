@@ -42,13 +42,15 @@ const DEFAULTS = {
   WRITER_AI_SERVICE: 'gemini', WRITER_AI_MODEL: 'gemini-2.5-flash', WRITER_DELIVERY: 'rtlayer',
   REVIEWER_AI_SERVICE: 'openai', REVIEWER_AI_MODEL: 'gpt-5.5', REVIEWER_DELIVERY: 'rtlayer',
   PROMO_AI_SERVICE: 'openai', PROMO_AI_MODEL: 'gpt-5-mini', PROMO_DELIVERY: 'sync',
-  // Phase 12: the Roadmap Planner (one call plans the learning path; one repair when the code checks fail).
-  PLANNER_AI_SERVICE: 'openai', PLANNER_AI_MODEL: 'gpt-5.6-luna', PLANNER_DELIVERY: 'sync', PLANNER_MAX_REPAIRS: '1',
-  // Phase 12: runs follow the approved roadmap. Timely lane: RAPID_RESPONSE_ENABLED=true means "news checks find
-  // timely opportunities, the person decides"; a timely post is written only after Write now.
-  ROADMAP_ENABLED: 'true', RAPID_RESPONSE_ENABLED: 'true',
-  // One click: a full run with no roadmap plans one first (1–2 AI calls), and approves it itself when it has no problems.
-  ROADMAP_AUTO_PLAN: 'true', ROADMAP_AUTO_APPROVE: 'true',
+  // The weekly editor: one call (a strong model) decides what this week's post is, from this week's news, the
+  // questions people asked, M91's changes and what readers already have.
+  EDITOR_AI_SERVICE: 'openai', EDITOR_AI_MODEL: 'gpt-5.5', EDITOR_DELIVERY: 'sync',
+  // How far back "this week's questions" go, how many the Scout returns, how many candidates the editor weighs,
+  // and how many real signals a candidate needs.
+  EDITOR_QUESTION_DAYS: '21', EDITOR_QUESTIONS_MAX: '12', EDITOR_CANDIDATES: '4', EDITOR_MIN_EVIDENCE: '2',
+  // The news check before each run: RAPID_RESPONSE_ENABLED=true means "news checks find events"; the editor may use
+  // one as a post's hook, and Write now on a card makes it the next post.
+  RAPID_RESPONSE_ENABLED: 'true',
   TIMELY_CHECK_ON_RUN: 'true', TIMELY_WINDOW_DAYS: '7', TIMELY_MAX_PER_WEEK: '1',
   MEM0_AGENT_ID: 'm91-blog',
   // Phase 9 A5: the Mem0 quota guard (an estimate kept in apps/engine/data/mem0-usage.json)
@@ -94,8 +96,8 @@ const DEFAULTS = {
   // Phase 3.5: dashboard API
   // The record store: viasocket (viaSocket AI memory, no monthly cap) or mem0. MEMORY_ROOT: the folder in viaSocket's space.
   MEMORY_BACKEND: 'viasocket', MEMORY_ROOT: 'm91-blog',
-  // The editor (what the next run writes): editor = news, tutorials and no near-repeats decide; roadmap = the next slot.
-  NEXT_PICK: 'editor', NEXT_SIMILARITY: '0.6', NEXT_NEWS_GAP_DAYS: '7', NEXT_TUTORIAL_EVERY: '3',
+  // Never a near-repeat: a topic this close (0–1) to a live guide or an earlier post is left out.
+  NEXT_SIMILARITY: '0.6',
   // Published guides (msg91.com/guide): the M91 posts already live, read before each full run (no AI).
   GUIDES_SYNC_ON_RUN: 'true', GUIDES_FEED_URL: 'https://msg91.com/guide/feed.xml', GUIDES_LIST_URL: 'https://msg91.com/guide', GUIDES_MAX_PAGES: '12', GUIDES_TIMEOUT_MS: '15000',
   DASHBOARD_PORT: '5173', DASHBOARD_AUTH: 'false', PORT: '8080',
@@ -326,18 +328,14 @@ export function loadConfig(env = process.env) {
       feedbackMaxItems: int('REVIEW_FEEDBACK_MAX_ITEMS', { min: 1, max: 30 }),
       lessonsPerReviewMax: int('LESSONS_PER_REVIEW_MAX', { max: 10 })
     },
-    planner: {
-      ...agent('planner'),
-      maxRepairs: int('PLANNER_MAX_REPAIRS', { max: 3 })
-    },
-    // Phase 12: each run writes the next slot of the approved roadmap (pinned topics first).
-    roadmap: { enabled: bool('ROADMAP_ENABLED'), autoPlan: bool('ROADMAP_AUTO_PLAN'), autoApprove: bool('ROADMAP_AUTO_APPROVE') },
-    // The timely lane, next to the roadmap (on only when both RAPID_RESPONSE_ENABLED and ROADMAP_ENABLED are true).
+    // The weekly editor: what each run writes (pinned topics and Write now cards first).
     editor: {
-      mode: oneOf('NEXT_PICK', ['editor', 'roadmap']),
+      ...agent('editor'),
       similarity: num('NEXT_SIMILARITY', { min: 0.1, max: 1 }),
-      newsGapDays: int('NEXT_NEWS_GAP_DAYS', { min: 0, max: 60 }),
-      tutorialEvery: int('NEXT_TUTORIAL_EVERY', { min: 2, max: 20 })
+      questionDays: int('EDITOR_QUESTION_DAYS', { min: 3, max: 90 }),
+      questionsMax: int('EDITOR_QUESTIONS_MAX', { min: 3, max: 30 }),
+      candidates: int('EDITOR_CANDIDATES', { min: 2, max: 6 }),
+      minEvidence: int('EDITOR_MIN_EVIDENCE', { min: 1, max: 5 })
     },
     guides: {
       syncOnRun: bool('GUIDES_SYNC_ON_RUN'),
@@ -347,7 +345,7 @@ export function loadConfig(env = process.env) {
       timeoutMs: int('GUIDES_TIMEOUT_MS', { min: 1000, max: 120000 })
     },
     timely: {
-      enabled: bool('RAPID_RESPONSE_ENABLED') && bool('ROADMAP_ENABLED'),
+      enabled: bool('RAPID_RESPONSE_ENABLED'),
       checkOnRun: bool('TIMELY_CHECK_ON_RUN'),
       windowDays: int('TIMELY_WINDOW_DAYS', { min: 1, max: 60 }),
       maxPerWeek: int('TIMELY_MAX_PER_WEEK', { min: 0, max: 7 })

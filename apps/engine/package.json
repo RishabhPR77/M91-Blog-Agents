@@ -53,7 +53,7 @@
     "blog:sync": "node --env-file=../../.env src/cli.js blog-sync",
     "mem0:usage": "node --env-file=../../.env src/cli.js mem0-usage",
     "reset:all": "node --env-file=../../.env src/cli.js reset",
-    "roadmap": "node --env-file=../../.env src/cli.js roadmap",
+    "weekly": "node --env-file=../../.env src/cli.js weekly",
     "export": "node --env-file=../../.env src/cli.js export",
     "timely": "node --env-file=../../.env src/cli.js timely",
     "admin:hash": "node scripts/admin-hash.mjs",

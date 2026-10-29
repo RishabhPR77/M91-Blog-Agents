@@ -16,11 +16,11 @@ const at = (r) => r?.createdAt ?? r?.date ?? null
 
 /**
  * briefs, drafts (newest first), reviews, exportRec, published (published_post records), runs (run records of this
- * brief), target (PUBLISH_TARGET), slot (roadmap slot or null).
+ * brief), target (PUBLISH_TARGET), pick (the weekly editor's decision for this post, or null).
  * Returns { title, status, stages: [{ id, label, state, detail, run_id, at }], runs, active_run_id }.
  * state: done | current (a run is on it) | waiting (needs you) | failed | todo | off.
  */
-export function buildJourney({ briefs = [], drafts = [], reviews = [], exportRec = null, published = [], runs = [], target = 'embarko', slot = null }) {
+export function buildJourney({ briefs = [], drafts = [], reviews = [], exportRec = null, published = [], runs = [], target = 'embarko', pick = null }) {
   const brief = [...briefs].sort((a, b) => bver(b) - bver(a))[0] ?? null
   const draft = drafts[0] ?? null
   const dp = draft?.payload ?? {}
@@ -47,7 +47,7 @@ export function buildJourney({ briefs = [], drafts = [], reviews = [], exportRec
   const docstarLive = exportRec?.payload?.docstar_state === 'published'
 
   const s = {}
-  s.topic = { state: brief || runList.length ? 'done' : 'todo', detail: slot?.title_idea ?? brief?.payload?.topic ?? brief?.payload?.titles?.[0] ?? '', run_id: firstRun?.run_id ?? null, at: firstRun?.started_at ?? null }
+  s.topic = { state: brief || runList.length || pick ? 'done' : 'todo', detail: pick ? `Chosen this week: ${pick.pick?.title ?? ''}` : brief?.payload?.topic ?? brief?.payload?.titles?.[0] ?? '', run_id: firstRun?.run_id ?? null, at: firstRun?.started_at ?? null }
   s.research = { state: brief || stepOf.research?.status === 'succeeded' ? 'done' : 'todo', detail: stepOf.research?.summary ?? '' }
   s.plan = { state: brief ? 'done' : 'todo', detail: brief ? `Brief v${bver(brief)}${brief.payload?.keyword ? ` · ${brief.payload.keyword}` : ''}` : '' }
   s.draft = { state: draft ? 'done' : 'todo', detail: draft ? `v${ver(draft)}${dp.word_count ? ` · ${Number(dp.word_count).toLocaleString('en-US')} words` : ''}${dp.reading?.post_grade != null ? ` · grade ${dp.reading.post_grade}` : ''}` : '' }
@@ -70,7 +70,7 @@ export function buildJourney({ briefs = [], drafts = [], reviews = [], exportRec
   else if (open && last && ['failed', 'cancelled'].includes(last.status) && s[open].state === 'todo') s[open] = { ...s[open], state: 'failed', detail: last.result_summary || last.error || `run ${last.status}` }
 
   return {
-    title: dp.title ?? brief?.payload?.titles?.[0] ?? slot?.title_idea ?? '',
+    title: dp.title ?? brief?.payload?.titles?.[0] ?? pick?.pick?.title ?? '',
     status,
     stages: STAGES.map(([key, label]) => ({
       id: key, label, state: s[key].state, detail: s[key].detail ?? '',

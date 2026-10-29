@@ -6,15 +6,15 @@ import { CheckCircle2, Loader2, OctagonX, UserRound } from 'lucide-react'
 import { trackerSteps, type RunView, type StepState } from '../state/runEvents'
 
 export const DOING: Record<string, string> = {
-  planner: 'Planning the roadmap…', guides: 'Reading the published guides…', scout: 'Researching what people ask…',
+  editor: 'Choosing this week\u2019s post…', guides: 'Reading the published guides…', scout: 'Researching what people ask…',
   strategist: 'Planning the post…', writer: 'Writing the draft…', checks: 'Checking the draft (reading level, links, facts)…',
   designer: 'Designing the interactive guide…', reviewer: 'AI review: reading and scoring the draft…', promo: 'Making the promo pack…',
-  export: 'Saving the Markdown export…', publisher: 'Publishing…', roadmap: 'Planning the roadmap…', timely: 'Checking the news…'
+  export: 'Saving the Markdown export…', publisher: 'Publishing…', timely: 'Checking the news…'
 }
-const NAME: Record<string, string> = { scout: 'Research', strategist: 'Plan', writer: 'Draft', checks: 'Checks', designer: 'Design', reviewer: 'AI review', promo: 'Promo', export: 'Export', publisher: 'Publish' }
+const NAME: Record<string, string> = { editor: 'Choose the topic', scout: 'Research', strategist: 'Plan', writer: 'Draft', checks: 'Checks', designer: 'Design', reviewer: 'AI review', promo: 'Promo', export: 'Export', publisher: 'Publish' }
 
 // The steps still to come in each kind of run (steps it already reported are always shown).
-const AHEAD: Record<string, string[]> = { full: ['scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer'], approve: ['promo', 'export', 'publisher'] }
+const AHEAD: Record<string, string[]> = { full: ['editor', 'scout', 'strategist', 'writer', 'checks', 'designer', 'reviewer'], approve: ['promo', 'export', 'publisher'] }
 
 /** The steps this run has, in order: the ones it reported, and while it runs, the ones still ahead of it. */
 export function runSteps(view: RunView, { hidePromo = false, hideDesigner = false } = {}): StepState[] {

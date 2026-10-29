@@ -110,28 +110,27 @@ export function rebriefTail(currentBrief, version, feedback) {
 export const TRUNCATED_PROBLEM = 'Your previous answer was cut off: return the same brief with shorter points (at most 3 per section).'
 
 /** Fills the PLAN prompt from config + computed inputs. */
-/** Phase 12: one roadmap post. It replaces HOW TO PICK THE LEAD and TOPIC GROUP BALANCE for the run. */
-export const ROADMAP_RULES = `
+/** This week's post (the weekly editor's pick) or a pinned topic. It replaces HOW TO PICK THE LEAD and TOPIC GROUP BALANCE. */
+export const TARGET_RULES = `
 
-=== THIS RUN: ONE POST OF THE ROADMAP (this section overrides HOW TO PICK THE LEAD and TOPIC GROUP BALANCE) ===
-The reader follows a learning path, stage by stage. There is no lead to choose: plan the post in POST TO PLAN.
-- lead: the one QUESTION CLUSTER in the message (kind "cluster"), or the PINNED TOPIC when there is one. post_type: "question" ("tutorial" only if a TUTORIAL LEAD is given and you use it; "pinned" for a pinned topic).
-- slot_id: exactly the slot_id in POST TO PLAN ("" for a pinned topic).
-- The reader's level is the stage's level in POST TO PLAN. Plan for that level: a beginner knows nothing about M91 yet.
-- KNOWLEDGE MAP is what the reader already learned in earlier posts. Never re-explain those concepts. When this post needs one, add a note_for_writer "see the earlier guide: <title>", and an internal_links item when that post has a URL in PUBLISHED POSTS.
-- why_today: one or two sentences on how this post builds on the previous one (name it), or why it is the place to start.
+=== THIS RUN: ONE POST, ALREADY CHOSEN (this section overrides HOW TO PICK THE LEAD and TOPIC GROUP BALANCE) ===
+There is no lead to choose: plan the post in POST TO PLAN. Only one post goes out this week, so it must fully answer the reader's question.
+- lead: the one QUESTION CLUSTER in the message (kind "cluster"), or the PINNED TOPIC when there is one. post_type: "question" ("tutorial" when POST TO PLAN's format is tutorial and a TUTORIAL LEAD is given; "pinned" for a pinned topic).
+- Follow POST TO PLAN's format and angle: tutorial = numbered steps the reader can follow; explainer = the answer, then why and how; comparison = a fair table and when to pick which; checklist = a short checklist the reader can use today; news_analysis = what happened, what it means, what to do.
+- When POST TO PLAN has a hook (this week's news): open the post with it in one or two sentences (outlet and date, its source in SOURCES FOR THIS POST), then answer the lasting question; the hook is not the whole post. Fill "news" from the hook (is_news_based true, outlet, published_date, source_url exactly as given, claim_in_own_words). Without a hook, is_news_based is false.
+- The reader may be new to M91. KNOWLEDGE MAP is what earlier posts and the live guides already teach. Never re-explain those concepts. When this post needs one, add a note_for_writer "see the earlier guide: <title>", and an internal_links item when that post has a URL in PUBLISHED POSTS.
+- why_today: one or two sentences on why this post matters this week (POST TO PLAN's why_now and demand).
 - terms_to_define: the technical words this post must explain in plain words the first time it uses them (none the KNOWLEDGE MAP already defined). At most 8.
 - One question per outline section; the answer comes first in every section. No history, background or side topics unless POST TO PLAN asks for them.
 - Use SOURCES FOR THIS POST and M91 FACTS for sources. Choose the topic group that fits the post.`
 
-// The timely lane: a rapid-response post about one real event you chose (Write now), next to the roadmap.
+// A rapid-response post about one real event you chose (Write now).
 export const TIMELY_RULES = `
 
 === THIS RUN: ONE TIMELY POST ABOUT A REAL EVENT (this section overrides HOW TO PICK THE LEAD and TOPIC GROUP BALANCE) ===
 There is no lead to choose: plan the post in POST TO PLAN.
 - lead: the one RAPID-RESPONSE STORY in the message (kind "story"). post_type: "rapid_response"; review_flags contain "rapid-response".
 - news: is_news_based true; outlet, published_date and source_url copied exactly from that story; claim_in_own_words: what happened, in your own words, nothing beyond the source.
-- slot_id: "" (a timely post is not a roadmap slot).
 - The reader may be new to M91. KNOWLEDGE MAP is what earlier posts taught: never re-explain it; add a note_for_writer "see the earlier guide: <title>" for the one or two most relevant earlier posts, and an internal_links item when that post has a URL in PUBLISHED POSTS.
 - why_today: one sentence on why this event matters to readers now.
 - terms_to_define: the technical words this post must explain the first time (none the KNOWLEDGE MAP already defined). At most 8.
@@ -139,8 +138,8 @@ There is no lead to choose: plan the post in POST TO PLAN.
 
 export function buildPlanPrompt(config, inputs) {
   const st = config.strategist
-  const roadmap = inputs.target ? (inputs.target.timely ? TIMELY_RULES : ROADMAP_RULES) : ''
-  return roadmap ? fill(PLAN, {
+  const rules = inputs.target ? (inputs.target.timely ? TIMELY_RULES : TARGET_RULES) : ''
+  return rules ? fill(PLAN, {
     rapid_response_days: config.scout.rapidResponseDays,
     update_rule: st.allowUpdateBriefs ? UPDATE_RULE_ON : UPDATE_RULE_OFF,
     blocked_group: inputs.blockedGroup ?? 'none (no group is blocked)',
@@ -158,7 +157,7 @@ export function buildPlanPrompt(config, inputs) {
     post_grade: config.content.readingGradePostMax,
     lessons_rule: inputs.lessons.length ? LESSONS_RULE : '',
     today: inputs.today
-  }) + roadmap : fill(PLAN, {
+  }) + rules : fill(PLAN, {
     rapid_response_days: config.scout.rapidResponseDays,
     update_rule: st.allowUpdateBriefs ? UPDATE_RULE_ON : UPDATE_RULE_OFF,
     blocked_group: inputs.blockedGroup ?? 'none (no group is blocked)',

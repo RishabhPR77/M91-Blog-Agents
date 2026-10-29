@@ -18,7 +18,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toasts'
 import { expectedCalls, expectedMem0, PRESETS, type CostKey, type Preset } from '../config/costs'
 import { flagsOf } from '../config/flags'
-import { useRoadmap, nextUpText } from '../api/roadmap'
+import { FORMAT_LABEL, nextRunText, useWeekly } from '../api/weekly'
 import { useTimely } from '../api/timely'
 import { buildRunRequest, leastUsedGroup, TOPIC_GROUPS } from '../config/runOptions'
 import { fmtDateTime, fmtDuration } from '../format'
@@ -122,9 +122,9 @@ export default function Control() {
   const flags = flagsOf(settings.data)
   // Each agent's AI model, as the engine has it now (from the settings), shown on its card.
   const models = settings.data?.models as Record<string, { service?: string; model?: string } | undefined> | undefined
-  // Phase 12: with the roadmap on, the run writes the next slot (shown above the Run button).
-  const roadmapOn = settings.data?.roadmap?.enabled === true
-  const roadmap = useRoadmap(roadmapOn)
+  // The weekly editor: what the next run writes about, and its last decision (shown on the big card).
+  const weekly = useWeekly(online)
+  const lastPick = weekly.data?.picks?.[0]
   // The timely lane: open cards (a badge) and a Write now card that waits.
   const timelyOn = settings.data?.timely?.enabled === true
   const timely = useTimely(timelyOn)
@@ -184,11 +184,12 @@ export default function Control() {
           </div>
         )}
 
-        <RunButton variant="hero" title="Write the next post" description={`One click: it researches what people ask, plans the post, writes it and has the AI review it (weak parts are rewritten). Then it waits for your review.${roadmapOn ? ' With no roadmap yet, it plans and approves one first.' : ''}`}
-          models={[...(roadmapOn ? [['Planner', models?.planner] as ModelRow] : []), ['Scout', models?.scout], ['Strategist', models?.strategist], ['Writer', models?.writer], ...(flags.experienceOn ? [['Designer', models?.designer] as ModelRow] : []), ['Reviewer', models?.reviewer]]} costKey={roadmapOn ? 'full_roadmap' : flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason ?? (roadmapOn && roadmap.data?.next.kind === 'none' ? roadmap.data.next.reason : null)}
-          onRun={() => ask('full', 'Write the next post', roadmapOn ? 'full_roadmap' : flags.experienceOn ? 'full' : 'full_plain', {}, roadmapOn ? [['Next up', nextUpText(roadmap.data?.next)]] : [])}>
-          {roadmapOn && <p className="text-[15px]" data-testid="control-next-up"><span className="font-semibold">Next up:</span> {roadmap.isPending ? 'loading…' : nextUpText(roadmap.data?.next)}{roadmap.data?.next?.why ? <span className="text-xs text-slate-500" data-testid="control-next-up-why"> ({roadmap.data.next.why})</span> : null} <Link className="text-xs text-sky-700 underline dark:text-sky-300" to="/roadmap">Roadmap</Link></p>}
-          {timelyOn && (timely.data?.open ?? 0) > 0 && <p className="text-sm" data-testid="control-timely"><Link to="/roadmap#timely" className="pill pill-amber">{timely.data!.open} timely opportunit{timely.data!.open === 1 ? 'y' : 'ies'}</Link>{timely.data?.waiting ? <span className="ml-2 text-xs text-slate-500">“{timely.data.waiting.title}” waits: {timely.data.waiting.reason}</span> : null}</p>}
+        <RunButton variant="hero" title="Write the next post" description="One click: the editor reads this week's questions, news and M91 changes and picks the most useful post (never a repeat of a live guide); then it is researched, planned, written and reviewed by the AI (weak parts are rewritten). It waits for your review."
+          models={[['Editor', models?.editor], ['Scout', models?.scout], ['Strategist', models?.strategist], ['Writer', models?.writer], ...(flags.experienceOn ? [['Designer', models?.designer] as ModelRow] : []), ['Reviewer', models?.reviewer]]} costKey={flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason}
+          onRun={() => ask('full', 'Write the next post', flags.experienceOn ? 'full' : 'full_plain', {}, [['Topic', nextRunText(weekly.data?.next, weekly.data?.model)]])}>
+          <p className="text-[15px]" data-testid="control-next-up"><span className="font-semibold">Topic:</span> {weekly.isPending ? 'loading…' : nextRunText(weekly.data?.next, weekly.data?.model)}. <Link className="text-xs text-sky-700 underline dark:text-sky-300" to="/week">This week</Link></p>
+          {lastPick && <p className="text-sm text-slate-600 dark:text-slate-300" data-testid="control-last-pick"><span className="font-medium">Last pick:</span> {lastPick.pick.title} <span className="text-xs text-slate-500">({FORMAT_LABEL[lastPick.pick.format] ?? lastPick.pick.format}, {lastPick.date}): {lastPick.reason}</span></p>}
+          {timelyOn && (timely.data?.open ?? 0) > 0 && <p className="text-sm" data-testid="control-timely"><Link to="/week#timely" className="pill pill-amber">{timely.data!.open} news item{timely.data!.open === 1 ? '' : 's'} this week</Link>{timely.data?.waiting ? <span className="ml-2 text-xs text-slate-500">“{timely.data.waiting.title}” waits: {timely.data.waiting.reason}</span> : null}</p>}
         </RunButton>
         <div className="grid items-start gap-4 lg:grid-cols-3">
           <Card title={<span className="flex items-center gap-1.5"><Inbox size={15} /> Waiting for you</span>}>

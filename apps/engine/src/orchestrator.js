@@ -13,12 +13,11 @@ import { runWriter } from './writer/index.js'
 import { runReviewer } from './reviewer/index.js'
 import { runPromo } from './promo/index.js'
 import { runExperience, isInteractive } from './experience/index.js'
-import { runPlanner } from './planner/index.js'
-import { pickTarget, setSlotStatus } from './roadmap/pick.js'
-import { loadRoadmap } from './roadmap/model.js'
-import { roadmapProblems } from './roadmap/checks.js'
-import { approveRoadmap } from './roadmap/actions.js'
-import { markWriting, releaseWriting, applyAction } from './timely/model.js'
+import { pickTarget } from './weekly/pick.js'
+import { gatherSignals } from './weekly/signals.js'
+import { runWeeklyEditor, linkPick } from './weekly/editor.js'
+import { createViaSocketClient } from './viasocket.js'
+import { markWriting, releaseWriting } from './timely/model.js'
 import { loadBrief } from './writer/inputs.js'
 import { loadDraft } from './reviewer/inputs.js'
 import { draftVersion, draftBriefVersion } from './writer/save.js'
@@ -42,21 +41,25 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
   const deps = { config, store, notifier, ...(agentDeps ?? scoutDeps) }
   return {
     ...stubAgents,
-    // Phase 12: the Roadmap Planner (roadmap mode).
-    async planner(ctx) {
-      const output = await runPlanner({ runId: ctx.runId }, deps)
-      return { model: output.calls.at(-1)?.model ?? config.planner.model, output }
+    // The weekly editor: this week's signals (code) and one AI call that decides the post.
+    async editor(ctx) {
+      const signals = await gatherSignals(store, { config, now: deps.now ?? Date.now, questions: ctx.weekQuestions ?? [] })
+      const output = await runWeeklyEditor(signals, { store, config, aiSend: deps.aiSend ?? createViaSocketClient({ config }).aiSend, runId: ctx.runId, now: deps.now ?? Date.now })
+      return { model: output.model ?? config.editor.model, output }
     },
     async scout(ctx) {
       const output = ctx.scoutMode === 'sources'
         ? await runScout({ mode: 'sources', briefId: ctx.briefId, version: ctx.version, claims: ctx.routeClaims ?? ctx.review?.claims ?? [], reviewerNote: ctx.review?.summary }, deps)
-        // Phase 12: with a roadmap target, the focused Scout researches only that post.
+        // The focused Scout researches only the post this run writes.
         : ctx.scoutMode === 'slot'
           ? await runScout({ mode: 'slot', runId: ctx.runId, briefId: ctx.briefId, target: ctx.target }, deps)
-          // The timely lane: the news check (1 call) proposes cards; it never picks what to write.
+          // The news check (1 call) finds this week's events.
           : ctx.scoutMode === 'timely'
             ? await runScout({ mode: 'timely', runId: ctx.runId }, deps)
-            : await runScout({ mode: 'research', runId: ctx.runId }, deps)
+            // The weekly editor's questions: what people asked recently (1 call).
+            : ctx.scoutMode === 'week'
+              ? await runScout({ mode: 'week', runId: ctx.runId }, deps)
+              : await runScout({ mode: 'research', runId: ctx.runId }, deps)
       return { model: config.scout.model, output }
     },
     async writer(ctx) {
@@ -129,6 +132,10 @@ export function summariseOutput(agent, out) {
       message: `News check: ${c.kept ?? 0} new timely opportunit${c.kept === 1 ? 'y' : 'ies'} (${c.returned ?? 0} found, ${c.dropped ?? 0} dropped${c.expired ? `, ${c.expired} expired` : ''})`,
       data: { opportunity_ids: (out.opportunities ?? []).map((o) => o.opportunity_id), dropped: out.dropped ?? [], expired: c.expired ?? 0 }
     }
+  }
+  if (agent === 'scout' && out.mode === 'week') {
+    const c = out.counts ?? {}
+    return { message: `This week's questions: ${c.kept ?? 0} kept (${c.returned ?? 0} found, ${c.dropped ?? 0} dropped)`, data: { kept: c.kept ?? 0 } }
   }
   if (agent === 'scout' && out.mode === 'sources') {
     return { message: `${out.claims_supported} supported, ${out.claims_unverified} unverified, ${out.claims_contradicted} contradicted`, data: { record_id: out.record_id } }
@@ -265,9 +272,13 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   let best = null
   let reviews = 0
   const warnings = []
-  // Phase 12: what this run writes about (a roadmap slot or a pinned topic); null without the roadmap.
+  // What this run writes about: the weekly editor's pick, a due pinned topic or a Write now card.
   let target = null
-  const ctx = () => ({ runId, briefId, version, round: counters.rounds, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, writerMode, routeFeedback, routeClaims, guideDoc, designFeedback, target, config })
+  // This week's questions (the Scout's "week" call), for the editor.
+  let weekQuestions = []
+  const ctx = () => ({ runId, briefId, version, round: counters.rounds, leads, brief, briefVersion, draft, review, sourcePack, scoutMode, strategistMode, writerMode, routeFeedback, routeClaims, guideDoc, designFeedback, target, weekQuestions, config })
+  // The news card this run holds: a Write now card, or the weekly pick's hook (free again if the run fails).
+  const heldCard = () => (target?.kind === 'timely' ? target.opportunity.record_id : target?.kind === 'weekly' ? target.pick.hook?.record_id ?? null : null)
 
   const setState = (to) => {
     state = assertTransition(state, to)
@@ -333,7 +344,7 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   }
 
   async function research() {
-    scoutMode = target && target.kind !== 'none' ? 'slot' : 'research'
+    scoutMode = target ? 'slot' : 'research'
     leads = await step('scout', ctx())
   }
   // Reviewer sent the post to the Scout: find sources for its claims, then back to the Writer.
@@ -387,66 +398,55 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
         designFeedback = resume.feedback ?? []
       }
     } else {
-      if (config.roadmap?.enabled) {
-        // The timely lane: check the news first (TIMELY_CHECK_ON_RUN). It only proposes cards for the person; a
-        // failed check is a warning and the run goes on.
-        if (config.timely?.enabled && config.timely.checkOnRun) {
-          scoutMode = 'timely'
-          try {
-            await step('scout', ctx())
-          } catch (error) {
-            if (isCancel(error, signal)) throw error
-            warnings.push(`news check failed (the run goes on): ${error.message}`)
-          }
+      // This week's news (TIMELY_CHECK_ON_RUN): the news check saves cards; a failed check is a warning.
+      if (config.timely?.enabled && config.timely.checkOnRun) {
+        scoutMode = 'timely'
+        try {
+          await step('scout', ctx())
+        } catch (error) {
+          if (isCancel(error, signal)) throw error
+          warnings.push(`news check failed (the run goes on): ${error.message}`)
         }
-        // The M91 guides already live on msg91.com/guide (no AI): new ones are saved before the next topic is picked,
-        // so the knowledge map, the internal links and the roadmap see them. A failed read is a warning.
-        if (config.guides?.syncOnRun) {
-          try {
-            const g = await syncGuides({ store, config, now })
-            emit('step.output', { agent: 'orchestrator', step: 'guides', message: guidesSummary(g), data: { known: g.known, added: g.added.length } })
-            warnings.push(...g.warnings.map((w) => `guide sync: ${w}`))
-          } catch (error) {
-            warnings.push(`guide sync failed (the run goes on): ${error.message}`)
-          }
-        }
-        // One click: no roadmap yet, so the Roadmap Planner plans it now (it sees the published guides); a draft roadmap
-        // is approved by the run itself when it has no problems (ROADMAP_AUTO_APPROVE). Then the next post is picked.
-        if (config.roadmap.autoPlan) {
-          let rec = await loadRoadmap(store)
-          if (!rec?.payload) {
-            emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: 'No roadmap yet: the Roadmap Planner plans it first (1–2 AI calls)', data: {} })
-            await step('planner', ctx())
-            rec = await loadRoadmap(store)
-          }
-          if (rec?.payload && rec.payload.status !== 'approved' && config.roadmap.autoApprove) {
-            const problems = roadmapProblems(rec.payload)
-            if (problems.length) warnings.push(`the roadmap was not approved automatically (${problems.slice(0, 2).join('; ')}): fix it on the Roadmap page`)
-            else {
-              await approveRoadmap(store, { now })
-              emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: 'Roadmap approved by the run (ROADMAP_AUTO_APPROVE); you can still edit it on the Roadmap page', data: {} })
-            }
-          }
-        }
-        // Phase 12: a pinned topic that is due, then a timely card you chose with Write now, else the next slot of
-        // the approved roadmap. Nothing to write: no further AI call.
-        target = await pickTarget(store, { now, config })
-        if (target.kind === 'none') {
-          emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: target.reason, data: {} })
-          return { briefId, state: 'skipped', reason: target.reason, error: target.reason, steps, warnings }
-        }
-        if (target.kind === 'slot') {
-          await setSlotStatus(store, { slotId: target.slot.slot_id }, 'drafting', { setBriefId: briefId, now })
-          emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Next up: stage ${target.stage.number} (${target.stage.name}) · ${target.slot.slot_id} ${target.slot.title_idea}${target.why ? ` — ${target.why}` : ''}`, data: { slot_id: target.slot.slot_id, stage: target.stage.number, why: target.why ?? null, skipped: target.skipped ?? [] } })
-        } else if (target.kind === 'timely') {
-          // A timely post never uses up a slot; the card holds the brief id while the post is written.
-          // A card the editor chose itself is marked Write now (as if you had clicked it), then taken.
-          if (target.chosenByEditor) await applyAction(store, target.opportunity.record_id, 'write_now', { now }).catch((error) => warnings.push(`news card not marked Write now: ${error.message}`))
-          await markWriting(store, target.opportunity.record_id, briefId, { now })
-          emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Timely post first: ${target.opportunity.title} (reported by ${target.opportunity.outlet})${target.why ? ` — ${target.why}` : ''}`, data: { opportunity_id: target.opportunity.opportunity_id, why: target.why ?? null } })
-        } else emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Pinned topic first: ${target.pin.topic}`, data: { pinned_id: target.pin.pinned_id } })
-        if (target.timelyWaiting) emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: `Timely card waits: ${target.timelyWaiting.title} — ${target.timelyWaiting.reason}`, data: { opportunity_id: target.timelyWaiting.opportunity_id } })
       }
+      // The M91 guides already live on msg91.com/guide (no AI): new ones are saved first, so the editor never repeats
+      // them and the knowledge map and the internal links see them. A failed read is a warning.
+      if (config.guides?.syncOnRun) {
+        try {
+          const g = await syncGuides({ store, config, now })
+          emit('step.output', { agent: 'orchestrator', step: 'guides', message: guidesSummary(g), data: { known: g.known, added: g.added.length } })
+          warnings.push(...g.warnings.map((w) => `guide sync: ${w}`))
+        } catch (error) {
+          warnings.push(`guide sync failed (the run goes on): ${error.message}`)
+        }
+      }
+      // A pinned topic that is due, then a news card you chose with Write now; otherwise the weekly editor decides
+      // from this week's questions, news and M91 changes.
+      target = await pickTarget(store, { now, config })
+      const waiting = target.timelyWaiting ?? null
+      if (target.kind === 'editor') {
+        scoutMode = 'week'
+        try {
+          weekQuestions = (await step('scout', ctx()))?.questions ?? []
+        } catch (error) {
+          if (isCancel(error, signal)) throw error
+          warnings.push(`this week's questions were not found (the editor uses the other signals): ${error.message}`)
+        }
+        const decided = await step('editor', ctx())
+        warnings.push(...(decided?.warnings ?? []))
+        if (!decided?.pick) {
+          target = null
+          return { briefId, state: 'skipped', reason: decided?.reason ?? 'the editor found nothing to write', error: decided?.reason ?? 'the editor found nothing to write', steps, warnings }
+        }
+        target = { kind: 'weekly', pick: decided.pick, why: decided.reason }
+        if (decided.pick.record_id) await linkPick(store, decided.pick.record_id, briefId)
+        // A news hook is used up by this post (free again if the run fails).
+        if (decided.pick.hook?.record_id) await markWriting(store, decided.pick.hook.record_id, briefId, { now })
+      } else if (target.kind === 'timely') {
+        // The card holds the brief id while the post is written.
+        await markWriting(store, target.opportunity.record_id, briefId, { now })
+        emit('step.output', { agent: 'orchestrator', step: 'editor', message: `You chose Write now: ${target.opportunity.title} (reported by ${target.opportunity.outlet})`, data: { opportunity_id: target.opportunity.opportunity_id } })
+      } else emit('step.output', { agent: 'orchestrator', step: 'editor', message: `Pinned topic first: ${target.pin.topic}`, data: { pinned_id: target.pin.pinned_id } })
+      if (waiting) emit('step.output', { agent: 'orchestrator', step: 'editor', message: `A Write now card waits: ${waiting.title} — ${waiting.reason}`, data: { opportunity_id: waiting.opportunity_id } })
       await research()
       await plan()
     }
@@ -526,24 +526,20 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     }
 
     const summary = await awaitHuman()
-    if (target?.kind === 'slot') await setSlotStatus(store, { slotId: target.slot.slot_id }, 'in_review', { now })
     await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'awaiting_human', error: null })
     return { briefId, state, version, counters, steps, summary, warnings }
   } catch (error) {
     // Once a run is cancelled, a later error (e.g. a network failure mid-step) still ends it as cancelled: no failure alert.
     if (error instanceof CancelledError || signal?.aborted) {
       state = 'cancelled'
-      if (target?.kind === 'slot') await setSlotStatus(store, { slotId: target.slot.slot_id }, 'planned', { setBriefId: '', now })
-      if (target?.kind === 'timely') await releaseWriting(store, target.opportunity.record_id)
+      if (heldCard()) await releaseWriting(store, heldCard())
       await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'cancelled', error: null })
       log.info('pipeline cancelled', { runId, briefId })
       return { runId, briefId, state, version, counters, steps }
     }
     if (state !== 'failed') state = 'failed'
-    // Phase 12: the slot is free again (a new run picks it).
-    if (target?.kind === 'slot') await setSlotStatus(store, { slotId: target.slot.slot_id }, 'planned', { setBriefId: '', now })
-    // The timely card waits again (still write_now) for the next run.
-    if (target?.kind === 'timely') await releaseWriting(store, target.opportunity.record_id)
+    // The news card is free again (a Write now card waits for the next run; a hook can be used again).
+    if (heldCard()) await releaseWriting(store, heldCard())
     await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'failed', error: error.message })
     log.error('pipeline failed', { briefId, error, counters })
     if (error.routing) await failReview(error)

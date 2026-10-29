@@ -242,19 +242,24 @@ test('sources mode: verdicts counted, dead URLs dropped, source_pack saved under
   assert.equal(r2.claims_supported, 0)
 })
 
-test('orchestrator: the real Scout runs before the Strategist stub, which receives the ScoutResult', async () => {
+test('orchestrator: the real Scout reads this week’s questions, then researches the editor’s pick for the Strategist', async () => {
   const config = fakeConfig({ DRY_RUN: 'true', M91_DOCS_URL: LLMS })
   const store = memoryStore({ dryRun: true })
   const notifier = fakeNotifier()
-  const ai = fakeAi()
-  // The real Strategist (Phase 3) has its own pipeline tests; here the stub stands in for it.
+  const ai = fakeAi({ 'questions-week': { questions: [] }, 'questions-slot': { main_question: 'When should an AI agent call a human?', related_questions: [], demand: { level: 'medium', reason: 'asked a few times' } }, 'sources-slot': { sources: [] } })
+  // The editor and the real Strategist have their own tests; here the stubs stand in for them.
   const real = defaultAgents({ config, store, notifier, scoutDeps: { aiSend: ai, fetch: fakeWeb(), urlChecker: fakeChecker(), now: () => NOW } })
-  let scoutCalls = []
-  const agents = { ...real, scout: async (ctx) => { const out = await real.scout(ctx); scoutCalls = out.output.calls; return out }, strategist: stubAgents.strategist, writer: stubAgents.writer, designer: stubAgents.designer, reviewer: mockReviewer() }
+  const modes = []
+  let leads = null
+  const agents = { ...real, scout: async (ctx) => { modes.push(ctx.scoutMode); return real.scout(ctx) }, editor: stubAgents.editor, strategist: async (ctx) => { leads = ctx.leads; return stubAgents.strategist(ctx) }, writer: stubAgents.writer, designer: stubAgents.designer, reviewer: mockReviewer() }
   const r = await runPipeline({ config, store, notifier, agents, now: () => NOW, briefId: RUN })
   assert.equal(r.state, 'awaiting_human')
-  assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 2), ['scout', 'strategist'])
-  assert.equal(scoutCalls.length, 11)
+  assert.deepEqual(r.steps.map((x) => x.agent).slice(0, 4), ['scout', 'editor', 'scout', 'strategist'])
+  assert.deepEqual(modes, ['week', 'slot'])
+  // DRY_RUN saves nothing, so the focused research builds the facts again (a real run reuses today's).
+  assert.deepEqual(ai.requests.map((q) => q.call), ['facts', 'questions-week', 'facts', 'questions-slot', 'sources-slot'])
+  assert.equal(leads.mode, 'slot')
+  assert.equal(leads.target.pick_id, 'W-stub')
   assert.equal(callLogs(store).length, 0, 'no run_log records for successful calls')
 })
 

@@ -155,15 +155,23 @@ export const scout_sources = {
   })
 }
 
-// Phase 12: the focused Scout (one post of the roadmap).
+// The focused Scout (one post: the weekly pick, a pinned topic or a Write now card).
 export const scout_slot_questions = {
   name: 'scout_slot_questions',
   strict: true,
   schema: obj({
     main_question: str,
     related_questions: arr(obj({ question: str, source_url: str, demand_evidence: str })),
-    demand: obj({ level: { type: 'string', enum: ['high', 'medium', 'low'] }, reason: str }),
-    off_roadmap: arr(obj({ title_idea: str, question: str, stage: { type: 'integer', enum: [1, 2, 3, 4, 5] }, teaches: arr(str), evidence_url: str, demand_evidence: str }))
+    demand: obj({ level: { type: 'string', enum: ['high', 'medium', 'low'] }, reason: str })
+  })
+}
+
+/** The weekly editor's questions: what people asked in the last EDITOR_QUESTION_DAYS days. */
+export const scout_week_questions = {
+  name: 'scout_week_questions',
+  strict: true,
+  schema: obj({
+    questions: arr(obj({ question: str, source_url: str, where: str, posted_date: str, demand_evidence: str, topic_group: GROUP }))
   })
 }
 
@@ -175,4 +183,4 @@ export const scout_slot_sources = {
   })
 }
 
-export const SCHEMAS = Object.freeze({ scout_m91_facts, scout_questions, scout_stories, scout_tutorials, scout_clusters, scout_style, scout_sources, scout_slot_questions, scout_slot_sources, scout_timely })
+export const SCHEMAS = Object.freeze({ scout_m91_facts, scout_questions, scout_stories, scout_tutorials, scout_clusters, scout_style, scout_sources, scout_slot_questions, scout_slot_sources, scout_timely, scout_week_questions })

@@ -22,6 +22,15 @@ function setup({ env = {}, agents = {}, store } = {}) {
   return { config, store, notifier, manager, updates }
 }
 const quiet = () => setSink(() => {})
+/** A Scout whose first call (this week's questions) waits for release(); later calls answer at once. */
+const gatedScout = (onGate) => {
+  let first = true
+  return () => {
+    if (!first) return stubAgents.scout()
+    first = false
+    return new Promise((r) => onGate(() => r(stubAgents.scout())))
+  }
+}
 
 test('full run: run_id format, separate brief_id, run record lifecycle, events, lock released', async () => {
   const restore = quiet()
@@ -44,7 +53,8 @@ test('full run: run_id format, separate brief_id, run record lifecycle, events, 
   assert.equal(p.mode, 'full')
   assert.equal(p.dry_run, false)
   assert.ok(p.finished_at && p.ms >= 0)
-  assert.deepEqual(p.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['designer', 'succeeded'], ['reviewer', 'succeeded']])
+  // This week's questions (Scout), the editor's pick, then the Scout's research of the pick.
+  assert.deepEqual(p.steps.map((x) => [x.name, x.status]), [['scout', 'succeeded'], ['editor', 'succeeded'], ['scout', 'succeeded'], ['strategist', 'succeeded'], ['writer', 'succeeded'], ['designer', 'succeeded'], ['reviewer', 'succeeded']])
   assert.match(p.brief_id, BRIEF_ID_RE)
   assert.notEqual(p.brief_id, run_id)
   // Phase 9 A2: saved at the start (create), when the run waits for approval, and at the end; not per step.
@@ -100,7 +110,7 @@ test('failure: status failed, run.failed event, lock released', async () => {
 test('one run at a time (409); unknown and not-built modes are refused', async () => {
   const restore = quiet()
   let release
-  const s = setup({ agents: { scout: () => new Promise((r) => { release = () => r(stubAgents.scout()) }) } })
+  const s = setup({ agents: { scout: gatedScout((go) => { release = go }) } })
   const { run_id } = await s.manager.startRun({ mode: 'full' })
   await assert.rejects(s.manager.startRun({ mode: 'full' }), (e) => e instanceof RunError && e.status === 409 && e.code === 'run_in_progress')
   await new Promise((r) => setImmediate(r))
@@ -120,7 +130,7 @@ test('cancel between steps: status cancelled, later steps never run, lock releas
   let strategistCalled = false
   const s = setup({
     agents: {
-      scout: () => new Promise((r) => { release = () => r(stubAgents.scout()) }),
+      scout: gatedScout((go) => { release = go }),
       strategist: async (ctx) => { strategistCalled = true; return stubAgents.strategist(ctx) }
     }
   })
@@ -180,11 +190,11 @@ test('a step interrupted by a cancel is recorded as "cancelled", not "failed" (r
   const f = setup({ agents: { scout: async () => { throw new Error('scout down') } } })
   const { run_id: id2 } = await f.manager.startRun({ mode: 'full' })
   const r2 = await f.manager.wait(id2)
-  assert.deepEqual(r2.run.steps.map((x) => [x.name, x.status, x.error]), [['scout', 'failed', 'scout down']])
-  // The run record was saved at the start, when the step failed, and at the end (Phase 9 A2).
-  assert.deepEqual(f.updates, ['running', 'failed'])
+  // This week's questions failing is a warning (the editor uses the other signals); the research failing fails the run.
+  assert.deepEqual(r2.run.steps.map((x) => [x.name, x.status, x.error]), [['scout', 'failed', 'scout down'], ['editor', 'succeeded', null], ['scout', 'failed', 'scout down']])
+  assert.ok(r2.run.warnings.some((w) => /this week's questions were not found/.test(w)))
   // Errors still get a run_log record.
-  assert.deepEqual(recordsOf(f.store, 'run_log').map((l) => [l.payload.agent, l.payload.result, l.payload.error]), [['scout', 'error', 'scout down'], ['orchestrator', 'failed', 'scout down']])
+  assert.deepEqual(recordsOf(f.store, 'run_log').map((l) => [l.payload.agent, l.payload.result, l.payload.error]), [['scout', 'error', 'scout down'], ['scout', 'error', 'scout down'], ['orchestrator', 'failed', 'scout down']])
 })
 
 test('scout mode: a cancel inside the step is recorded as "cancelled"', async () => {

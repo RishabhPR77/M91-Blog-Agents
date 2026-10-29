@@ -5,7 +5,7 @@ import { log } from '../util/log.js'
 import { istDate, istIso } from '../util/time.js'
 import { newBriefId, newRecordId, newScoutThreadId } from '../util/ids.js'
 import { createViaSocketClient, AiError, TruncatedError } from '../viasocket.js'
-import { SCOUT_BASE, FACTS, QUESTIONS, STORIES, TIMELY, TUTORIALS, CLUSTERS, STYLE, SOURCES, SLOT_QUESTIONS, SLOT_SOURCES, SCHEMA_RETRY_NOTE, TOPIC_GROUPS, MESSAGE_MAX, buildPrompt, fitMessage } from './prompts.js'
+import { SCOUT_BASE, FACTS, QUESTIONS, STORIES, TIMELY, TUTORIALS, CLUSTERS, STYLE, SOURCES, SLOT_QUESTIONS, SLOT_SOURCES, WEEK_QUESTIONS, SCHEMA_RETRY_NOTE, TOPIC_GROUPS, MESSAGE_MAX, buildPrompt, fitMessage } from './prompts.js'
 import { SCHEMAS, scout_m91_facts_inline } from './schemas.js'
 import { limiter, validateAgainst, createUrlChecker, normaliseUrl, isKeptStatus, protectFields, removeLongQuotes, storyDateRule, freshnessFromDates, daysAgo } from './checks.js'
 import { buildDocsBundle, fetchSkillReadme, DocsError } from './docs.js'
@@ -15,8 +15,6 @@ import { emit, scoutStepName, throwIfCancelled, CancelledError } from '../events
 import { saveRunLog } from '../util/runlog.js'
 import { dedupeSettings, similarity } from '../dedupe.js'
 import { expireOld, listOpportunities } from '../timely/model.js'
-import { loadRoadmap, saveRoadmap, allSlots } from '../roadmap/model.js'
-import { roadmapProblems } from '../roadmap/checks.js'
 
 /** An error that fails the pipeline run (brief 13). */
 export class ScoutError extends Error {
@@ -176,9 +174,12 @@ export async function runScout(params = {}, deps = {}) {
   if (params.mode === 'sources') return sourcesMode()
   // The timely lane: one news-check call; saves timely_opportunity cards for the person to decide on.
   if (params.mode === 'timely') return timelyMode()
-  // Phase 12: one roadmap slot (or a due pinned topic) only: facts, its questions, its sources (+ tutorial steps in stage 2).
+  // One post only (the weekly editor's pick, a due pinned topic or a Write now card): its questions and sources
+  // (+ tutorial steps for a tutorial).
   if (params.mode === 'slot') return slotMode()
-  // Phase 12: the facts step alone (the Roadmap Planner's input); today's record is reused.
+  // The weekly editor's input: the questions people asked recently (1 web-search call).
+  if (params.mode === 'week') return weekMode()
+  // The facts step alone; today's record is reused.
   if (params.mode === 'facts') {
     const f = await getFacts()
     return { mode: 'facts', facts_record_id: f.id, facts: f.payload, reused: f.reused, calls_used: callsUsed, warnings, calls }
@@ -251,43 +252,82 @@ export async function runScout(params = {}, deps = {}) {
     return { mode: 'timely', run_id: runId, opportunities: kept, dropped, expired, counts: { returned: returned.length, kept: kept.length, dropped: dropped.length, expired }, calls_used: callsUsed, warnings, calls }
   }
 
-  // ======================= slot mode (Phase 12) =======================
+  // ======================= week mode (the weekly editor's questions) =======================
 
   /**
-   * The focused Scout: research only the post the roadmap chose (params.target: { kind: 'slot', slot, stage } or
-   * { kind: 'pinned', pin }). About 2 AI calls (questions, sources), +1 for the facts when today's are not there
-   * yet, +1 for tutorial steps in stage 2 (First steps). No stories, clusters or style calls.
-   * Saves: one question_cluster (with the slot id), one source_pack (for the run's brief id), a tutorial_lead in
-   * stage 2, and, when people strongly ask about something not on the roadmap, a "proposed" slot for the person.
+   * One web-search call: real questions people asked in the last EDITOR_QUESTION_DAYS days, across every topic
+   * group. Code keeps a question only when its page loads, its date (if shown) is inside the window, and it is not
+   * a near-duplicate of another one. Nothing is saved: the editor's weekly_pick record keeps what it used.
+   */
+  async function weekMode() {
+    const ec = config.editor ?? {}
+    const days = ec.questionDays ?? 21
+    const max = ec.questionsMax ?? 12
+    const current = (await store.getRecords({ type: 'm91_facts', status: 'current' })).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]
+    const facts = current?.payload ?? (await getFacts()).payload
+    const res = await callAi('questions-week', {
+      task: WEEK_QUESTIONS,
+      values: { days, questions_max: max, topic_groups: Object.entries(TOPIC_GROUPS).map(([n, t]) => `${n}. ${t}`).join('\n') },
+      sections: { facts: summariseFacts(facts) },
+      schema: SCHEMAS.scout_week_questions,
+      delivery: sc.researchDelivery,
+      fewer: { values: { questions_max: Math.max(3, Math.floor(max / 2)) }, note: 'Your last answer was cut off. Return fewer questions.' },
+      timeoutMs: sc.questionsTimeoutMs
+    })
+    const returned = res.value.questions.slice(0, max)
+    const kept = []
+    const dropped = []
+    for (const q of returned) {
+      const drop = (reason) => dropped.push({ title: q.question, reason })
+      const age = q.posted_date ? daysAgo(q.posted_date, today) : null
+      if (age !== null && (age < 0 || age > days)) { drop(`${age} days old (window ${days})`); continue }
+      if (kept.some((k) => similarity(k.question, q.question) >= 0.8)) { drop('a near-duplicate of another question'); continue }
+      const live = await liveUrl(q.source_url)
+      if (!live) { drop('the page does not load'); continue }
+      protectFields(q, [], ['question', 'demand_evidence'])
+      kept.push({ question: q.question, source_url: live.url, where: q.where, posted_date: q.posted_date, demand_evidence: q.demand_evidence, topic_group: q.topic_group })
+    }
+    await runLog(res.meta, { returned: returned.length, kept: kept.length, dropped: dropped.length, details: dropped })
+    return { mode: 'week', run_id: runId, questions: kept, dropped, counts: { returned: returned.length, kept: kept.length, dropped: dropped.length }, calls_used: callsUsed, warnings, calls }
+  }
+
+  // ======================= slot mode: one post =======================
+
+  /**
+   * The focused Scout: research only the post this run writes (params.target: { kind: 'weekly', pick } from the
+   * weekly editor, { kind: 'pinned', pin } or { kind: 'timely', opportunity }). About 2 AI calls (questions,
+   * sources), +1 for the facts when today's are not there yet, +1 for tutorial steps when the post is a tutorial.
+   * Saves: one question_cluster, one source_pack (for the run's brief id), and a tutorial_lead for a tutorial.
    */
   async function slotMode() {
     const t = params.target
-    if (!t || !['slot', 'pinned', 'timely'].includes(t.kind)) throw new ScoutError('slot mode needs a target (a roadmap slot, a pinned topic or a timely opportunity)')
-    // The timely lane: the post is about one real event (the card you chose with Write now).
+    if (!t || !['weekly', 'pinned', 'timely'].includes(t.kind)) throw new ScoutError('slot mode needs a target (the weekly pick, a pinned topic or a timely opportunity)')
+    // A Write now card: the post is about one real event. The weekly pick may open with a news hook.
     const opp = t.kind === 'timely' ? t.opportunity : null
-    const slot = t.kind === 'slot' ? t.slot
-      : opp ? { slot_id: null, title_idea: opp.title, question: `What does "${opp.title}" mean for teams that need a person to decide in time?`, teaches: [], needs: [] }
-      : { slot_id: null, title_idea: t.pin.topic, question: /\?$/.test(t.pin.topic) ? t.pin.topic : `${t.pin.topic}?`, teaches: [], needs: [] }
-    const stage = t.kind === 'slot' ? t.stage : null
+    const pick = t.kind === 'weekly' ? t.pick : null
+    const hook = pick?.hook ?? null
+    const slot = pick ? { title_idea: pick.title, question: pick.question }
+      : opp ? { title_idea: opp.title, question: `What does "${opp.title}" mean for teams that need a person to decide in time?` }
+      : { title_idea: t.pin.topic, question: /\?$/.test(t.pin.topic) ? t.pin.topic : `${t.pin.topic}?` }
+    const tutorial = pick?.format === 'tutorial'
     const factsResult = await getFacts()
     const facts = factsResult.payload
     const factsSummary = summariseFacts(facts)
     const slotText = [
       `Question: ${slot.question}`,
       `Working title: ${slot.title_idea}`,
-      slot.teaches?.length ? `Teaches: ${slot.teaches.join(', ')}` : null,
-      stage ? `Stage: ${stage.number} ${stage.name} (${stage.level}): ${stage.goal}` : opp ? 'A timely post about a real event (outside the roadmap)' : 'A pinned topic (outside the roadmap)',
+      pick ? `Format: ${pick.format}. Angle: ${pick.angle}. Why this week: ${pick.why_now}` : opp ? 'A timely post about a real event' : 'A pinned topic',
+      pick?.evidence?.length ? `Why readers need it: ${pick.evidence.filter((e) => e.kind !== 'news').map((e) => `${e.text}${e.url ? ` (${e.url})` : ''}`).join('; ')}` : null,
       t.kind === 'pinned' && t.pin.notes ? `Notes: ${t.pin.notes}` : null,
-      opp ? `Event: ${opp.what_happened} Reported by ${opp.outlet} on ${opp.published_date}: ${opp.source_url}\nWhy M91 helps: ${opp.why_m91}` : null
+      opp ? `Event: ${opp.what_happened} Reported by ${opp.outlet} on ${opp.published_date}: ${opp.source_url}\nWhy M91 helps: ${opp.why_m91}` : null,
+      hook ? `This week's hook (the intro opens with it): ${hook.what_happened} Reported by ${hook.outlet} on ${hook.published_date}: ${hook.source_url}` : null
     ].filter(Boolean).join('\n')
-    const roadmapRec = await loadRoadmap(store)
-    const roadmapText = roadmapRec?.payload ? roadmapRec.payload.stages.map((st) => `Stage ${st.number} ${st.name}: ${st.slots.map((s) => s.title_idea).join(' · ')}`).join('\n') : '(no roadmap)'
 
     // 1. The real questions about this post (web).
     const qRes = await callAi('questions-slot', {
       task: SLOT_QUESTIONS,
       values: { questions_max: sc.questionsPerGroup },
-      sections: { facts: factsSummary, slot: slotText, roadmap: roadmapText },
+      sections: { facts: factsSummary, slot: slotText },
       schema: SCHEMAS.scout_slot_questions,
       delivery: sc.researchDelivery,
       fewer: { values: { questions_max: Math.max(1, Math.floor(sc.questionsPerGroup / 2)) }, note: 'Your last answer was cut off. Return fewer related questions.' },
@@ -303,9 +343,10 @@ export async function runScout(params = {}, deps = {}) {
     await runLog(qRes.meta, { returned: qRes.value.related_questions.length, kept: related.length, dropped: qRes.value.related_questions.length - related.length })
     const clusterPayload = {
       cluster_id: newRecordId('C', new Date(now())), main_question: qRes.value.main_question || slot.question, related_questions: related.map((q) => q.question),
-      questions: related, demand: qRes.value.demand, slot_id: slot.slot_id, stage: stage?.number ?? null, pinned_id: t.kind === 'pinned' ? t.pin.pinned_id : null,
+      // The pages where people asked are sources the Strategist may cite (like a research cluster's).
+      questions: related, source_urls: related.map((q) => q.source_url), demand: qRes.value.demand, pick_id: pick?.pick_id ?? null, pinned_id: t.kind === 'pinned' ? t.pin.pinned_id : null,
       opportunity_id: opp?.opportunity_id ?? null,
-      title_idea: slot.title_idea, teaches: slot.teaches ?? [], m91_fit: { score: 5, reason: t.kind === 'slot' ? 'a slot of the approved roadmap' : opp ? 'a timely opportunity you chose' : 'a pinned topic' }
+      title_idea: slot.title_idea, m91_fit: { score: 5, reason: pick ? `the weekly editor's pick: ${pick.why_now}` : opp ? 'a timely opportunity you chose' : 'a pinned topic' }
     }
     const clusterRec = await store.createRecord({ type: 'question_cluster', briefId: null, payload: clusterPayload, status: 'open', date: today })
 
@@ -326,13 +367,19 @@ export async function runScout(params = {}, deps = {}) {
       results.push({ url: live.url, publisher: s.publisher, verdict: 'supports', note: s.what_it_covers, kind: s.kind, url_status: live.status })
     }
     if (sRes) await runLog(sRes.meta, { returned: sRes.value.sources.length, kept: results.length, dropped: sRes.value.sources.length - results.length })
-    // A timely post's own event source always comes first (it was checked when the card was found; checked again here).
-    if (opp && !results.some((x) => urlKey(x.url) === urlKey(opp.source_url))) {
-      const live = await liveUrl(opp.source_url)
-      if (live) results.unshift({ url: live.url, publisher: opp.outlet, verdict: 'supports', note: opp.what_happened, kind: 'news', url_status: live.status })
-      else warnings.push(`timely: the event's source no longer loads (${opp.source_url})`)
+    // The event's own source (a Write now card, or the weekly pick's hook) always comes first (checked again here).
+    const event = opp ?? hook
+    if (event && !results.some((x) => urlKey(x.url) === urlKey(event.source_url))) {
+      const live = await liveUrl(event.source_url)
+      if (live) results.unshift({ url: live.url, publisher: event.outlet, verdict: 'supports', note: event.what_happened, kind: 'news', url_status: live.status })
+      else warnings.push(`the event's source no longer loads (${event.source_url})`)
     }
-    const packPayload = { brief_id: params.briefId ?? runId, version: null, slot_id: slot.slot_id, claims: [{ claim: slot.question, results, verdict: results.length ? 'supported' : 'unverified' }] }
+    // The questions that showed the demand are sources too (where people asked).
+    for (const e of pick?.evidence ?? []) {
+      if (e.kind !== 'question' || !e.url || results.some((x) => urlKey(x.url) === urlKey(e.url))) continue
+      results.push({ url: e.url, publisher: e.where ?? 'community', verdict: 'supports', note: `people ask: ${e.text}`, kind: 'community', url_status: 200 })
+    }
+    const packPayload = { brief_id: params.briefId ?? runId, version: null, pick_id: pick?.pick_id ?? null, claims: [{ claim: slot.question, results, verdict: results.length ? 'supported' : 'unverified' }] }
     const packRec = await store.createRecord({ type: 'source_pack', briefId: params.briefId ?? runId, payload: packPayload, status: 'current', date: today })
 
     // The timely lane: the card becomes the story lead the Strategist plans the rapid-response post from (no AI).
@@ -347,9 +394,9 @@ export async function runScout(params = {}, deps = {}) {
       storyId = story.story_id
     }
 
-    // 3. Stage 2 (First steps): tutorial steps, only from the M91 docs and the skill repository.
+    // 3. A tutorial: its steps, only from the M91 docs and the skill repository.
     const tutorialIds = []
-    if (stage?.number === 2) {
+    if (tutorial) {
       const readme = await fetchSkillReadme({ repoUrl: config.m91.skillRepoUrl, fetch: fetchImpl })
       const tRes = await tryCall('tutorials', {
         task: `${TUTORIALS}\n\nOnly ideas for this post: ${slot.question} (return at most 2).`,
@@ -359,42 +406,17 @@ export async function runScout(params = {}, deps = {}) {
         fewer: { values: {}, note: 'Your last answer was cut off. Return at most 1 tutorial idea.' }
       })
       for (const idea of (tRes?.value.tutorials ?? []).slice(0, 2)) {
-        const payload = { tutorial_id: newRecordId('T', new Date(now())), ...idea, slot_id: slot.slot_id }
+        const payload = { tutorial_id: newRecordId('T', new Date(now())), ...idea, pick_id: pick?.pick_id ?? null }
         await store.createRecord({ type: 'tutorial_lead', briefId: null, payload, status: 'open', topicGroup: idea.topic_group ?? null, date: today })
         tutorialIds.push(payload.tutorial_id)
       }
       if (tRes) await runLog(tRes.meta, { returned: tRes.value.tutorials?.length ?? 0, kept: tutorialIds.length, dropped: 0 })
     }
 
-    // 4. Strong demand off the roadmap: a "proposed" slot for the person to accept (never picked on its own).
-    const proposed = []
-    if (roadmapRec?.payload && qRes.value.off_roadmap.length) {
-      const roadmap = structuredClone(roadmapRec.payload)
-      const known = new Set(allSlots(roadmap).map((s) => s.title_idea.toLowerCase()))
-      for (const o of qRes.value.off_roadmap.slice(0, 2)) {
-        if (known.has(o.title_idea.toLowerCase())) continue
-        const st = roadmap.stages.find((x) => x.number === o.stage)
-        if (!st) continue
-        const used = new Set(st.slots.map((s) => s.slot_id))
-        let n = 1
-        while (used.has(`s${st.number}-${n}`)) n++
-        const candidate = { slot_id: `s${st.number}-${n}`, title_idea: o.title_idea.slice(0, 90), question: o.question, teaches: o.teaches.slice(0, 3), needs: [], status: 'proposed', brief_id: '', evidence_url: o.evidence_url, demand_evidence: o.demand_evidence, proposed_at: istIso(new Date(now())) }
-        st.slots.push(candidate)
-        const problems = roadmapProblems(roadmap)
-        if (problems.length) {
-          st.slots.pop()
-          warnings.push(`proposed slot "${o.title_idea}" not added: ${problems[0]}`)
-          continue
-        }
-        proposed.push(candidate.slot_id)
-      }
-      if (proposed.length) await saveRoadmap(store, roadmap, roadmapRec, { now })
-    }
-
     return {
-      mode: 'slot', run_id: runId, target: { kind: t.kind, slot_id: slot.slot_id, stage: stage?.number ?? null, opportunity_id: opp?.opportunity_id ?? null }, story_id: storyId,
+      mode: 'slot', run_id: runId, target: { kind: t.kind, pick_id: pick?.pick_id ?? null, opportunity_id: opp?.opportunity_id ?? null }, story_id: storyId,
       facts_record_id: factsResult.id, facts_reused: factsResult.reused, cluster_id: clusterPayload.cluster_id, cluster_record_id: clusterRec.id,
-      cluster_ids: [clusterPayload.cluster_id], source_pack_id: packRec.id, sources: results.length, tutorial_ids: tutorialIds, proposed_slot_ids: proposed,
+      cluster_ids: [clusterPayload.cluster_id], source_pack_id: packRec.id, sources: results.length, tutorial_ids: tutorialIds,
       top_clusters: [{ cluster_id: clusterPayload.cluster_id, main_question: clusterPayload.main_question }],
       counts: { questions: related.length, clusters_new: 1, clusters_merged: 0, stories: 0, tutorials: tutorialIds.length, sources: results.length },
       calls_used: callsUsed, warnings, calls
