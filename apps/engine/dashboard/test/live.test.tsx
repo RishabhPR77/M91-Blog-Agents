@@ -154,12 +154,30 @@ describe('Runs page', () => {
       }
     })
     renderApp(<Runs />)
+    await userEvent.click(screen.getByRole('tab', { name: 'All runs' }))
     const row = (await screen.findByText('R-261019-1055-QHVG')).closest('tr')!
     expect(within(row).getByText('11')).toBeInTheDocument()
     expect(within(row).getByText('12m 32s')).toBeInTheDocument()
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'succeeded')
     expect(screen.queryByText('R-261019-1055-QHVG')).not.toBeInTheDocument()
     expect(screen.getByText('R-261019-1136-UQ7F')).toBeInTheDocument()
+  })
+})
+
+describe('Runs by post', () => {
+  it('one row per post with its journey; runs without a post are listed apart', async () => {
+    const stage = (id: string, label: string, state: string) => ({ id, label, state, detail: '', run_id: null, at: null })
+    mockFetch({
+      'GET /api/journeys?limit=30': { body: { posts: [{ brief_id: '261019-1055-BZ89', title: 'How to Gate Destructive AI Agent Actions', status: 'approved', runs: 2, active_run_id: null, updated_at: '2026-10-19T11:36:07+05:30',
+        stages: [stage('topic', 'Topic', 'done'), stage('research', 'Research', 'done'), stage('plan', 'Plan', 'done'), stage('draft', 'Draft', 'done'), stage('review', 'AI review', 'done'), stage('you', 'You', 'done'), stage('export', 'Export', 'done'), stage('published', 'Published', 'done')] }] } },
+      'GET /api/runs?limit=20': { body: { runs: [{ run_id: 'R-261019-0900-GGGG', mode: 'guides', trigger: 'manual', dry_run: false, status: 'succeeded', started_at: '2026-10-19T09:00:00+05:30', ms: 1, brief_id: null, result_summary: '12 guides', steps: [] }] } }
+    })
+    renderApp(<Runs />)
+    const post = await screen.findByTestId('post-261019-1055-BZ89')
+    expect(within(post).getByRole('link', { name: 'How to Gate Destructive AI Agent Actions' })).toHaveAttribute('href', '/approvals/261019-1055-BZ89')
+    expect(post).toHaveTextContent('Published')
+    expect(post).toHaveTextContent('2 runs')
+    expect(await screen.findByRole('link', { name: 'Read published guides' })).toHaveAttribute('href', '/runs/R-261019-0900-GGGG')
   })
 })
 

@@ -1,15 +1,19 @@
-// / — Control: start the pipeline or one agent (dry-run and low-cost switches, expected AI calls, confirm),
-// the current run with Stop, drafts waiting for you, and the last 5 runs.
+// / — Control. On top, one big card: "Write the next post" (what comes next and why, each step's AI model, the
+// cost). Then what waits for you, the current run in plain words (with Stop) and the run options. The single
+// agents and the other actions are under "Run one agent"; at the bottom, the latest posts with their journeys.
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Square } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Inbox, Square } from 'lucide-react'
 import { api, errorMessage, isApiError } from '../api/client'
 import { useApprovals, useHealth, useRuns, useSettings } from '../api/queries'
 import type { RunSummary } from '../api/types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Card, EmptyState, PageHeader } from '../components/Page'
 import { RunButton } from '../components/RunButton'
+import { DOING } from '../components/RunProgress'
+import { JourneyBar, journeyLine } from '../components/JourneyBar'
+import { modeLabel, usePostJourneys } from '../api/journey'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toasts'
 import { expectedCalls, expectedMem0, PRESETS, type CostKey, type Preset } from '../config/costs'
@@ -57,13 +61,14 @@ function CurrentRun({ run }: { run: RunSummary }) {
   }
   return (
     <Card title="Current run" actions={<Link to={`/runs/${run.run_id}`} className="text-sm text-sky-700 hover:underline dark:text-sky-300">Watch live →</Link>}>
-      <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-        <div><dt className="text-xs text-slate-500">Run</dt><dd className="font-mono text-xs">{run.run_id}</dd></div>
-        <div><dt className="text-xs text-slate-500">Mode</dt><dd>{run.mode}{run.dry_run ? ' (dry run)' : ''}</dd></div>
-        <div><dt className="text-xs text-slate-500">Elapsed</dt><dd data-testid="current-elapsed">{fmtDuration(run.started_at ? now - Date.parse(run.started_at) : null)}</dd></div>
-        <div><dt className="text-xs text-slate-500">Current step · AI calls</dt><dd>{current} · {aiCalls(run)}</dd></div>
-      </dl>
-      <button type="button" className="btn-danger mt-3" onClick={() => setConfirm(true)}><Square size={14} /> Stop</button>
+      <p className="flex items-center gap-2 text-base font-semibold" data-testid="current-doing">
+        <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-sky-500" />
+        {DOING[current] ?? (current === '—' ? 'Starting…' : `${current}…`)}
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        {modeLabel(run.mode)}{run.dry_run ? ' (dry run)' : ''} · <span data-testid="current-elapsed">{fmtDuration(run.started_at ? now - Date.parse(run.started_at) : null)}</span> · <span data-testid="current-calls">{current} · {aiCalls(run)}</span> AI calls so far
+      </p>
+      <button type="button" className="btn-danger mt-3 py-1.5" onClick={() => setConfirm(true)}><Square size={14} /> Stop</button>
       <ConfirmDialog open={confirm} title={`Stop run ${run.run_id}?`} expectedCalls="0 (calls already made are not refunded)" confirmLabel="Stop the run" danger busy={busy} onConfirm={stop} onCancel={() => setConfirm(false)}>
         <p>The current step is interrupted and recorded as cancelled.</p>
       </ConfirmDialog>
@@ -156,10 +161,12 @@ export default function Control() {
   }
 
   const waiting = approvals.data?.length ?? 0
+  const firstWaiting = approvals.data?.[0]
+  const posts = usePostJourneys(5)
 
   return (
     <>
-      <PageHeader title="Control" subtitle="Run the pipeline or one agent. Every run asks you first and shows its expected AI calls." />
+      <PageHeader title="Control" subtitle="One click writes the next post. Every run asks you first and shows what it costs." />
       <div className="space-y-4">
         {outdated && (
           <div role="alert" data-testid="engine-outdated" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
@@ -177,55 +184,72 @@ export default function Control() {
           </div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card title="Run options" className="lg:col-span-2">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium">
-                  <input type="checkbox" checked={dryRun ?? true} onChange={(e) => setDryRun(e.target.checked)} aria-describedby="dry-note" />
-                  Dry run
-                </label>
-                <p id="dry-note" className="mt-1 text-xs text-slate-500">Dry run still uses AI credits; it only stops saving and sending.</p>
-                <p className="mt-1 text-xs text-slate-500">Engine default: {settings.data ? (settings.data.runtime.dry_run ? 'dry run' : 'live') : '…'}</p>
-              </div>
-              <div>
-                <fieldset>
-                  <legend className="text-sm font-medium">Preset</legend>
-                  {(Object.keys(PRESETS) as Preset[]).map((p) => (
-                    <label key={p} className="mt-1 flex items-start gap-2 text-sm" data-testid={`preset-${p}`}>
-                      <input type="radio" name="preset" className="mt-1" checked={preset === p} onChange={() => setPreset(p)} />
-                      <span>
-                        <span className="font-medium">{PRESETS[p].label}</span>
-                        <span className="block text-xs text-slate-500">{PRESETS[p].text} Full run: {expectedCalls('full', p === 'lowcost')} AI calls · Mem0 {expectedMem0('full', p === 'lowcost')}.</span>
-                      </span>
-                    </label>
-                  ))}
-                </fieldset>
-                <label className="mt-2 flex items-center gap-2 text-xs">
-                  Scout question group
-                  <select aria-label="Scout question group" className="input w-auto py-1" value={effectiveGroup} disabled={!lowCost} onChange={(e) => setGroup(Number(e.target.value))}>
-                    {TOPIC_GROUPS.map((g) => <option key={g} value={g}>{g}{g === suggestedGroup ? ' (least used)' : ''}</option>)}
-                  </select>
-                </label>
+        <RunButton variant="hero" title="Write the next post" description={`One click: it researches what people ask, plans the post, writes it and has the AI review it (weak parts are rewritten). Then it waits for your review.${roadmapOn ? ' With no roadmap yet, it plans and approves one first.' : ''}`}
+          models={[...(roadmapOn ? [['Planner', models?.planner] as ModelRow] : []), ['Scout', models?.scout], ['Strategist', models?.strategist], ['Writer', models?.writer], ...(flags.experienceOn ? [['Designer', models?.designer] as ModelRow] : []), ['Reviewer', models?.reviewer]]} costKey={roadmapOn ? 'full_roadmap' : flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason ?? (roadmapOn && roadmap.data?.next.kind === 'none' ? roadmap.data.next.reason : null)}
+          onRun={() => ask('full', 'Write the next post', roadmapOn ? 'full_roadmap' : flags.experienceOn ? 'full' : 'full_plain', {}, roadmapOn ? [['Next up', nextUpText(roadmap.data?.next)]] : [])}>
+          {roadmapOn && <p className="text-[15px]" data-testid="control-next-up"><span className="font-semibold">Next up:</span> {roadmap.isPending ? 'loading…' : nextUpText(roadmap.data?.next)}{roadmap.data?.next?.why ? <span className="text-xs text-slate-500" data-testid="control-next-up-why"> ({roadmap.data.next.why})</span> : null} <Link className="text-xs text-sky-700 underline dark:text-sky-300" to="/roadmap">Roadmap</Link></p>}
+          {timelyOn && (timely.data?.open ?? 0) > 0 && <p className="text-sm" data-testid="control-timely"><Link to="/roadmap#timely" className="pill pill-amber">{timely.data!.open} timely opportunit{timely.data!.open === 1 ? 'y' : 'ies'}</Link>{timely.data?.waiting ? <span className="ml-2 text-xs text-slate-500">“{timely.data.waiting.title}” waits: {timely.data.waiting.reason}</span> : null}</p>}
+        </RunButton>
+        <div className="grid items-start gap-4 lg:grid-cols-3">
+          <Card title={<span className="flex items-center gap-1.5"><Inbox size={15} /> Waiting for you</span>}>
+            <p className="text-3xl font-semibold tabular-nums" data-testid="waiting-count">{waiting}</p>
+            <p className="text-sm text-slate-500">{waiting === 1 ? 'post waits' : 'posts wait'} for your review.</p>
+            {firstWaiting ? (
+              <>
+                <p className="mt-3 line-clamp-2 text-sm font-medium" data-testid="first-waiting">{firstWaiting.title || firstWaiting.brief_id}</p>
+                <Link to={`/approvals/${firstWaiting.brief_id}`} className="btn-primary mt-2 w-full">Review it now</Link>
+              </>
+            ) : (
+              <Link to="/approvals" className="btn-secondary mt-3">Open Approvals</Link>
+            )}
+          </Card>
+          <div className={activeRun ? 'lg:col-span-2' : 'hidden'}>{activeRun && <CurrentRun run={activeRun} />}</div>
+          <details className={`group rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 ${activeRun ? 'lg:col-span-3' : 'lg:col-span-2'}`} data-testid="run-options">
+            <summary className="flex cursor-pointer list-none items-center gap-2 p-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Run options <span className="font-normal text-slate-500">· {dryRun ?? true ? 'dry run' : 'live'} · {lowCost ? PRESETS.lowcost.label : PRESETS.normal.label}</span>
+              <ChevronDown size={14} className="ml-auto transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-slate-200 p-4 dark:border-slate-800">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    <input type="checkbox" checked={dryRun ?? true} onChange={(e) => setDryRun(e.target.checked)} aria-describedby="dry-note" />
+                    Dry run
+                  </label>
+                  <p id="dry-note" className="mt-1 text-xs text-slate-500">Dry run still uses AI credits; it only stops saving and sending.</p>
+                  <p className="mt-1 text-xs text-slate-500">Engine default: {settings.data ? (settings.data.runtime.dry_run ? 'dry run' : 'live') : '…'}</p>
+                </div>
+                <div>
+                  <fieldset>
+                    <legend className="text-sm font-medium">Preset</legend>
+                    {(Object.keys(PRESETS) as Preset[]).map((p) => (
+                      <label key={p} className="mt-1 flex items-start gap-2 text-sm" data-testid={`preset-${p}`}>
+                        <input type="radio" name="preset" className="mt-1" checked={preset === p} onChange={() => setPreset(p)} />
+                        <span>
+                          <span className="font-medium">{PRESETS[p].label}</span>
+                          <span className="block text-xs text-slate-500">{PRESETS[p].text} Full run: {expectedCalls('full', p === 'lowcost')} AI calls · memory {expectedMem0('full', p === 'lowcost')}.</span>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+                  <label className="mt-2 flex items-center gap-2 text-xs">
+                    Scout question group
+                    <select aria-label="Scout question group" className="input w-auto py-1" value={effectiveGroup} disabled={!lowCost} onChange={(e) => setGroup(Number(e.target.value))}>
+                      {TOPIC_GROUPS.map((g) => <option key={g} value={g}>{g}{g === suggestedGroup ? ' (least used)' : ''}</option>)}
+                    </select>
+                  </label>
+                </div>
               </div>
             </div>
-          </Card>
-          <Card title="Waiting for you">
-            <p className="text-3xl font-semibold tabular-nums" data-testid="waiting-count">{waiting}</p>
-            <p className="text-sm text-slate-500">{waiting === 1 ? 'draft waits' : 'drafts wait'} for your approval.</p>
-            <Link to="/approvals" className="btn-secondary mt-3">Open Approvals</Link>
-          </Card>
+          </details>
         </div>
 
-        {activeRun && <CurrentRun run={activeRun} />}
-
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <RunButton title="Run full pipeline" description={`${roadmapOn ? 'One click: the roadmap (planned and approved by the run when there is none yet), then ' : ''}Scout → Strategist → Writer → checks → ${flags.experienceOn ? 'Experience Designer → ' : ''}Reviewer, until a pass (then it waits for you) or a limit.`}
-            models={[...(roadmapOn ? [['Planner', models?.planner] as ModelRow] : []), ['Scout', models?.scout], ['Strategist', models?.strategist], ['Writer', models?.writer], ...(flags.experienceOn ? [['Designer', models?.designer] as ModelRow] : []), ['Reviewer', models?.reviewer]]} costKey={roadmapOn ? 'full_roadmap' : flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason ?? (roadmapOn && roadmap.data?.next.kind === 'none' ? roadmap.data.next.reason : null)}
-            onRun={() => ask('full', 'Full pipeline', roadmapOn ? 'full_roadmap' : flags.experienceOn ? 'full' : 'full_plain', {}, roadmapOn ? [['Next up', nextUpText(roadmap.data?.next)]] : [])}>
-            {roadmapOn && <p className="text-sm" data-testid="control-next-up"><span className="font-medium">Next up:</span> {roadmap.isPending ? 'loading…' : nextUpText(roadmap.data?.next)}{roadmap.data?.next?.why ? <span className="text-xs text-slate-500" data-testid="control-next-up-why"> ({roadmap.data.next.why})</span> : null} <Link className="text-xs text-sky-700 underline dark:text-sky-300" to="/roadmap">Roadmap</Link></p>}
-            {timelyOn && (timely.data?.open ?? 0) > 0 && <p className="text-sm" data-testid="control-timely"><Link to="/roadmap#timely" className="pill pill-amber">{timely.data!.open} timely opportunit{timely.data!.open === 1 ? 'y' : 'ies'}</Link>{timely.data?.waiting ? <span className="ml-2 text-xs text-slate-500">“{timely.data.waiting.title}” waits: {timely.data.waiting.reason}</span> : null}</p>}
-          </RunButton>
+        <details className="group" data-testid="run-one-agent">
+          <summary className="flex cursor-pointer list-none items-center gap-2 py-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <ChevronDown size={16} className="-rotate-90 transition-transform group-open:rotate-0" /> Run one agent, or another action
+            <span className="font-normal text-slate-500">(Scout, Strategist, Writer, Reviewer, export{flags.target !== 'none' ? ', publish' : ''})</span>
+          </summary>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <RunButton title="Run Scout" description="Research: M91 facts, questions people ask, stories and tutorials." models={[['Scout', models?.scout]]} costKey="scout" lowCost={lowCost} built={isBuilt('scout')} disabledReason={busyReason}
             onRun={() => ask('scout', 'Scout', 'scout')} />
           <RunButton title="Run Strategist" description="Plan one brief from the latest Scout data." models={[['Strategist', models?.strategist]]} costKey="strategist" lowCost={lowCost} built={isBuilt('strategist')} disabledReason={busyReason}
@@ -283,10 +307,25 @@ export default function Control() {
           {flags.blogOn && <RunButton title="Rebuild blog" description="Rebuild and redeploy the blog from the published posts without changing any post (after a change to the blog's code or look)." costKey="rebuild_blog" lowCost={lowCost} built={isBuilt('rebuild_blog')} comingIn="Phase 7"
             disabledReason={busyReason ?? tokenReason}
             onRun={() => ask('rebuild_blog', 'Rebuild blog', 'rebuild_blog', {}, [['Deploys to', blog?.base_url ?? '…']])} />}
-        </div>
+          </div>
+        </details>
 
-        <Card title="Recent runs" actions={<Link to="/runs" className="text-sm text-sky-700 hover:underline dark:text-sky-300">All runs →</Link>}>
-          {!runs.data?.length ? (
+        <Card title="Latest posts" actions={<Link to="/runs" className="text-sm text-sky-700 hover:underline dark:text-sky-300">All posts and runs →</Link>}>
+          {posts.data?.length ? (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800" data-testid="latest-posts">
+              {posts.data.map((p) => {
+                const line = journeyLine(p.stages)
+                return (
+                  <li key={p.brief_id} className="flex flex-col gap-2 py-3 md:flex-row md:items-center md:gap-4">
+                    <Link to={`/approvals/${p.brief_id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:underline">{p.title || 'A post in the making'}</Link>
+                    <div className="w-full md:w-72"><JourneyBar stages={p.stages} compact /></div>
+                    <span className={`pill ${line.tone === 'green' ? 'pill-green' : line.tone === 'red' ? 'pill-red' : line.tone === 'gray' ? 'pill-gray' : 'pill-blue'} md:w-48 md:justify-center`}>{line.text}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : null}
+          {posts.data?.length ? null : !runs.data?.length ? (
             <EmptyState>{runs.isPending && online ? 'Loading…' : 'No runs yet.'}</EmptyState>
           ) : (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -295,7 +334,7 @@ export default function Control() {
                   <Link to={`/runs/${r.run_id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <StatusBadge status={r.status} />
                     <span className="font-mono text-xs">{r.run_id}</span>
-                    <span>{r.mode}{r.dry_run ? ' (dry)' : ''}</span>
+                    <span>{modeLabel(r.mode)}{r.dry_run ? ' (dry)' : ''}</span>
                     <span className="text-slate-500">{fmtDateTime(r.started_at)} · {fmtDuration(r.ms)} · {aiCalls(r)} AI calls</span>
                     <span className="w-full truncate text-slate-600 sm:w-auto sm:flex-1 dark:text-slate-300">{r.result_summary}</span>
                   </Link>

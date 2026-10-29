@@ -37,6 +37,9 @@ function useGlobalLive(online: boolean) {
           qc.invalidateQueries({ queryKey: ['roadmap'] })
           qc.invalidateQueries({ queryKey: ['guides'] })
           qc.invalidateQueries({ queryKey: ['timely'] })
+          // The post pages: their journey bars turn green as the steps finish.
+          qc.invalidateQueries({ queryKey: ['post-journey'] })
+          qc.invalidateQueries({ queryKey: ['post-journeys'] })
         }
       }
     })
@@ -83,7 +86,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/approvals', label: 'Approvals', icon: <Inbox size={18} />, badge: waiting },
     // Phase 12: the learning path.
     ...(settings.data?.roadmap?.enabled ? [{ to: '/roadmap', label: 'Roadmap', icon: <MapIcon size={18} /> }] : []),
-    { to: '/runs', label: 'Runs', icon: <History size={18} />, end: true },
+    { to: '/runs', label: 'Posts & runs', icon: <History size={18} />, end: true },
     { to: '/content', label: 'Content', icon: <BookOpen size={18} /> },
     // What Mem0 holds, why a record may not be useful, and clean-up.
     { to: '/memory', label: 'Memory', icon: <Database size={18} /> },
@@ -108,8 +111,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const sidebar = (
     <nav className="flex h-full flex-col gap-1 p-3" aria-label="Main">
       <div className="mb-4 px-2 pt-1">
-        <div className="text-sm font-semibold tracking-tight">M91 Engine</div>
-        <div className="text-xs text-slate-500 dark:text-slate-400">Control room</div>
+        <div className="flex items-center gap-2 text-sm font-semibold tracking-tight"><span className="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-600 text-[11px] font-bold text-white">M91</span> Blog Engine</div>
+        <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Control room</div>
       </div>
       {nav.map((item) => (
         <NavLink
@@ -117,12 +120,12 @@ export function Layout({ children }: { children: ReactNode }) {
           to={item.to}
           end={item.end}
           className={({ isActive }) =>
-            `flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition-colors ${isActive ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`
+            `flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition-colors ${isActive ? 'bg-indigo-50 font-semibold text-indigo-700 dark:bg-slate-800 dark:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'}`
           }
         >
           {item.icon}
           <span className="flex-1">{item.label}</span>
-          {item.badge ? <span className="rounded-full bg-violet-600 px-1.5 text-xs font-semibold text-white" aria-label={`${item.badge} waiting`}>{item.badge}</span> : null}
+          {item.badge ? <span className="rounded-full bg-indigo-600 px-1.5 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-950" aria-label={`${item.badge} waiting`}>{item.badge}</span> : null}
         </NavLink>
       ))}
       <div className="mt-auto">

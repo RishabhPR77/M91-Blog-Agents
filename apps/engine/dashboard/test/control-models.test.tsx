@@ -1,4 +1,4 @@
-// Control: each run card shows the AI model its agent uses now; "Run full pipeline" lists every step's model, and with
+// Control: each run card shows the AI model its agent uses now; "Write the next post" lists every step's model, and with
 // no roadmap yet it is still one click (the run plans and approves the roadmap itself).
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
@@ -31,22 +31,22 @@ describe('Control: models and one click', () => {
     await waitFor(() => expect(within(scout).getByTestId('models')).toHaveTextContent('AI model: gpt-5.6-luna (openai)'))
     expect(within(screen.getByTestId('run-card-Run Writer')).getByTestId('models')).toHaveTextContent('AI model: claude-opus-4-7 (anthropic)')
     expect(within(screen.getByTestId('run-card-Run Reviewer')).getByTestId('models')).toHaveTextContent('AI model: gpt-5.5 (openai)')
-    expect(within(screen.getByTestId('run-card-Run full pipeline')).getByTestId('models')).toHaveTextContent('AI models: Planner gpt-5.6-luna (openai) · Scout gpt-5.6-luna (openai) · Strategist claude-sonnet-4-6 (anthropic) · Writer claude-opus-4-7 (anthropic) · Reviewer gpt-5.5 (openai)')
+    expect(within(screen.getByTestId('run-card-Write the next post')).getByTestId('models')).toHaveTextContent('AI models: Planner gpt-5.6-luna (openai) · Scout gpt-5.6-luna (openai) · Strategist claude-sonnet-4-6 (anthropic) · Writer claude-opus-4-7 (anthropic) · Reviewer gpt-5.5 (openai)')
   })
 
   it('no roadmap yet: Next up says the run plans it, and the button stays enabled', async () => {
     mockFetch(routes({ kind: 'plan', reason: 'the run plans the roadmap first (1–2 more AI calls), approves it, then writes the first post' }))
     renderApp(<Routes><Route path="/" element={<Control />} /></Routes>)
-    const card = await screen.findByTestId('run-card-Run full pipeline')
+    const card = await screen.findByTestId('run-card-Write the next post')
     await waitFor(() => expect(within(card).getByTestId('control-next-up')).toHaveTextContent('Next up: First run: the run plans the roadmap first (1–2 more AI calls), approves it, then writes the first post'))
-    expect(within(card).getByRole('button', { name: /Run full pipeline/ })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: /Write the next post/ })).toBeEnabled()
   })
 
   it('nothing to write: the button is blocked with the reason', async () => {
     mockFetch(routes({ kind: 'none', reason: 'every stage of the roadmap is finished' }))
     renderApp(<Routes><Route path="/" element={<Control />} /></Routes>)
-    const card = await screen.findByTestId('run-card-Run full pipeline')
+    const card = await screen.findByTestId('run-card-Write the next post')
     await waitFor(() => expect(card).toHaveTextContent('every stage of the roadmap is finished'))
-    expect(within(card).getByRole('button', { name: /Run full pipeline/ })).toBeDisabled()
+    expect(within(card).getByRole('button', { name: /Write the next post/ })).toBeDisabled()
   })
 })

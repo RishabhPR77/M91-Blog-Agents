@@ -1,8 +1,9 @@
 // The Reviewer's feedback items: severity, area, the quoted sentence (and whether it was found in the post),
-// the problem and the fix.
+// the problem and the fix. With onShow, each quote has "Show in post" (marks it in the reading view).
+import { Search } from 'lucide-react'
 export type FeedbackItem = { area?: string; quote?: string; problem?: string; fix?: string; severity?: string; send_to?: string; quote_found?: boolean; source?: string }
 
-export function FeedbackList({ items }: { items: FeedbackItem[] }) {
+export function FeedbackList({ items, onShow }: { items: FeedbackItem[]; onShow?: (quote: string) => boolean }) {
   if (!items.length) return <p className="text-sm text-slate-500">No feedback items.</p>
   return (
     <ol className="space-y-3" aria-label="Feedback">
@@ -18,6 +19,11 @@ export function FeedbackList({ items }: { items: FeedbackItem[] }) {
               “{f.quote}”{' '}
               {f.quote_found === false ? <span className="pill pill-red not-italic">quote not found in the post</span> : f.quote_found ? <span className="pill pill-green not-italic">found</span> : null}
             </blockquote>
+          )}
+          {f.quote && onShow && f.quote_found !== false && (
+            <button type="button" className="mb-1 inline-flex items-center gap-1 text-xs font-medium text-indigo-700 hover:underline dark:text-sky-300" onClick={() => onShow(f.quote!)}>
+              <Search size={12} /> Show in post
+            </button>
           )}
           {f.problem && <p><span className="font-medium">Problem: </span>{f.problem}</p>}
           {f.fix && <p className="mt-0.5"><span className="font-medium">Fix: </span>{f.fix}</p>}

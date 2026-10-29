@@ -28,6 +28,7 @@ import { roadmapProblems } from './roadmap/checks.js'
 import { pickTarget } from './roadmap/pick.js'
 import { approveRoadmap, editSlot, moveSlot, setSkipped, decideProposed, setCovered, RoadmapError } from './roadmap/actions.js'
 import { listGuides } from './guides/sync.js'
+import { buildJourney } from './journey.js'
 import { knowledgeMap } from './roadmap/knowledge.js'
 import { listOpportunities, nextTimely, applyAction, isExpired, OPEN_STATUSES, TimelyError } from './timely/model.js'
 import { istDate } from './util/time.js'
@@ -299,6 +300,33 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
    * GET /api/approvals/:brief_id — the newest draft in full, its review, its check results, and the earlier
    * versions (title, status, score, human feedback) for comparison. 404 when the brief has no draft.
    */
+  /**
+   * Each post's journey (one bar from topic to published, whichever runs did the steps). briefId: one post, else
+   * the newest posts first (limit). Reads each record type once.
+   */
+  async function postJourneys(briefId = null, limit = 30) {
+    // A run record's briefId is its run id: its post is payload.brief_id.
+    const idOf = (r) => (r.type === 'run' ? r.payload?.brief_id : r.briefId ?? r.payload?.brief_id)
+    const want = (r) => !briefId || idOf(r) === briefId
+    const of = async (type) => (await store.getRecords({ type, ...(briefId && type !== 'run' && { brief_id: briefId }) })).filter(want)
+    const [briefs, drafts, reviews, exportsAll, published, runs] = await Promise.all(['brief', 'draft', 'review', 'markdown_export', 'published_post', 'run'].map(of))
+    const runsOf = runs.filter((r) => r.payload?.brief_id)
+    const rm = config?.roadmap?.enabled ? (await loadRoadmap(store))?.payload ?? null : null
+    const slots = rm ? rm.stages.flatMap((st) => st.slots) : []
+    const ids = new Set([...briefs, ...drafts, ...runsOf].map(idOf).filter(Boolean))
+    const group = (list, id) => list.filter((r) => idOf(r) === id)
+    const posts = [...ids].map((id) => {
+      const bs = group(briefs, id)
+      const slotId = bs.find((b) => b.payload?.slot_id)?.payload?.slot_id
+      const slot = slots.find((s) => s.slot_id === slotId || s.brief_id === id) ?? null
+      const ds = group(drafts, id).sort((a, b) => draftBriefVersion(b) - draftBriefVersion(a) || (draftVersion(b) ?? 0) - (draftVersion(a) ?? 0))
+      const exp = group(exportsAll, id).sort((a, b) => String(b.createdAt ?? b.date).localeCompare(String(a.createdAt ?? a.date)))[0] ?? null
+      const j = buildJourney({ briefs: bs, drafts: ds, reviews: group(reviews, id), exportRec: exp, published: group(published, id), runs: group(runsOf, id), target: config?.publish?.target ?? 'embarko', slot })
+      return { brief_id: id, ...j, updated_at: j.runs[0]?.started_at ?? null }
+    })
+    return posts.sort((a, b) => String(b.updated_at ?? b.brief_id).localeCompare(String(a.updated_at ?? a.brief_id))).slice(0, limit)
+  }
+
   async function approvalDetail(briefId) {
     const drafts = await draftsOf(store, briefId)
     if (!drafts.length) throw new ApiError(404, 'not_found', `no draft of brief ${briefId}`)
@@ -686,6 +714,17 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     }
 
     // Approvals (Phase 5.5 B7): drafts waiting for the human, and the human's three decisions.
+    // One page per post: its journey and every run that worked on it.
+    if (path === '/api/journeys' && method === 'GET') {
+      const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 30) || 30))
+      return send(res, 200, { posts: (await postJourneys(null, limit)).map(({ runs, ...p }) => ({ ...p, runs: runs.length })) })
+    }
+    if (seg[1] === 'journeys' && seg[2] && seg.length === 3 && method === 'GET') {
+      if (!BRIEF_ID_RE.test(seg[2])) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')
+      const [post] = await postJourneys(seg[2], 1)
+      if (!post) throw new ApiError(404, 'not_found', `no post ${seg[2]}`)
+      return send(res, 200, post)
+    }
     if (path === '/api/approvals' && method === 'GET') {
       const waiting = (await store.getRecords({ type: 'draft', status: 'awaiting_human' }))
         .sort((a, b) => String(a.metadata?.awaiting_since).localeCompare(String(b.metadata?.awaiting_since)))
@@ -709,11 +748,14 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         delete params.quotes
         delete params.reason
         delete params.force_unreviewed
+        delete params.publish
         delete params.target
         // C5: target "writing" (default: Writer, then the Experience Designer) or "design" (the Experience Designer only).
         if (action === 'human_revise') Object.assign(params, { feedback: body.feedback, ...(body.quotes !== undefined && { quotes: body.quotes }), ...(body.target !== undefined && { target: body.target }) })
         if (action === 'reject_topic' && body.reason !== undefined) params.reason = body.reason
         if (action === 'approve' && body.force_unreviewed !== undefined) params.force_unreviewed = body.force_unreviewed
+        // "Approve and publish": export and publish in the same run.
+        if (action === 'approve' && body.publish !== undefined) params.publish = body.publish
         const { run_id } = await manager.startRun({ mode: action, trigger: 'manual', params })
         return send(res, 202, { run_id })
       }

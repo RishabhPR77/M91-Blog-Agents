@@ -6,17 +6,17 @@ const AREA_LABEL: Record<string, string> = {
   tone: 'Tone', originality: 'Originality', ai_answer_readiness: 'AI-answer readiness', to_the_point: 'To the point', m91_fit_cta: 'M91 fit and CTA'
 }
 
-export function ScoreCard({ total, pass, notes = false, passMin, areaMin, areas = [] }: { total: number | null; pass: boolean | null; notes?: boolean; passMin?: number; areaMin?: number; areas?: Area[] }) {
+export function ScoreCard({ total, pass, notes = false, passMin, areaMin, areas = [], hideTotal = false }: { total: number | null; pass: boolean | null; notes?: boolean; passMin?: number; areaMin?: number; areas?: Area[]; hideTotal?: boolean }) {
   return (
     <div>
-      <div className="flex items-end gap-3">
+      {!hideTotal && <div className="flex items-end gap-3">
         <span className="text-5xl font-semibold tabular-nums" data-testid="score-total">{total ?? '—'}</span>
         <span className="pb-1.5 text-sm text-slate-500">/ 100{passMin != null ? ` · pass ≥ ${passMin}` : ''}</span>
         {pass != null && <span className={`mb-1.5 pill ${pass ? (notes ? 'pill-amber' : 'pill-green') : 'pill-red'}`} data-testid="score-verdict">{pass ? (notes ? 'pass with notes' : 'pass') : 'fail'}</span>}
-      </div>
+      </div>}
       {pass && notes && <p className="mt-1 text-xs text-slate-600 dark:text-slate-400" data-testid="score-notes">Only minor problems: not sent back to the Writer. The should-fix items are listed below.</p>}
       {areas.length > 0 && (
-        <ul className="mt-4 space-y-1.5" aria-label="Area scores">
+        <ul className={`${hideTotal ? '' : 'mt-4 '}space-y-1.5`} aria-label="Area scores">
           {areas.map((a) => {
             const low = areaMin != null && a.score < areaMin
             return (

@@ -1,13 +1,19 @@
-// /approvals/:briefId — the draft (rendered), the verdict panel, the version history with Compare, and the
-// human's actions: approve (with the Reviewer-pass rule), ask for a review, request changes, reject the topic.
-// Every action starts a run after a confirm dialog that shows its expected AI calls, then opens the live run.
+// /approvals/:briefId — the post page. On top, the post's journey (Topic → … → Published, whichever runs did it).
+// Left, the post as readers will see it (with Compare versions); right, the AI review next to it (notes with "Show
+// in post") and your decision: "Approve and publish" (one run: approval, Markdown export, publish), approve only,
+// ask for a review, request changes, reject the topic. Approving stays on this page (the journey shows each step);
+// the other actions open the live run.
 import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, MessageSquareQuote, ShieldQuestion, Trash2, X } from 'lucide-react'
+import { AlertTriangle, BookOpenText, CheckCircle2, GitCompare, MessageSquareQuote, Send, ShieldQuestion, Sparkles, Trash2, X } from 'lucide-react'
 import { api, errorMessage, isApiError } from '../api/client'
 import { useSettings } from '../api/queries'
-import { ChecksTable, type CheckResult } from '../components/ChecksTable'
+import type { CheckResult } from '../components/ChecksTable'
+import { AiReviewPanel } from '../components/AiReviewPanel'
+import { JourneyCard } from '../components/JourneyCard'
+import { journeyKeys, usePostJourney } from '../api/journey'
+import { showInPost } from '../highlight'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { MarkdownPreview } from '../components/MarkdownPreview'
 import { PublishCard } from '../components/PublishCard'
@@ -17,7 +23,7 @@ import { SlotCard, type SlotInfo } from '../components/SlotCard'
 import { ExportCard } from '../components/ExportCard'
 import { flagsOf } from '../config/flags'
 import { Card, EmptyState, PageHeader } from '../components/Page'
-import { VerdictPanel, type Review } from '../components/VerdictPanel'
+import type { Review } from '../components/VerdictPanel'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toasts'
 import { VersionDiff } from '../components/VersionDiff'
@@ -90,6 +96,10 @@ export default function ApprovalDetail() {
   const [target, setTarget] = useState<'writing' | 'design'>('writing')
   const [reason, setReason] = useState('')
   const [compare, setCompare] = useState<{ a: number; b: number } | null>(null)
+  const [compareOn, setCompareOn] = useState(false)
+  // true: "Approve and publish"; false: approve only.
+  const [approvePublish, setApprovePublish] = useState(true)
+  const journey = usePostJourney(briefId)
 
   const d = detail.data
   const rereviewDefault = settings.data?.approval?.rereview_after_human ?? true
@@ -104,6 +114,15 @@ export default function ApprovalDetail() {
   if (detail.isPending) return <p className="text-sm text-slate-500">Loading…</p>
   if (!d) {
     const notFound = isApiError(detail.error) && detail.error.status === 404
+    if (notFound && journey.data) {
+      return (
+        <>
+          <PageHeader title={journey.data.title || 'A post in the making'} subtitle={<span className="font-mono text-xs">{briefId}</span>} />
+          <JourneyCard journey={journey.data} />
+          <EmptyState>No draft yet: the post appears here as soon as the Writer has written it.</EmptyState>
+        </>
+      )
+    }
     return (
       <>
         <PageHeader title={notFound ? 'No draft for this brief' : 'Could not load the approval'} />
@@ -132,6 +151,14 @@ export default function ApprovalDetail() {
   const revisionsLeft = maxRevisions == null ? null : maxRevisions - usedRevisions
   const fbLen = feedback.trim().length
   const fbValid = fbLen >= FEEDBACK_MIN && feedback.length <= FEEDBACK_MAX
+  // "Approve and publish" while there is somewhere to publish (Docstar or the blog); with PUBLISH_TARGET=none the
+  // Markdown export is the output and the button is "Approve".
+  const publishOn = flags.target !== 'none'
+  const openApprove = (publish: boolean) => {
+    setApprovePublish(publish)
+    setUnderstood(false)
+    setApproveOpen(true)
+  }
 
   async function run(action: Action) {
     setBusy(true)
@@ -140,11 +167,14 @@ export default function ApprovalDetail() {
       const { run_id } = await api<{ run_id: string }>(action.path, { method: 'POST', body: action.body })
       void qc.invalidateQueries({ queryKey: ['approvals'] })
       void qc.invalidateQueries({ queryKey: ['approval', briefId] })
+      void qc.invalidateQueries({ queryKey: journeyKeys.one(briefId) })
       void qc.invalidateQueries({ queryKey: ['runs'] })
       setConfirm(null)
       setApproveOpen(false)
       toast('success', `${action.label} started`)
-      navigate(`/runs/${run_id}`)
+      // Approving is quick and has no AI: it stays here, and the journey turns green step by step.
+      if (action.kind === 'approve' || action.kind === 'force') window.scrollTo?.({ top: 0, behavior: 'smooth' })
+      else navigate(`/runs/${run_id}`)
     } catch (e) {
       setConfirm(null)
       setApproveOpen(false)
@@ -155,8 +185,9 @@ export default function ApprovalDetail() {
   }
 
   const base = `/api/approvals/${briefId}`
-  const approveAction: Action = { kind: 'approve', path: `${base}/approve`, body: {}, label: 'Approval' }
-  const forceAction: Action = { kind: 'force', path: `${base}/approve`, body: { force_unreviewed: true }, label: 'Approval without review' }
+  const publishBody = approvePublish && publishOn ? { publish: true } : {}
+  const approveAction: Action = { kind: 'approve', path: `${base}/approve`, body: publishBody, label: approvePublish && publishOn ? 'Approve and publish' : 'Approval' }
+  const forceAction: Action = { kind: 'force', path: `${base}/approve`, body: { force_unreviewed: true, ...publishBody }, label: 'Approval without review' }
   const reviewAction: Action = { kind: 'review', path: `${base}/review`, body: {}, label: 'Review' }
 
   function quoteSelection() {
@@ -180,38 +211,65 @@ export default function ApprovalDetail() {
   const review = d.review
   const compareA = compare ? versions.find((v) => v.version === compare.a) : null
   const compareB = compare ? versions.find((v) => v.version === compare.b) : null
+  const words = d.draft.word_count ?? null
+  const showInArticle = (quote: string) => {
+    setCompareOn(false)
+    const ok = showInPost(preview.current, quote)
+    if (!ok) toast('info', 'That sentence is not in this version any more.')
+    return ok
+  }
 
   return (
     <>
       <PageHeader
         title={d.draft.title || '(untitled draft)'}
-        subtitle={<>brief <span className="font-mono">{d.brief_id}</span> · v{d.draft.version} (brief v{d.draft.brief_version}){d.draft.waiting_since ? ` · waiting since ${fmtDateTime(d.draft.waiting_since)}` : ''}</>}
-        actions={<><StatusBadge status={d.draft.status} />{!reviewed && <span className="pill pill-amber" data-testid="not-reviewed">Not reviewed</span>}</>}
+        subtitle={<>v{d.draft.version}{d.draft.waiting_since && waiting ? ` · waiting for you since ${fmtDateTime(d.draft.waiting_since)}` : ''} · <span className="font-mono text-xs">{d.brief_id}</span></>}
+        actions={<><StatusBadge status={d.draft.status} label={waiting ? 'waiting for you' : undefined} />{!reviewed && <span className="pill pill-amber" data-testid="not-reviewed">Not reviewed</span>}</>}
       />
-      {!waiting && <div className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900">This version is <strong>{d.draft.status.replace(/_/g, ' ')}</strong>. Actions are only for a draft that waits for you.{d.draft.approved_unreviewed ? ' It was approved without a Reviewer pass.' : ''}</div>}
+      <JourneyCard journey={journey.data} />
+      {!waiting && <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900">This version is <strong>{d.draft.status.replace(/_/g, ' ')}</strong>. The decision buttons are only for a draft that waits for you.{d.draft.approved_unreviewed ? ' It was approved without a Reviewer pass.' : ''}</div>}
 
-      <div className="grid gap-4 lg:grid-cols-5">
-        <div className="space-y-4 lg:col-span-3">
-          {flags.blogOn && <PreviewCard briefId={d.brief_id} version={d.draft.version} preview={d.preview} />}
-          <Card title="Draft">
-            <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
-              <div className="sm:col-span-2"><dt className="text-xs text-slate-500">SEO title</dt><dd>{d.draft.seo?.title_tag ?? '—'}</dd></div>
-              <div className="sm:col-span-2"><dt className="text-xs text-slate-500">Meta description</dt><dd>{d.draft.seo?.meta_description ?? '—'}</dd></div>
-              <div><dt className="text-xs text-slate-500">Slug</dt><dd className="font-mono text-xs">{d.draft.seo?.slug_suggestion ?? '—'}</dd></div>
-              <div><dt className="text-xs text-slate-500">Words · reading grade (post / intro)</dt><dd data-testid="reading">{d.draft.word_count?.toLocaleString('en-US') ?? '—'} · {d.draft.reading?.post_grade ?? '—'} / {d.draft.reading?.intro_grade ?? '—'}</dd></div>
-            </dl>
-            {d.draft.tldr?.length ? (
-              <div className="mb-4 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/50">
-                <div className="mb-1 text-xs font-medium text-slate-500">TL;DR</div>
-                <ul className="list-disc space-y-0.5 pl-5">{d.draft.tldr.map((t, i) => <li key={i}>{t}</li>)}</ul>
-              </div>
-            ) : null}
-            <div className="border-t border-slate-200 pt-2 dark:border-slate-800">
-              <MarkdownPreview ref={preview} markdown={d.draft.post_markdown ?? ''} />
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="min-w-0 space-y-4">
+          <Card className="overflow-hidden p-0!">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 px-5 py-3 text-sm dark:border-slate-800">
+              <span className="flex items-center gap-1.5 font-medium"><BookOpenText size={16} /> {compareOn ? 'Compare versions' : 'The post, as readers will see it'}</span>
+              <span className="text-slate-500 dark:text-slate-400" data-testid="reading">{words?.toLocaleString('en-US') ?? '—'} words · {words ? `${Math.max(1, Math.round(words / 230))} min read · ` : ''}reading grade {d.draft.reading?.post_grade ?? '—'} (intro {d.draft.reading?.intro_grade ?? '—'})</span>
+              {versions.length > 1 && (
+                <button type="button" className="btn-secondary ml-auto py-1 text-xs" aria-pressed={compareOn} onClick={() => setCompareOn((o) => !o)}>
+                  <GitCompare size={14} /> {compareOn ? 'Back to the post' : 'Compare versions'}
+                </button>
+              )}
             </div>
+            <div className="px-5 py-6 sm:px-8 sm:py-8">
+              {compareOn ? (
+                <>
+                  <CompareControls versions={versions.map((v) => v.version)} onCompare={(a, b) => setCompare({ a, b })} />
+                  {compareA && compareB && <ComparePanel a={compareA} b={compareB} currentMarkdown={d.draft.post_markdown} currentVersion={d.draft.version} />}
+                </>
+              ) : (
+                <>
+                  {d.draft.tldr?.length ? (
+                    <div className="mx-auto mb-8 max-w-[70ch] rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 text-[15px] dark:border-slate-700 dark:bg-slate-800/60">
+                      <div className="mb-1 text-xs font-semibold tracking-wide text-indigo-700 uppercase dark:text-slate-300">TL;DR</div>
+                      <ul className="list-disc space-y-1 pl-5">{d.draft.tldr.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                    </div>
+                  ) : null}
+                  <MarkdownPreview ref={preview} variant="article" markdown={d.draft.post_markdown ?? ''} />
+                </>
+              )}
+            </div>
+            <details className="border-t border-slate-200 px-5 py-3 text-sm dark:border-slate-800">
+              <summary className="cursor-pointer text-slate-600 dark:text-slate-300">Search result preview (SEO title, description, slug)</summary>
+              <div className="mt-3 max-w-xl rounded-lg border border-slate-200 p-3 dark:border-slate-800" data-testid="seo">
+                <div className="truncate text-[17px] text-indigo-800 dark:text-sky-300">{d.draft.seo?.title_tag ?? '—'}</div>
+                <div className="truncate font-mono text-xs text-emerald-700 dark:text-emerald-400">msg91.com/guide/{d.draft.seo?.slug_suggestion ?? '—'}</div>
+                <p className="mt-1 text-slate-600 dark:text-slate-400">{d.draft.seo?.meta_description ?? '—'}</p>
+              </div>
+            </details>
           </Card>
           {d.draft.revision_notes?.length ? (
-            <Card title="Revision notes (what the Writer changed)">
+            <Card title="What the Writer changed in this version">
               <ul className="space-y-2 text-sm">
                 {d.draft.revision_notes.map((n, i) => (
                   <li key={i}>{n.feedback_quote && <div className="text-slate-500 italic">“{n.feedback_quote}”</div>}<div>{n.what_changed}</div></li>
@@ -219,99 +277,101 @@ export default function ApprovalDetail() {
               </ul>
             </Card>
           ) : null}
+          {flags.blogOn && <PreviewCard briefId={d.brief_id} version={d.draft.version} preview={d.preview} />}
         </div>
 
-        <div className="space-y-4 lg:col-span-2">
-          <ExportCard briefId={d.brief_id} version={d.draft.version} status={d.draft.status} />
-          <SlotCard slot={d.slot} />
-          {flags.blogOn && <PublishCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} title={d.draft.title} />}
-          {flags.experienceOn && <InteractiveCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} info={d.interactive} />}
+        <aside className="space-y-4 lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto lg:pr-1" aria-label="Review and decision">
           <Card title="Your decision">
-            <div className="space-y-4">
+            <div className="space-y-2">
               {error && <ActionError error={error} onClose={() => setError(null)} />}
-              <div>
-                <button type="button" className="btn-primary w-full" disabled={!waiting || !hardPassed} onClick={() => { setUnderstood(false); setApproveOpen(true) }}>
-                  <CheckCircle2 size={16} /> Approve
+              <button type="button" className="btn-primary w-full py-2.5" disabled={!waiting || !hardPassed} onClick={() => openApprove(publishOn)}>
+                {publishOn ? <Send size={16} /> : <CheckCircle2 size={16} />} {publishOn ? 'Approve and publish' : 'Approve'}
+              </button>
+              {publishOn && (
+                <button type="button" className="btn-secondary w-full py-1.5 text-xs" disabled={!waiting || !hardPassed} onClick={() => openApprove(false)}>
+                  Approve only (publish later)
                 </button>
-                {!hardPassed && (
-                  <p className="mt-1 text-xs text-red-600 dark:text-red-400" data-testid="approve-blocked">
-                    Approve is off: the hard content checks did not pass{failedHard.length ? ` (${failedHard.map((c) => c.id).join(', ')})` : ' (no check results)'}. Send a counter prompt or reject the topic.
-                  </p>
-                )}
-                {!reviewed && waiting && (
-                  <button type="button" className="btn-secondary mt-2 w-full" onClick={() => setConfirm({ action: reviewAction, calls: COSTS.approval_review.normal, title: 'Ask the Reviewer to check this version?', text: 'One Reviewer call (no revision loop). The draft keeps waiting for you, pass or fail.' })}>
-                    <ShieldQuestion size={16} /> Review this version
-                  </button>
-                )}
-              </div>
-
-              <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
-                <h3 className="mb-1 text-sm font-semibold">Request changes</h3>
-                <p className="mb-2 text-xs text-slate-500">A counter prompt.{revisionsLeft != null ? ` ${Math.max(0, revisionsLeft)} of ${maxRevisions} left for this brief.` : ''}</p>
-                <fieldset className="mb-2 space-y-1 text-sm" disabled={!waiting}>
-                  <legend className="sr-only">What to change</legend>
-                  <label className="flex items-start gap-2"><input type="radio" name="revise-target" className="mt-1" checked={!design} onChange={() => setTarget('writing')} /> <span><strong>Change the writing</strong> <span className="block text-xs text-slate-500">{flags.experienceOn ? 'The Writer revises the post, then the Experience Designer builds its guide again.' : 'The Writer revises the post.'}</span></span></label>
-                  {flags.experienceOn && <label className="flex items-start gap-2"><input type="radio" name="revise-target" className="mt-1" checked={design} disabled={!hasGuide} onChange={() => setTarget('design')} /> <span><strong>Change the design</strong> <span className="block text-xs text-slate-500">{hasGuide ? 'Only the Experience Designer runs again (cheaper). The post’s text stays as it is.' : 'This version has no guide to change.'}</span></span></label>}
-                </fieldset>
-                <label className="label" htmlFor="feedback">Your feedback</label>
-                <textarea id="feedback" className="input min-h-28" maxLength={FEEDBACK_MAX + 200} value={feedback} onChange={(e) => setFeedback(e.target.value)} disabled={!waiting} placeholder="e.g. Make the first paragraph shorter and explain 'webhook' in plain words." />
-                <div className={`mt-0.5 text-right text-xs ${fbValid || fbLen === 0 ? 'text-slate-500' : 'text-red-600 dark:text-red-400'}`} data-testid="feedback-counter">
-                  {feedback.length.toLocaleString('en-US')} / {FEEDBACK_MAX.toLocaleString('en-US')}{fbLen > 0 && fbLen < FEEDBACK_MIN ? ` · at least ${FEEDBACK_MIN} characters` : ''}{feedback.length > FEEDBACK_MAX ? ' · too long' : ''}
-                </div>
-                <button type="button" className="btn-secondary mt-1 py-1.5 text-xs" onClick={quoteSelection} disabled={!waiting} onMouseDown={(e) => e.preventDefault()}>
-                  <MessageSquareQuote size={14} /> Quote selected text
+              )}
+              <p className="text-xs text-slate-500" data-testid="approve-explain">{publishOn ? `One run: approve, save the Markdown export, then ${flags.target === 'docstar' ? 'send it to Docstar' : 'publish it to the blog'}. No AI calls.` : 'Approving saves the final Markdown export (the output while publishing is off). No AI calls.'}</p>
+              {!hardPassed && (
+                <p className="text-xs text-red-600 dark:text-red-400" data-testid="approve-blocked">
+                  Approve is off: the hard content checks did not pass{failedHard.length ? ` (${failedHard.map((c) => c.id).join(', ')})` : ' (no check results)'}. Send a counter prompt or reject the topic.
+                </p>
+              )}
+              {!reviewed && waiting && (
+                <button type="button" className="btn-secondary w-full" onClick={() => setConfirm({ action: reviewAction, calls: COSTS.approval_review.normal, title: 'Ask the Reviewer to check this version?', text: 'One Reviewer call (no revision loop). The draft keeps waiting for you, pass or fail.' })}>
+                  <ShieldQuestion size={16} /> Review this version
                 </button>
-                {quoteMsg && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" role="status">{quoteMsg}</p>}
-                {quotes.length > 0 && (
-                  <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Quotes">
-                    {quotes.map((q) => (
-                      <li key={q} className="flex max-w-full items-center gap-1 rounded-full bg-slate-100 py-0.5 pr-1 pl-2.5 text-xs dark:bg-slate-800">
-                        <span className="truncate" title={q}>“{q}”</span>
-                        <button type="button" aria-label={`Remove quote ${q.slice(0, 30)}`} onClick={() => setQuotes((all) => all.filter((x) => x !== q))}><X size={12} /></button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <label className="mt-3 flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={rereviewOn} onChange={(e) => setRereview(e.target.checked)} disabled={!waiting} /> Re-review after the change
-                </label>
-                <p className="text-xs text-slate-500" data-testid="revise-cost">Expected AI calls: {reviseCost.normal} ({reviseCost.note})</p>
-                <button type="button" className="btn-secondary mt-2 w-full" disabled={!waiting || !fbValid || revisionsLeft === 0}
-                  onClick={() => setConfirm({
-                    action: { kind: 'revise', path: `${base}/revise`, body: { feedback, ...(quotes.length && { quotes }), target: design ? 'design' : 'writing', params: { rereview_after_human: rereviewOn } }, label: design ? 'Design change' : 'Counter prompt' },
-                    calls: reviseCost.normal,
-                    title: design ? 'Change the design?' : 'Send this counter prompt?',
-                    text: `${design ? `The Experience Designer builds the guide of v${d.draft.version} again` : `The Writer revises v${d.draft.version}, then the Experience Designer builds its guide`} with your feedback${quotes.length ? ` and ${quotes.length} quote${quotes.length === 1 ? '' : 's'}` : ''}${rereviewOn ? ', then the Reviewer checks it' : '; the Reviewer is skipped'}.`
-                  })}>
-                  Send counter prompt
-                </button>
-                {revisionsLeft === 0 && <p className="mt-1 text-xs text-red-600 dark:text-red-400">No counter prompts left (MAX_HUMAN_REVISIONS): approve or reject the topic.</p>}
-              </div>
-
-              <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
-                <h3 className="mb-1 text-sm font-semibold">Reject the topic</h3>
-                <label className="label" htmlFor="reason">Reason (optional, saved as a lesson)</label>
-                <textarea id="reason" className="input min-h-16" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!waiting} maxLength={FEEDBACK_MAX} />
-                <button type="button" className="btn-danger mt-2 w-full" disabled={!waiting}
-                  onClick={() => setConfirm({ action: { kind: 'reject', path: `${base}/reject`, body: reason.trim() ? { reason: reason.trim() } : {}, label: 'Reject' }, calls: COSTS.reject_topic.normal, title: 'Reject this topic?', danger: true, text: 'The brief and this draft become rejected, and the topic is never picked again.' })}>
-                  <Trash2 size={16} /> Reject topic
-                </button>
-              </div>
+              )}
             </div>
           </Card>
 
-          <Card title="Verdict" actions={!reviewed ? <span className="pill pill-amber">Not reviewed</span> : undefined}>
-            {review ? (
-              <VerdictPanel review={review} />
-            ) : (
-              <p className="text-sm text-slate-500">This version has no review. {waiting ? 'Use “Review this version” to ask the Reviewer.' : ''}</p>
-            )}
+          <Card title={<span className="flex items-center gap-1.5"><Sparkles size={15} /> AI review</span>} actions={!reviewed ? <span className="pill pill-amber">Not reviewed</span> : undefined}>
+            <AiReviewPanel review={review} checks={d.checks} onShow={showInArticle} notReviewedText={`This version has no review.${waiting ? ' Use “Review this version” to ask the Reviewer.' : ''}`} />
           </Card>
-          <Card title="Checks"><ChecksTable checks={d.checks} /></Card>
-        </div>
+
+          <Card title="Request changes">
+            <p className="mb-2 text-xs text-slate-500">Tell the Writer what to change.{revisionsLeft != null ? ` ${Math.max(0, revisionsLeft)} of ${maxRevisions} left for this post.` : ''}</p>
+            <fieldset className="mb-2 space-y-1 text-sm" disabled={!waiting}>
+              <legend className="sr-only">What to change</legend>
+              <label className="flex items-start gap-2"><input type="radio" name="revise-target" className="mt-1" checked={!design} onChange={() => setTarget('writing')} /> <span><strong>Change the writing</strong> <span className="block text-xs text-slate-500">{flags.experienceOn ? 'The Writer revises the post, then the Experience Designer builds its guide again.' : 'The Writer revises the post.'}</span></span></label>
+              {flags.experienceOn && <label className="flex items-start gap-2"><input type="radio" name="revise-target" className="mt-1" checked={design} disabled={!hasGuide} onChange={() => setTarget('design')} /> <span><strong>Change the design</strong> <span className="block text-xs text-slate-500">{hasGuide ? 'Only the Experience Designer runs again (cheaper). The post’s text stays as it is.' : 'This version has no guide to change.'}</span></span></label>}
+            </fieldset>
+            <label className="label" htmlFor="feedback">Your feedback</label>
+            <textarea id="feedback" className="input min-h-28" maxLength={FEEDBACK_MAX + 200} value={feedback} onChange={(e) => setFeedback(e.target.value)} disabled={!waiting} placeholder="e.g. Make the first paragraph shorter and explain 'webhook' in plain words." />
+            <div className={`mt-0.5 text-right text-xs ${fbValid || fbLen === 0 ? 'text-slate-500' : 'text-red-600 dark:text-red-400'}`} data-testid="feedback-counter">
+              {feedback.length.toLocaleString('en-US')} / {FEEDBACK_MAX.toLocaleString('en-US')}{fbLen > 0 && fbLen < FEEDBACK_MIN ? ` · at least ${FEEDBACK_MIN} characters` : ''}{feedback.length > FEEDBACK_MAX ? ' · too long' : ''}
+            </div>
+            <button type="button" className="btn-secondary mt-1 py-1.5 text-xs" onClick={quoteSelection} disabled={!waiting} onMouseDown={(e) => e.preventDefault()}>
+              <MessageSquareQuote size={14} /> Quote selected text
+            </button>
+            {quoteMsg && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" role="status">{quoteMsg}</p>}
+            {quotes.length > 0 && (
+              <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Quotes">
+                {quotes.map((q) => (
+                  <li key={q} className="flex max-w-full items-center gap-1 rounded-full bg-slate-100 py-0.5 pr-1 pl-2.5 text-xs dark:bg-slate-800">
+                    <span className="truncate" title={q}>“{q}”</span>
+                    <button type="button" aria-label={`Remove quote ${q.slice(0, 30)}`} onClick={() => setQuotes((all) => all.filter((x) => x !== q))}><X size={12} /></button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <label className="mt-3 flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={rereviewOn} onChange={(e) => setRereview(e.target.checked)} disabled={!waiting} /> Re-review after the change
+            </label>
+            <p className="text-xs text-slate-500" data-testid="revise-cost">Expected AI calls: {reviseCost.normal} ({reviseCost.note})</p>
+            <button type="button" className="btn-secondary mt-2 w-full" disabled={!waiting || !fbValid || revisionsLeft === 0}
+              onClick={() => setConfirm({
+                action: { kind: 'revise', path: `${base}/revise`, body: { feedback, ...(quotes.length && { quotes }), target: design ? 'design' : 'writing', params: { rereview_after_human: rereviewOn } }, label: design ? 'Design change' : 'Counter prompt' },
+                calls: reviseCost.normal,
+                title: design ? 'Change the design?' : 'Send this counter prompt?',
+                text: `${design ? `The Experience Designer builds the guide of v${d.draft.version} again` : `The Writer revises v${d.draft.version}, then the Experience Designer builds its guide`} with your feedback${quotes.length ? ` and ${quotes.length} quote${quotes.length === 1 ? '' : 's'}` : ''}${rereviewOn ? ', then the Reviewer checks it' : '; the Reviewer is skipped'}.`
+              })}>
+              Send counter prompt
+            </button>
+            {revisionsLeft === 0 && <p className="mt-1 text-xs text-red-600 dark:text-red-400">No counter prompts left (MAX_HUMAN_REVISIONS): approve or reject the topic.</p>}
+          </Card>
+
+          <Card title="Reject the topic">
+            <label className="label" htmlFor="reason">Reason (optional, saved as a lesson)</label>
+            <textarea id="reason" className="input min-h-16" value={reason} onChange={(e) => setReason(e.target.value)} disabled={!waiting} maxLength={FEEDBACK_MAX} />
+            <button type="button" className="btn-danger mt-2 w-full" disabled={!waiting}
+              onClick={() => setConfirm({ action: { kind: 'reject', path: `${base}/reject`, body: reason.trim() ? { reason: reason.trim() } : {}, label: 'Reject' }, calls: COSTS.reject_topic.normal, title: 'Reject this topic?', danger: true, text: 'The brief and this draft become rejected, and the topic is never picked again.' })}>
+              <Trash2 size={16} /> Reject topic
+            </button>
+          </Card>
+        </aside>
       </div>
 
-      <Card title="History" className="mt-4">
+      <h2 className="mt-8 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">More about this post</h2>
+      <div className="grid items-start gap-4 md:grid-cols-2">
+        <ExportCard briefId={d.brief_id} version={d.draft.version} status={d.draft.status} />
+        <SlotCard slot={d.slot} />
+        {flags.blogOn && <PublishCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} title={d.draft.title} />}
+        {flags.experienceOn && <InteractiveCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} info={d.interactive} />}
+      </div>
+
+      <Card title="Versions" className="mt-4">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-xs text-slate-500"><tr className="border-b border-slate-200 dark:border-slate-800"><th className="px-2 py-1.5 font-medium">Version</th><th className="px-2 py-1.5 font-medium">Status</th><th className="px-2 py-1.5 font-medium">Score</th><th className="px-2 py-1.5 font-medium">Title</th><th className="px-2 py-1.5 font-medium">Your counter prompt</th></tr></thead>
@@ -328,10 +388,6 @@ export default function ApprovalDetail() {
             </tbody>
           </table>
         </div>
-        {versions.length > 1 && (
-          <CompareControls versions={versions.map((v) => v.version)} onCompare={(a, b) => setCompare({ a, b })} />
-        )}
-        {compareA && compareB && <ComparePanel a={compareA} b={compareB} currentMarkdown={d.draft.post_markdown} currentVersion={d.draft.version} />}
       </Card>
 
       {/* Approve: the Reviewer-pass rule (REREVIEW_AFTER_HUMAN) — review first, or approve without review with a tick. */}
@@ -344,14 +400,14 @@ export default function ApprovalDetail() {
             <button type="button" className="btn-primary mt-4 w-full" disabled={busy} onClick={() => void run(reviewAction)}>Review it first · expected AI calls {COSTS.approval_review.normal}</button>
             <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
               <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-0.5" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} /> I understand this version was not checked by the Reviewer</label>
-              <button type="button" className="btn-danger mt-2 w-full" disabled={busy || !understood} onClick={() => void run(forceAction)}>Approve without review · expected AI calls {approveCalls}</button>
+              <button type="button" className="btn-danger mt-2 w-full" disabled={busy || !understood} onClick={() => void run(forceAction)}>{approvePublish ? 'Approve and publish' : 'Approve'} without review · expected AI calls {approveCalls}</button>
             </div>
             <div className="mt-4 flex justify-end"><button type="button" className="btn-secondary" disabled={busy} onClick={() => setApproveOpen(false)}>Cancel</button></div>
           </div>
         </div>
       ) : (
-        <ConfirmDialog open title={`Approve v${d.draft.version}?`} expectedCalls={approveCalls} expectedMem0={approveCost.mem0} confirmLabel="Approve" busy={busy} onConfirm={() => run(approveAction)} onCancel={() => setApproveOpen(false)}>
-          <p>{promoOn ? 'The promo pack is created, then the Publisher step' : 'No AI call: the guide was already built and reviewed. Then the Publisher step'} ({settings.data?.blog?.auto_publish ? 'AUTO_PUBLISH is on: the post is published to the blog, no AI calls' : 'AUTO_PUBLISH is off: publish it afterwards with Publish'}).{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>
+        <ConfirmDialog open title={`${approvePublish ? 'Approve and publish' : 'Approve'} v${d.draft.version}?`} expectedCalls={approveCalls} expectedMem0={approveCost.mem0} confirmLabel={approvePublish ? 'Approve and publish' : 'Approve'} busy={busy} onConfirm={() => run(approveAction)} onCancel={() => setApproveOpen(false)}>
+          <p>{promoOn ? 'The promo pack is created, then the' : 'No AI call. One run:'} approval, the Markdown export{approvePublish ? `, then ${flags.target === 'docstar' ? 'the post goes to Docstar' : 'the post is published to the blog'}` : publishOn ? ' (publish it later with Publish)' : ''}. You see each step on this page.{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>
         </ConfirmDialog>
       ))}
 

@@ -9,19 +9,49 @@
 }
 
 html, body, #root { height: 100%; }
-body { @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100; }
+
+/* Dark mode = graphite: neutral greys, the page darkest, cards one step up, borders one more; grey text bright
+   enough to read. Only the dark theme redefines these, so light mode keeps Tailwind's slate. */
+.dark {
+  --color-slate-50: #fafafa;
+  --color-slate-100: #f1f1f3;
+  --color-slate-200: #e2e2e6;
+  --color-slate-300: #cfcfd5;
+  --color-slate-400: #ababb3;
+  --color-slate-500: #8f8f98;
+  --color-slate-600: #5c5c64;
+  --color-slate-700: #3b3b41;
+  --color-slate-800: #2b2b30;
+  --color-slate-900: #1c1c1f;
+  --color-slate-950: #131315;
+}
+body { @apply bg-slate-100/70 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100; }
 
 /* Small shared component classes (Tailwind 4 utilities, so they can be combined with @apply). */
 @utility btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50; }
-@utility btn-primary { @apply btn bg-slate-900 text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white; }
-@utility btn-secondary { @apply btn border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800; }
+@utility btn-primary { @apply btn bg-indigo-600 text-white shadow-sm hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:bg-slate-100 dark:text-slate-950 dark:shadow-none dark:hover:bg-white dark:focus-visible:outline-slate-300; }
+@utility btn-secondary { @apply btn border border-slate-300 bg-white text-slate-800 shadow-xs hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800; }
 @utility btn-danger { @apply btn bg-red-600 text-white hover:bg-red-500; }
 @utility btn-ghost { @apply inline-flex items-center justify-center rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800; }
 @utility pill { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap; }
-@utility pill-green { @apply bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200; }
-@utility pill-red { @apply bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200; }
-@utility pill-amber { @apply bg-amber-200 text-amber-950 dark:bg-amber-500/30 dark:text-amber-100; }
-@utility pill-blue { @apply bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200; }
-@utility pill-gray { @apply bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300; }
-@utility input { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-slate-800; }
+@utility pill-green { @apply bg-emerald-100 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-1 dark:ring-emerald-400/25 dark:ring-inset; }
+@utility pill-red { @apply bg-red-100 text-red-800 dark:bg-red-400/10 dark:text-red-300 dark:ring-1 dark:ring-red-400/25 dark:ring-inset; }
+@utility pill-amber { @apply bg-amber-200 text-amber-950 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-1 dark:ring-amber-400/25 dark:ring-inset; }
+@utility pill-blue { @apply bg-sky-100 text-sky-800 dark:bg-sky-400/10 dark:text-sky-300 dark:ring-1 dark:ring-sky-400/25 dark:ring-inset; }
+@utility pill-gray { @apply bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:ring-1 dark:ring-slate-700 dark:ring-inset; }
+@utility input { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:border-slate-500 dark:focus:ring-slate-700/60; }
 @utility label { @apply mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300; }
+
+/* The reading view (the post as on msg91.com/guide): headings and blocks a little larger than in plain previews. */
+.article-view h1 { @apply mt-0 mb-6 text-3xl leading-tight font-bold tracking-tight text-slate-900 dark:text-white; }
+.article-view h2 { @apply mt-12 mb-4 border-t border-slate-200 pt-8 text-2xl leading-snug font-bold tracking-tight text-slate-900 dark:border-slate-800 dark:text-white; }
+.article-view h3 { @apply mt-8 mb-3 text-xl font-semibold text-slate-900 dark:text-white; }
+.article-view p { @apply my-4 leading-8; }
+.article-view li { @apply leading-7; }
+.article-view table { @apply text-[15px]; }
+.article-view pre { @apply text-[13.5px] leading-6; }
+.article-view blockquote { @apply rounded-r-lg bg-slate-50 py-2 dark:bg-slate-800/40; }
+
+/* "Show in post": the sentence a review note quotes, flashed in the reading view. */
+.review-mark { @apply rounded bg-amber-200/80 px-0.5 text-inherit ring-2 ring-amber-300 transition-colors dark:bg-amber-400/30 dark:ring-amber-500/60; }
+.review-flash { @apply rounded-lg bg-amber-50 ring-2 ring-amber-300 transition-shadow dark:bg-amber-400/10 dark:ring-amber-500/50; }

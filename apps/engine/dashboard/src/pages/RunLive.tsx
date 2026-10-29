@@ -1,11 +1,15 @@
-// /runs/:runId — one run, live or finished: header, approval banners, pipeline tracker, loop timeline,
-// outputs and the event log.
+// /runs/:runId — one run, live or finished. On top, what it is doing in plain words ("Writing the draft…") with a
+// progress bar, and the journey of its post (every green of the post, from all its runs). Then its steps; the
+// facts, loop timeline, outputs and event log are under "Details".
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Info, Square } from 'lucide-react'
+import { ChevronDown, Info, Square } from 'lucide-react'
 import { api, errorMessage, isApiError } from '../api/client'
 import { useSettings } from '../api/queries'
+import { modeLabel, usePostJourney } from '../api/journey'
+import { JourneyCard } from '../components/JourneyCard'
+import { RunProgress } from '../components/RunProgress'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EventLog } from '../components/EventLog'
 import { LoopTimeline } from '../components/LoopTimeline'
@@ -35,7 +39,7 @@ function Banner({ a }: { a: ApprovalBanner }) {
         <div className="font-medium">{APPROVAL_TEXT[a.kind] ?? `approval.${a.kind}`}</div>
         <div className="text-slate-600 dark:text-slate-300">{a.message}{a.briefId ? ` · brief ${a.briefId}` : ''}</div>
       </div>
-      {a.kind === 'waiting' && a.briefId && <Link to={`/approvals/${a.briefId}`} className="btn-primary">Open the approval screen</Link>}
+      {a.kind === 'waiting' && a.briefId && <Link to={`/approvals/${a.briefId}`} className="btn-secondary">Open the approval screen</Link>}
     </div>
   )
 }
@@ -49,6 +53,8 @@ export default function RunLive() {
   const now = useNow(running)
   const [confirmStop, setConfirmStop] = useState(false)
   const [stopping, setStopping] = useState(false)
+  const briefId = view.briefId ?? detail?.run?.brief_id ?? null
+  const journey = usePostJourney(briefId ?? '', Boolean(briefId))
 
   async function stop() {
     setStopping(true)
@@ -88,8 +94,8 @@ export default function RunLive() {
   return (
     <>
       <PageHeader
-        title={`Run ${runId}`}
-        subtitle={view.resultSummary ?? (running ? 'Running…' : stream === 'connecting' || stream === 'waiting' ? 'Loading…' : '')}
+        title={view.mode ? modeLabel(view.mode) : 'Run'}
+        subtitle={<><span className="font-mono text-xs">{runId}</span>{view.startedAt ? ` · started ${fmtDateTime(view.startedAt)}` : ''}{stream === 'connecting' || stream === 'waiting' ? ' · loading…' : ''}</>}
         actions={
           <>
             <StatusBadge status={view.status === 'unknown' ? (detail?.run?.status ?? 'unknown') : view.status} />
@@ -98,6 +104,18 @@ export default function RunLive() {
         }
       />
       <div className="space-y-4">
+        <Card><RunProgress view={view} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} /></Card>
+        {briefId && journey.data && (
+          <JourneyCard journey={journey.data} title={<Link to={`/approvals/${briefId}`} className="font-semibold text-slate-800 hover:underline dark:text-slate-100">{journey.data.title || 'This post'}</Link>} />
+        )}
+        {view.approvals.map((a) => <Banner key={a.seq} a={a} />)}
+        <Card title="Steps of this run"><PipelineTracker view={view} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} /></Card>
+        {publisherProgress(view.outputs).size > 0 && <Card title="Publisher"><PublisherSteps outputs={view.outputs} stepStatus={view.steps.publisher?.status ?? null} /></Card>}
+        <details className="group rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" data-testid="run-details">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            Details: AI calls, memory calls, outputs and the event log <ChevronDown size={14} className="ml-auto transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="space-y-4 border-t border-slate-200 p-4 dark:border-slate-800">
         <Card>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
             {header.map(([k, v]) => (
@@ -129,15 +147,13 @@ export default function RunLive() {
         )}
         {stream === 'reconnecting' && <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">Connection lost: reconnecting…</div>}
 
-        {view.approvals.map((a) => <Banner key={a.seq} a={a} />)}
-
-        <Card title="Pipeline"><PipelineTracker view={view} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} /></Card>
-        {publisherProgress(view.outputs).size > 0 && <Card title="Publisher"><PublisherSteps outputs={view.outputs} stepStatus={view.steps.publisher?.status ?? null} /></Card>}
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="Loop timeline"><LoopTimeline routes={view.routes} /></Card>
           <Card title="Outputs"><StepOutputs outputs={view.outputs} records={detail?.records} /></Card>
         </div>
         <Card title="Event log"><EventLog lines={view.log} dropped={view.logDropped} /></Card>
+          </div>
+        </details>
       </div>
 
       <ConfirmDialog open={confirmStop} title={`Stop run ${runId}?`} expectedCalls="0 (calls already made are not refunded)" confirmLabel="Stop the run" danger busy={stopping} onConfirm={stop} onCancel={() => setConfirmStop(false)}>

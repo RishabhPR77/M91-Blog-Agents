@@ -17,7 +17,7 @@
 // npm run publish -- --brief-id=<id> [--draft] · unpublish -- --slug=<slug> · set-index -- --slug=<slug> --noindex=true|false · rebuild-blog
 // npm run blog:sync   (published posts from Mem0 → apps/blog/src/content/posts; no build, no deploy)
 // npm run approvals -- --list
-// npm run approve -- --brief-id=<id> [--force-unreviewed]
+// npm run approve -- --brief-id=<id> [--force-unreviewed] [--publish]   (--publish: export and publish in the same run)
 // npm run review -- --brief-id=<id>   one Reviewer call on the waiting version (no routing)
 // npm run revise -- --brief-id=<id> --feedback "<text>" [--quote "<exact sentence>"] … [--no-rereview]
 //   (also reopens an approved, unpublished draft; --no-rereview skips the Reviewer for this run)
@@ -515,6 +515,7 @@ async function main() {
     }
     if (mode === 'reject_topic' && typeof args.reason === 'string') params.reason = args.reason
     if (mode === 'approve' && args['force-unreviewed']) params.force_unreviewed = true
+    if (mode === 'approve' && args.publish) params.publish = true
     const result = await startAndWait(config, { mode, params })
     console.table((result.run?.steps ?? []).map((s) => ({ step: s.name, status: s.status, ms: s.ms, ai_calls: s.ai_calls, summary: String(s.summary).slice(0, 80), error: s.error ? String(s.error).slice(0, 50) : '' })))
     console.log(`${result.status}: ${result.run?.result_summary ?? result.error ?? ''}`)

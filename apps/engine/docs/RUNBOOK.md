@@ -68,9 +68,15 @@ What it changes:
 
 ## One click
 
-Click **Run full pipeline** on Control. That is all: if there is no roadmap yet, the run plans it (1–2 AI calls) and
-approves it, then writes the next post and waits for your approval. Each card on Control shows the AI model it uses.
-You can still open the **Roadmap** page to read or change the plan.
+Click **Write the next post** on Control. That is all: if there is no roadmap yet, the run plans it (1–2 AI calls) and
+approves it, then writes the next post and waits for your review. The card shows what comes next and why, each
+step's AI model and the cost. The single agents (Scout, Strategist, Writer, Reviewer) and the other actions are under
+**Run one agent, or another action**. You can still open the **Roadmap** page to read or change the plan.
+
+Every post has one page (open it from Approvals, from **Posts & runs**, or from a run). On top is its journey:
+Topic → Research → Plan → Draft → AI review → You → Export → Published. A step turns green when it is done, whichever
+run did it, so the writing run and the approve run show on the same bar. **Posts & runs** lists the posts this way
+("By post"); "All runs" is the old table.
 
 ## What the next run writes
 
@@ -109,12 +115,17 @@ If every ready topic repeats something, mark those slots **Covered by a guide** 
 ## Read a draft and decide
 
 1. Go to **Approvals** and open the draft.
-2. Read the post, the Reviewer's scores and notes, and the check results. The **Roadmap** card shows the
-   slot, its stage and the earlier posts it builds on. **Compare** shows what changed
-   from the previous version.
+2. On the left is the post as readers will see it (with its words, reading time and reading grade). On the right is
+   the AI review: the score, what the Reviewer says in one line, its notes (**Show in post** marks the quoted
+   sentence in the post), the scores by area and the content checks in one line (click it for the table). The
+   **Roadmap** card (under "More about this post") shows the slot, its stage and the earlier posts it builds on.
+   **Compare versions** shows what changed from the previous version.
 3. Choose one of these:
-   - **Approve**: the post is approved and its final **Markdown export** is saved (the Mem0 record and
-     `apps/engine/exports/<slug>.md`). No AI calls.
+   - **Approve and publish** (while `PUBLISH_TARGET` is `docstar` or `embarko`): one run approves the post, saves
+     its final **Markdown export** and sends it to Docstar (or the blog). No AI calls. You stay on the post page
+     and watch Export and Published turn green. **Approve only (publish later)** skips the publishing step.
+   - **Approve** (with `PUBLISH_TARGET=none`): the post is approved and its final **Markdown export** is saved (the
+     record and `apps/engine/exports/<slug>.md`). No AI calls.
    - **Request changes** (a counter prompt): write what to change, then click **Send counter prompt**. You
      can quote exact sentences from the draft. The Writer revises, and the Reviewer checks again unless you
      turn that off. This uses 2–4 AI calls. The new version comes back to Approvals. With the Experience

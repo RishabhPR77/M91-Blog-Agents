@@ -72,11 +72,11 @@ describe('Interactive guide card on an approval', () => {
     page(detail('awaiting_human', { on: true, default: true, set: false, guide_doc: null }))
     expect(await screen.findByTestId('designer-result')).toHaveTextContent('the Experience Designer runs after each draft, before the Reviewer')
     expect(screen.queryByRole('button', { name: /Re-run Experience Designer/ })).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: /^Approve/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Approve and publish$/ }))
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByTestId('expected-calls')).toHaveTextContent(COSTS.approve.normal)
     expect(COSTS.approve.normal).toBe('0')
-    expect(dialog).toHaveTextContent('No AI call: the guide was already built and reviewed')
+    expect(dialog).toHaveTextContent('No AI call. One run: approval, the Markdown export, then the post is published to the blog')
   })
 
   it('older engines without interactive info show no card', async () => {
@@ -112,7 +112,7 @@ describe('C5: Request changes — change the writing or the design', () => {
 
   it('counts design requests from the engine (revisions_used)', async () => {
     page(detail('awaiting_human', { on: true, default: true, set: false, guide_doc: DOC }, { revisions_used: 2 }))
-    expect(await screen.findByText(/3 of 5 left for this brief/)).toBeInTheDocument()
+    expect(await screen.findByText(/3 of 5 left for this post/)).toBeInTheDocument()
   })
 })
 

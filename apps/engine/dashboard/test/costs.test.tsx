@@ -11,7 +11,7 @@ describe('Mem0 estimates', () => {
     expect(COSTS.full.mem0).toBe('≈30–48')
   })
   it('the run button and the confirm dialog show it', () => {
-    render(<RunButton title="Run full pipeline" description="d" costKey="full" lowCost={false} built onRun={() => {}} />)
+    render(<RunButton title="Write the next post" description="d" costKey="full" lowCost={false} built onRun={() => {}} />)
     expect(screen.getByTestId('cost-mem0')).toHaveTextContent('Expected memory calls: ≈30–48')
     render(<ConfirmDialog open title="Start" expectedCalls="16–29" expectedMem0="≈30–48" onConfirm={() => {}} onCancel={() => {}} />)
     expect(screen.getByTestId('expected-mem0')).toHaveTextContent('Expected memory calls: ≈30–48')

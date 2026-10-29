@@ -113,15 +113,15 @@ describe('Next up on Control, the slot on the approval screen, Settings', () => 
     }
     mockFetch({ ...base, 'GET /api/roadmap': { body: { roadmap: ROADMAP('approved'), record_id: 'mem-rm', next: NEXT, problems: [] } } } as Parameters<typeof mockFetch>[0])
     const { unmount } = renderApp(<Routes><Route path="/" element={<Control />} /></Routes>)
-    const card = await screen.findByTestId('run-card-Run full pipeline')
+    const card = await screen.findByTestId('run-card-Write the next post')
     await waitFor(() => expect(within(card).getByTestId('control-next-up')).toHaveTextContent('Next up: Stage 0 · Starter · s0-2 How M91 works'))
     expect(within(card).getByTestId('cost')).toHaveTextContent(`Expected AI calls: ${COSTS.full_roadmap.normal}`)
     unmount()
     mockFetch({ ...base, 'GET /api/roadmap': { body: { roadmap: ROADMAP('draft'), record_id: 'mem-rm', next: { kind: 'none', reason: 'Approve the roadmap first' }, problems: [] } } } as Parameters<typeof mockFetch>[0])
     renderApp(<Routes><Route path="/" element={<Control />} /></Routes>)
-    const card2 = await screen.findByTestId('run-card-Run full pipeline')
+    const card2 = await screen.findByTestId('run-card-Write the next post')
     await waitFor(() => expect(card2).toHaveTextContent('Approve the roadmap first'))
-    expect(within(card2).getByRole('button', { name: /Run full pipeline/ })).toBeDisabled()
+    expect(within(card2).getByRole('button', { name: /Write the next post/ })).toBeDisabled()
   })
 
   it('the approval screen shows the slot, its stage and what it builds on', async () => {

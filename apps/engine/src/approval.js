@@ -93,6 +93,9 @@ export async function checkDecision(mode, params, { store, config }) {
   if (mode === 'approve' && params.force_unreviewed !== undefined && typeof params.force_unreviewed !== 'boolean') {
     throw new ApprovalError('bad_params', 'force_unreviewed must be true or false')
   }
+  if (mode === 'approve' && params.publish !== undefined && typeof params.publish !== 'boolean') {
+    throw new ApprovalError('bad_params', 'publish must be true or false')
+  }
   if (mode === 'human_revise') {
     const fb = params.feedback
     if (typeof fb !== 'string' || fb.trim().length < FEEDBACK_MIN_CHARS || fb.length > FEEDBACK_MAX_CHARS) {
@@ -236,16 +239,18 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
 
   // Where the approved post goes (PUBLISH_TARGET): none (the export is the output), the blog (embarko) or Docstar.
   const target = config.publish?.target ?? 'embarko'
+  // "Approve and publish" (params.publish: true): the post goes out in this same run, whatever AUTO_PUBLISH says.
+  const publishNow = params.publish === true || config.runtime.autoPublish
   let published = null
   if (target === 'none') {
     await runStep('publisher', async () => ({ placeholder: true, message: 'Publishing is off (PUBLISH_TARGET=none): the Markdown export is the output' }))
   } else if (target === 'docstar') {
     published = await runStep('publisher', async () => {
-      if (!config.runtime.autoPublish) return { placeholder: true, message: 'Not sent to Docstar: AUTO_PUBLISH=false. Use Publish in the dashboard (or npm run publish)' }
+      if (!publishNow) return { placeholder: true, message: 'Not sent to Docstar: approved only. Use Publish in the dashboard (or npm run publish)' }
       return publishToDocstar({ store, docstar: createDocstar({ config }), exportRecord: await latestExport(store, briefId) })
     })
     if (published?.warnings?.length) warnings.push(...published.warnings)
-  } else if (config.runtime.autoPublish) {
+  } else if (publishNow) {
     try {
       published = await runStep('publisher', async () => (publisher ?? createPublisher({ config, store, notifier })).publish({ briefId }))
       warnings.push(...(published?.warnings ?? []))
@@ -255,7 +260,7 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
     }
   } else {
     await runStep('publisher', async () => {
-      const message = 'Not published: AUTO_PUBLISH=false. Use Publish in the dashboard (or npm run publish)'
+      const message = 'Not published: approved only. Use Publish in the dashboard (or npm run publish)'
       log.info(message, { briefId, version })
       return { placeholder: true, message }
     })

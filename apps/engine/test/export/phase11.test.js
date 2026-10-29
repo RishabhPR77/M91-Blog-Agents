@@ -130,6 +130,22 @@ test('approve with PUBLISH_TARGET=none: the export is saved, the Publisher step 
   assert.equal(recordsOf(store, 'published_post').length, 0)
 })
 
+test('"Approve and publish" (params.publish): the export and the Docstar step run in the same approve run; without it, approved only', async () => {
+  const restore = quiet()
+  const a = await seed()
+  const only = await runWith(manager(a.store, { PUBLISH_TARGET: 'docstar' }), 'approve')
+  const b = await seed()
+  const both = await runWith(manager(b.store, { PUBLISH_TARGET: 'docstar' }), 'approve', { publish: true })
+  const bad = await manager(b.store, { PUBLISH_TARGET: 'docstar' }).startRun({ mode: 'approve', params: { brief_id: BRIEF_ID, publish: 'yes' } }).catch((e) => e)
+  restore()
+  assert.equal(only.run.steps[2].summary, 'Not sent to Docstar: approved only. Use Publish in the dashboard (or npm run publish)')
+  assert.equal(both.status, 'succeeded', both.error)
+  assert.deepEqual(both.run.steps.map((x) => x.name), ['promo', 'export', 'publisher'])
+  // No Docstar keys in tests: the step tried to send it (one run, no separate publish run).
+  assert.match(both.run.steps[2].summary, /^Docstar: Docstar is not configured/)
+  assert.equal(bad.code, 'bad_params')
+})
+
 test('PUBLISH_TARGET decides the publish modes: none refuses all (409), docstar only publish/unpublish', async () => {
   const restore = quiet()
   const { store } = await seed({ status: 'approved' })

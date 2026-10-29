@@ -48,9 +48,10 @@ const REVIEW = {
   sources_checked: [{ url: 'https://m91.msg91.com/api/public/quickstart.md', claim: 'M91 rings phones', verdict: 'supports' }]
 }
 
-function routes(d: ApprovalDetailData, extra: Record<string, unknown> = {}) {
+const DOCSTAR = { ...SETTINGS, publish: { target: 'docstar', docstar_configured: true, auto_publish: false } }
+function routes(d: ApprovalDetailData, extra: Record<string, unknown> = {}, settings: unknown = DOCSTAR) {
   return {
-    'GET /api/settings': { body: SETTINGS },
+    'GET /api/settings': { body: settings },
     [`GET /api/approvals/${B}`]: { body: d },
     'GET /api/records/mem-v2': { body: { record: { payload: { post_markdown: MD.replace('a small approval envelope', 'an approval envelope that binds the action') } } } },
     ...extra
@@ -127,56 +128,98 @@ describe('Approve', () => {
     const calls = mockFetch(routes(detail(), { [`POST /api/approvals/${B}/approve`]: { status: 202, body: { run_id: 'R-261019-1400-AAAA' } } }))
     page()
     expect(await screen.findByTestId('not-reviewed')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /^Approve$/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Approve and publish$/ }))
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveTextContent('This version was not checked by the Reviewer')
     expect(within(dialog).getByRole('button', { name: /Review it first · expected AI calls 1–2/ })).toBeEnabled()
-    const force = within(dialog).getByRole('button', { name: /Approve without review/ })
+    const force = within(dialog).getByRole('button', { name: /Approve and publish without review/ })
     expect(force).toBeDisabled()
     await userEvent.click(within(dialog).getByLabelText('I understand this version was not checked by the Reviewer'))
     expect(force).toBeEnabled()
     await userEvent.click(force)
-    expect(await screen.findByText('live page')).toBeInTheDocument()
-    expect(posts(calls)).toEqual([{ method: 'POST', path: `/api/approvals/${B}/approve`, body: { force_unreviewed: true } }])
+    // Approving stays on the post page (its journey shows each step).
+    await waitFor(() => expect(posts(calls)).toEqual([{ method: 'POST', path: `/api/approvals/${B}/approve`, body: { force_unreviewed: true, publish: true } }]))
+    expect(screen.queryByText('live page')).not.toBeInTheDocument()
   })
 
   it('"Review it first" starts the review action', async () => {
     const calls = mockFetch(routes(detail(), { [`POST /api/approvals/${B}/review`]: { status: 202, body: { run_id: 'R-261019-1400-BBBB' } } }))
     page()
-    await userEvent.click(await screen.findByRole('button', { name: /^Approve$/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Approve and publish$/ }))
     await userEvent.click(screen.getByRole('button', { name: /Review it first/ }))
     expect(await screen.findByText('live page')).toBeInTheDocument()
     expect(posts(calls)[0].path).toBe(`/api/approvals/${B}/review`)
   })
 
-  it('reviewed: a plain confirm with expected calls, then approve without force; the verdict panel shows the review', async () => {
+  it('reviewed: "Approve and publish" is one confirm and one run (publish: true); the AI review sits next to the post', async () => {
     const calls = mockFetch(routes(detail({ reviewed: true }, { review: REVIEW }), { [`POST /api/approvals/${B}/approve`]: { status: 202, body: { run_id: 'R-261019-1400-CCCC' } } }))
     page()
     expect(await screen.findByTestId('score-total')).toHaveTextContent('86')
+    expect(screen.getByTestId('review-summary')).toHaveTextContent('Publish after a small revision.')
+    expect(screen.getByTestId('checks-line')).toHaveTextContent('All 1 hard checks passed · 1 soft note')
+    expect(screen.getByTestId('approve-explain')).toHaveTextContent('One run: approve, save the Markdown export, then send it to Docstar. No AI calls.')
     expect(screen.getByTestId('score-verdict')).toHaveTextContent('pass')
     expect(screen.getByRole('list', { name: 'Gates' })).toHaveTextContent('checks_hard_passed')
     expect(screen.getByRole('list', { name: 'Feedback' })).toHaveTextContent('found')
     expect(screen.queryByTestId('not-reviewed')).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /^Approve$/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Approve and publish$/ }))
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByTestId('expected-calls')).toHaveTextContent('0')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
-    await screen.findByText('live page')
-    expect(posts(calls)[0].body).toEqual({})
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and publish' }))
+    await waitFor(() => expect(posts(calls)[0]?.body).toEqual({ publish: true }))
+  })
+
+  it('"Approve only" sends no publish; with PUBLISH_TARGET=none the button is "Approve"', async () => {
+    const reply = { [`POST /api/approvals/${B}/approve`]: { status: 202, body: { run_id: 'R-261019-1400-DDDD' } } }
+    const calls = mockFetch(routes(detail({ reviewed: true }, { review: REVIEW }), reply))
+    const first = page()
+    await userEvent.click(await screen.findByRole('button', { name: /Approve only/ }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve' }))
+    await waitFor(() => expect(posts(calls)[0]?.body).toEqual({}))
+    first.unmount()
+    const calls2 = mockFetch(routes(detail({ reviewed: true }, { review: REVIEW }), reply, { ...SETTINGS, publish: { target: 'none' } }))
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: /^Approve$/ }))
+    expect(screen.queryByRole('button', { name: /Approve only/ })).not.toBeInTheDocument()
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve' }))
+    await waitFor(() => expect(posts(calls2)[0]?.body).toEqual({}))
+  })
+
+  it('"Show in post" marks the quoted sentence in the reading view', async () => {
+    mockFetch(routes(detail({ reviewed: true }, { review: REVIEW })))
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: /Show in post/ }))
+    const mark = screen.getByTestId('markdown-preview').querySelector('mark.review-mark')
+    expect(mark).toHaveTextContent('Tie each risky tool call')
+  })
+
+  it('the journey bar shows every step of the post, whichever run did it', async () => {
+    const stage = (id: string, label: string, state: string, run_id: string | null = null) => ({ id, label, state, detail: '', run_id, at: null })
+    mockFetch(routes(detail({ reviewed: true }, { review: REVIEW }), {
+      [`GET /api/journeys/${B}`]: { body: { brief_id: B, title: 't', status: 'awaiting_human', active_run_id: null, updated_at: null, runs: [{ run_id: 'R-261019-1000-AAAA', mode: 'full', status: 'waiting_for_approval', started_at: '2026-10-19T10:00:00+05:30', finished_at: null, result_summary: 'waiting' }],
+        stages: [stage('topic', 'Topic', 'done', 'R-261019-1000-AAAA'), stage('research', 'Research', 'done'), stage('plan', 'Plan', 'done'), stage('draft', 'Draft', 'done'), stage('review', 'AI review', 'done'), stage('you', 'You', 'waiting'), stage('export', 'Export', 'todo'), stage('published', 'Published', 'todo')] } }
+    }))
+    page()
+    const bar = await screen.findByTestId('journey')
+    expect(within(bar).getByTestId('stage-review')).toHaveAttribute('data-state', 'done')
+    expect(within(bar).getByTestId('stage-you')).toHaveAttribute('data-state', 'waiting')
+    expect(screen.getByTestId('journey-line')).toHaveTextContent('Waiting for your review')
+    expect(within(bar).getByRole('link', { name: 'Topic: open its run' })).toHaveAttribute('href', '/runs/R-261019-1000-AAAA')
+    expect(screen.getByTestId('post-runs')).toHaveTextContent('Write a post')
   })
 
   it('hard-check failure disables Approve with the reason', async () => {
     mockFetch(routes(detail({ hard_passed: false }, { checks: [{ id: 'cta_exact', passed: false, severity: 'hard', value: 0, detail: 'CTA missing' }] })))
     page()
-    expect(await screen.findByRole('button', { name: /^Approve$/ })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: /^Approve and publish$/ })).toBeDisabled()
     expect(screen.getByTestId('approve-blocked')).toHaveTextContent('hard content checks did not pass (cta_exact)')
   })
 
   it('a 409 from the engine is shown as a clear message', async () => {
     mockFetch(routes(detail({ reviewed: true }), { [`POST /api/approvals/${B}/approve`]: { status: 409, body: { error: { code: 'not_awaiting_human', message: `the latest draft of ${B} (v3) is approved, not awaiting_human` } } } }))
     page()
-    await userEvent.click(await screen.findByRole('button', { name: /^Approve$/ }))
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Approve and publish$/ }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve and publish' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('is approved, not awaiting_human (refresh to see the current state)')
   })
 })
@@ -242,6 +285,7 @@ describe('History, diff, checks, list', () => {
   it('Compare loads the earlier version and shows a word diff', async () => {
     mockFetch(routes(detail()))
     page()
+    await userEvent.click(await screen.findByRole('button', { name: /Compare versions/ }))
     await userEvent.selectOptions(await screen.findByLabelText('Compare from'), '2')
     await userEvent.selectOptions(screen.getByLabelText('Compare with'), '3')
     await userEvent.click(screen.getByRole('button', { name: 'Compare' }))

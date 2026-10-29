@@ -1,4 +1,4 @@
-// Renders a post's Markdown. Raw HTML is never rendered (skipHtml, no rehype-raw), unsafe URLs are dropped
+// Renders a post's Markdown (plain, or the reading view). Raw HTML is never rendered (skipHtml, no rehype-raw), unsafe URLs are dropped
 // by react-markdown's default urlTransform, and links open in a new tab with rel="noopener noreferrer".
 import { forwardRef } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
@@ -22,9 +22,12 @@ const components: Components = {
   img: ({ node: _n, alt }) => <span className="text-slate-500">[image: {alt}]</span>
 }
 
-export const MarkdownPreview = forwardRef<HTMLDivElement, { markdown: string; className?: string }>(function MarkdownPreview({ markdown, className = '' }, ref) {
+// The reading view: the post as a reader sees it on msg91.com/guide (bigger type, calm headings, roomy lines).
+const ARTICLE = 'article-view mx-auto max-w-[70ch] text-[17px] leading-8 text-slate-800 dark:text-slate-200'
+
+export const MarkdownPreview = forwardRef<HTMLDivElement, { markdown: string; className?: string; variant?: 'plain' | 'article' }>(function MarkdownPreview({ markdown, className = '', variant = 'plain' }, ref) {
   return (
-    <div ref={ref} className={`text-[15px] text-slate-800 dark:text-slate-200 ${className}`} data-testid="markdown-preview">
+    <div ref={ref} className={`${variant === 'article' ? ARTICLE : 'text-[15px] text-slate-800 dark:text-slate-200'} ${className}`} data-testid="markdown-preview">
       <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={components}>{markdown}</ReactMarkdown>
     </div>
   )

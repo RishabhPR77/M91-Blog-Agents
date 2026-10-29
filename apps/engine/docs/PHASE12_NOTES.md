@@ -508,3 +508,23 @@ already has. It is now the engine's record store.
   "Run full pipeline" lists every step's model (Planner, Scout, Strategist, Writer, Designer when on, Reviewer). They
   come from the engine's settings, so they change when you change `*_AI_MODEL` / `*_AI_SERVICE` and restart.
 - The cost lines say "Expected memory calls" (viaSocket memory or Mem0, whichever is the backend).
+
+## The redesign: one page per post, approve and publish in one run
+
+- **One journey per post** (`GET /api/journeys`, `GET /api/journeys/:briefId`, `src/journey.js`): Topic → Research →
+  Plan → Draft → AI review → You → Export → Published, built from the post's records (brief, drafts, reviews, export,
+  published post) and every run with its `brief_id`. Each step links to the run that did it. 0 AI calls, no writes.
+  (`/api/posts` stays the blog's published posts.)
+- **Approve and publish in one run:** the approve run takes `publish: true` (`POST /api/approvals/:id/approve` with
+  `{ "publish": true }`, or `npm run approve -- --publish`): approval, Markdown export and the Publisher step (Docstar
+  or the blog) in the same run, whatever `AUTO_PUBLISH` says. Without it the post is approved only.
+- **Post page:** the journey on top; the post rendered like msg91.com/guide on the left (TL;DR, words, reading time,
+  grade, a search-result preview); the AI review on the right (score, one-line summary, notes with **Show in post**,
+  area scores, the checks in one line), then the decision. Compare versions swaps the post for the diff.
+- **Posts & runs:** "By post" (each post with its journey, plus the runs that belong to no post) and "All runs".
+- **Run page:** what the run is doing in plain words ("Writing the draft…") with a progress bar, the journey of its
+  post, its steps; the facts, outputs and event log are under "Details".
+- **Control:** one big **Write the next post** card (next up, each step's model, the cost); waiting posts, the current
+  run and the run options below; single agents under **Run one agent**; the latest posts with small journey bars.
+- **Look:** one accent colour (indigo) in light mode; dark mode is a neutral graphite theme (no blue tint, readable
+  grey text, quiet tinted badges). Screenshots: `docs/screenshots/redesign/` (a seeded local engine, no AI).

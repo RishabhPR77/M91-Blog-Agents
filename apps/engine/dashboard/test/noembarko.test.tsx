@@ -56,7 +56,7 @@ describe('PUBLISH_TARGET=none: no Embarko item anywhere', () => {
       'GET /api/records?type=draft&status=approved&limit=30': { body: { records: [] } }
     } as Parameters<typeof mockFetch>[0])
     renderApp(<Routes><Route path="/" element={<Control />} /></Routes>)
-    await screen.findByTestId('run-card-Run full pipeline')
+    await screen.findByTestId('run-card-Write the next post')
     await waitFor(() => expect(screen.queryByTestId('run-card-Publish')).toBeNull())
     expect(screen.queryByTestId('run-card-Rebuild blog')).toBeNull()
     noEmbarko()

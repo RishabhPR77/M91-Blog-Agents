@@ -55,7 +55,7 @@ test('approve: statuses approved (by human, with time), promo off by default, no
   assert.deepEqual(r.run.steps.map((x) => [x.name, x.status, x.summary]), [
     ['promo', 'succeeded', 'Promo pack is off (PROMO_ENABLED=false)'],
     ['export', 'succeeded', 'Markdown export saved: how-agent-approval-works.md (2,382 characters)'],
-    ['publisher', 'succeeded', 'Not published: AUTO_PUBLISH=false. Use Publish in the dashboard (or npm run publish)']
+    ['publisher', 'succeeded', 'Not published: approved only. Use Publish in the dashboard (or npm run publish)']
   ])
   assert.equal(designed, 0, 'the guide was built before the review: approving runs no Experience Designer')
   assert.equal(recordsOf(s.store, 'promo_pack').length, 0)
