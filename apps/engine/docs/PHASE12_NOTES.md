@@ -495,3 +495,16 @@ already has. It is now the engine's record store.
   until Mem0 resets. The first runs on viaSocket memory start fresh (guides sync, the Scout reads the M91 facts, the
   roadmap is generated again); drafts in progress stay in the local work store.
 - The repo's `viasocket-check.mjs` is the latest from viaSocket (0 FAIL, 0 WARN over 102 files).
+
+## One click, and each agent's model on Control
+
+- **One click** (`ROADMAP_AUTO_PLAN=true`, `ROADMAP_AUTO_APPROVE=true`, the defaults): "Run full pipeline" no longer
+  stops at "there is no roadmap yet" or "Approve the roadmap first". With no roadmap, the run plans it first (the
+  Roadmap Planner, 1–2 AI calls; it sees the published guides), approves it itself when it has no problems, then picks
+  and writes the next post. A draft roadmap without problems is approved by the run. A roadmap with problems is not
+  approved (the run says so). "Next up" on Control says what the click will do ("First run: the run plans the roadmap
+  first …"). `ROADMAP_AUTO_APPROVE=false` keeps your approval step; `ROADMAP_AUTO_PLAN=false` keeps the old gate.
+- **Models on Control:** each run card names the AI model its agent uses now ("AI model: gpt-5.6-luna (openai)"), and
+  "Run full pipeline" lists every step's model (Planner, Scout, Strategist, Writer, Designer when on, Reviewer). They
+  come from the engine's settings, so they change when you change `*_AI_MODEL` / `*_AI_SERVICE` and restart.
+- The cost lines say "Expected memory calls" (viaSocket memory or Mem0, whichever is the backend).

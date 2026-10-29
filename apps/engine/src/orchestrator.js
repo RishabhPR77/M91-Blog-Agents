@@ -15,6 +15,9 @@ import { runPromo } from './promo/index.js'
 import { runExperience, isInteractive } from './experience/index.js'
 import { runPlanner } from './planner/index.js'
 import { pickTarget, setSlotStatus } from './roadmap/pick.js'
+import { loadRoadmap } from './roadmap/model.js'
+import { roadmapProblems } from './roadmap/checks.js'
+import { approveRoadmap } from './roadmap/actions.js'
 import { markWriting, releaseWriting, applyAction } from './timely/model.js'
 import { loadBrief } from './writer/inputs.js'
 import { loadDraft } from './reviewer/inputs.js'
@@ -405,6 +408,24 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
             warnings.push(...g.warnings.map((w) => `guide sync: ${w}`))
           } catch (error) {
             warnings.push(`guide sync failed (the run goes on): ${error.message}`)
+          }
+        }
+        // One click: no roadmap yet, so the Roadmap Planner plans it now (it sees the published guides); a draft roadmap
+        // is approved by the run itself when it has no problems (ROADMAP_AUTO_APPROVE). Then the next post is picked.
+        if (config.roadmap.autoPlan) {
+          let rec = await loadRoadmap(store)
+          if (!rec?.payload) {
+            emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: 'No roadmap yet: the Roadmap Planner plans it first (1–2 AI calls)', data: {} })
+            await step('planner', ctx())
+            rec = await loadRoadmap(store)
+          }
+          if (rec?.payload && rec.payload.status !== 'approved' && config.roadmap.autoApprove) {
+            const problems = roadmapProblems(rec.payload)
+            if (problems.length) warnings.push(`the roadmap was not approved automatically (${problems.slice(0, 2).join('; ')}): fix it on the Roadmap page`)
+            else {
+              await approveRoadmap(store, { now })
+              emit('step.output', { agent: 'orchestrator', step: 'roadmap', message: 'Roadmap approved by the run (ROADMAP_AUTO_APPROVE); you can still edit it on the Roadmap page', data: {} })
+            }
           }
         }
         // Phase 12: a pinned topic that is due, then a timely card you chose with Write now, else the next slot of

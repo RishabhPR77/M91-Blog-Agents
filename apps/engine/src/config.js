@@ -47,6 +47,8 @@ const DEFAULTS = {
   // Phase 12: runs follow the approved roadmap. Timely lane: RAPID_RESPONSE_ENABLED=true means "news checks find
   // timely opportunities, the person decides"; a timely post is written only after Write now.
   ROADMAP_ENABLED: 'true', RAPID_RESPONSE_ENABLED: 'true',
+  // One click: a full run with no roadmap plans one first (1–2 AI calls), and approves it itself when it has no problems.
+  ROADMAP_AUTO_PLAN: 'true', ROADMAP_AUTO_APPROVE: 'true',
   TIMELY_CHECK_ON_RUN: 'true', TIMELY_WINDOW_DAYS: '7', TIMELY_MAX_PER_WEEK: '1',
   MEM0_AGENT_ID: 'm91-blog',
   // Phase 9 A5: the Mem0 quota guard (an estimate kept in apps/engine/data/mem0-usage.json)
@@ -329,7 +331,7 @@ export function loadConfig(env = process.env) {
       maxRepairs: int('PLANNER_MAX_REPAIRS', { max: 3 })
     },
     // Phase 12: each run writes the next slot of the approved roadmap (pinned topics first).
-    roadmap: { enabled: bool('ROADMAP_ENABLED') },
+    roadmap: { enabled: bool('ROADMAP_ENABLED'), autoPlan: bool('ROADMAP_AUTO_PLAN'), autoApprove: bool('ROADMAP_AUTO_APPROVE') },
     // The timely lane, next to the roadmap (on only when both RAPID_RESPONSE_ENABLED and ROADMAP_ENABLED are true).
     editor: {
       mode: oneOf('NEXT_PICK', ['editor', 'roadmap']),

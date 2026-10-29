@@ -5,6 +5,8 @@ import { Play } from 'lucide-react'
 import { COSTS, expectedMem0, type CostKey } from '../config/costs'
 
 type Props = {
+  /** The AI model of each agent this button runs: [label, { service, model }]. */
+  models?: [string, { service?: string; model?: string } | undefined][]
   title: string
   description: string
   costKey?: CostKey
@@ -16,7 +18,7 @@ type Props = {
   onRun: () => void
 }
 
-export function RunButton({ title, description, costKey, lowCost, built, comingIn, disabledReason, children, onRun }: Props) {
+export function RunButton({ title, description, costKey, lowCost, built, comingIn, disabledReason, models, children, onRun }: Props) {
   const cost = costKey ? COSTS[costKey] : null
   const blocked = !built ? `Coming in ${comingIn ?? 'a later phase'}` : disabledReason
   return (
@@ -29,7 +31,13 @@ export function RunButton({ title, description, costKey, lowCost, built, comingI
           <strong className={lowCost ? 'text-slate-900 dark:text-white' : ''}>{cost.lowCost}</strong> low-cost
         </p>
       )}
-      {cost && <p className="text-xs text-slate-500" data-testid="cost-mem0">Expected Mem0 requests: {costKey ? expectedMem0(costKey, lowCost) : cost.mem0}</p>}
+      {cost && <p className="text-xs text-slate-500" data-testid="cost-mem0">Expected memory calls: {costKey ? expectedMem0(costKey, lowCost) : cost.mem0}</p>}
+      {models && models.length > 0 && (
+        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300" data-testid="models">
+          {models.length === 1 ? 'AI model: ' : 'AI models: '}
+          {models.map(([label, m], i) => <span key={label}>{i > 0 && ' · '}{models.length > 1 && <span className="text-slate-500">{label} </span>}<strong>{m?.model ?? '—'}</strong>{m?.service ? <span className="text-slate-500"> ({m.service})</span> : null}</span>)}
+        </p>
+      )}
       {children && <div className="mt-3 space-y-2">{children}</div>}
       <div className="mt-auto pt-3">
         <button type="button" className="btn-primary w-full" disabled={Boolean(blocked)} onClick={onRun} title={blocked ?? undefined}>

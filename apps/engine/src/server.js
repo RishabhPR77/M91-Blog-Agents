@@ -611,12 +611,18 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     if (seg[1] === 'roadmap') {
       if (path === '/api/roadmap' && method === 'GET') {
         const rec = await loadRoadmap(store)
-        const next = rec?.payload ? await pickTarget(store, { now, config }) : { kind: 'none', reason: 'there is no roadmap yet: generate it' }
+        let next = rec?.payload ? await pickTarget(store, { now, config }) : { kind: 'none', reason: 'there is no roadmap yet: generate it' }
+        // One click: the run plans the roadmap and approves it itself, then writes the first post.
+        if (next.kind === 'none' && config?.roadmap?.autoPlan) {
+          if (!rec?.payload) next = { kind: 'plan', reason: 'the run plans the roadmap first (1–2 more AI calls), approves it, then writes the first post' }
+          else if (next.reason === 'Approve the roadmap first' && config.roadmap.autoApprove && !roadmapProblems(rec.payload).length) next = { kind: 'plan', reason: 'the run approves the roadmap, then writes its first post' }
+        }
         const compactNext = {
           ...(next.kind === 'slot' ? { kind: 'slot', slot_id: next.slot.slot_id, title_idea: next.slot.title_idea, stage: next.stage }
             : next.kind === 'pinned' ? { kind: 'pinned', topic: next.pin.topic, pinned_id: next.pin.pinned_id }
               : next.kind === 'timely' ? { kind: 'timely', title: next.opportunity.title, opportunity_id: next.opportunity.opportunity_id, outlet: next.opportunity.outlet }
-                : { kind: 'none', reason: next.reason }),
+                : next.kind === 'plan' ? { kind: 'plan', reason: next.reason }
+                  : { kind: 'none', reason: next.reason }),
           // The timely lane: a Write now card that waits, and why.
           ...(next.timelyWaiting && { timely_waiting: next.timelyWaiting }),
           // The editor: why this one, and the topics it left out as repeats.

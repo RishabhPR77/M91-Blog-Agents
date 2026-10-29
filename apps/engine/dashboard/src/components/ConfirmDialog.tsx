@@ -43,7 +43,7 @@ export function ConfirmDialog({ open, title, children, expectedCalls, expectedMe
         <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-sm dark:bg-slate-800" data-testid="expected-calls">
           Expected AI calls: <strong>{expectedCalls}</strong>
         </p>
-        {expectedMem0 && <p className="mt-1 px-3 text-xs text-slate-500" data-testid="expected-mem0">Expected Mem0 requests: {expectedMem0}</p>}
+        {expectedMem0 && <p className="mt-1 px-3 text-xs text-slate-500" data-testid="expected-mem0">Expected memory calls: {expectedMem0}</p>}
         {requireTick && (
           <label className="mt-3 flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-0.5" checked={ticked} onChange={(e) => setTicked(e.target.checked)} />

@@ -45,6 +45,8 @@ export function fakeEnv(overrides = {}) {
     MEMORY_BACKEND: 'mem0',
     // The editor's choices are tested on their own; the older tests take the next roadmap slot.
     NEXT_PICK: 'roadmap',
+    // The older tests have the roadmap gate (generate and approve by hand); the one-click flow has its own tests.
+    ROADMAP_AUTO_PLAN: 'false', ROADMAP_AUTO_APPROVE: 'false',
     // The existing tests keep every record in Mem0; the work store tests (and the full-run measure) use WORK_STORE=local.
     WORK_STORE: 'mem0',
     ...overrides

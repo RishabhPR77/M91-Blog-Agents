@@ -26,6 +26,8 @@ export type NextUp = (
   | { kind: 'pinned'; topic: string; pinned_id: string }
   | { kind: 'timely'; title: string; opportunity_id: string; outlet: string }
   | { kind: 'none'; reason: string }
+  /** One click: the run plans (and approves) the roadmap itself, then writes the first post. */
+  | { kind: 'plan'; reason: string }
 ) & {
   timely_waiting?: TimelyWaiting
   /** The editor: why this topic, and the topics it left out as repeats of posts readers already have. */
@@ -52,5 +54,6 @@ export function nextUpText(next: NextUp | undefined): string {
   if (next.kind === 'slot') return `Stage ${next.stage.number} · ${next.stage.name} · ${next.slot_id} ${next.title_idea}`
   if (next.kind === 'pinned') return `Pinned topic: ${next.topic}`
   if (next.kind === 'timely') return `Timely post: ${next.title} (reported by ${next.outlet})`
+  if (next.kind === 'plan') return `First run: ${next.reason}`
   return next.reason
 }

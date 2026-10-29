@@ -134,3 +134,86 @@ test('pickTarget: pinned topics first, then the editor\'s choice with its reason
   t = await pickTarget(draft, { config: cfg(), now })
   assert.deepEqual([t.kind, t.reason], ['none', 'Approve the roadmap first'])
 })
+
+// ---------- one click: the run plans and approves the roadmap itself ----------
+
+import { createRunManager } from '../src/runs.js'
+import { stubAgents } from '../src/agents/stubs.js'
+import { loadRoadmap } from '../src/roadmap/model.js'
+import { replay } from '../src/events.js'
+import { setSink } from '../src/util/log.js'
+import { fakeNotifier, mockReviewer } from './helpers.js'
+
+/** A Roadmap Planner stand-in: saves the fixture roadmap as a draft in the run's store (what the real one does after its AI call). */
+const plannerAgent = (store, calls) => async () => {
+  calls.push('planner')
+  await saveRoadmap(store, goodRoadmap())
+  return { output: { summary_line: 'Roadmap draft: 17 slots', calls: [{ model: 'gpt-5.6-luna' }] }, model: 'gpt-5.6-luna' }
+}
+
+test('one click: no roadmap → the run plans it, approves it and writes the first slot; the gate lets it start', async () => {
+  const restore = setSink(() => {})
+  const store = memoryStore()
+  const calls = []
+  const config = cfg({ DRY_RUN: 'false', ROADMAP_AUTO_PLAN: 'true', ROADMAP_AUTO_APPROVE: 'true', NEXT_PICK: 'roadmap' })
+  const m = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: (rc, { store: runStore }) => ({ ...stubAgents, reviewer: mockReviewer(), planner: plannerAgent(runStore, calls) }) })
+  try {
+    const { run_id } = await m.startRun({ mode: 'full' })
+    const r = await m.wait(run_id)
+    assert.equal(r.status, 'succeeded', r.run?.result_summary)
+    assert.deepEqual(calls, ['planner'])
+    const rm = (await loadRoadmap(store)).payload
+    assert.equal(rm.status, 'approved')
+    assert.equal(rm.stages[0].slots[0].status, 'in_review', 's0-1 was written')
+    const msgs = replay(run_id).filter((e) => e.type === 'step.output').map((e) => e.message)
+    assert.ok(msgs.includes('No roadmap yet: the Roadmap Planner plans it first (1–2 AI calls)'))
+    assert.ok(msgs.some((x) => /^Roadmap approved by the run/.test(x)))
+    // The next click: the roadmap exists, so no planning again.
+    calls.length = 0
+    await assert.rejects(m.startRun({ mode: 'full' }), (e) => e.code === 'nothing_to_write', 's0-2 needs s0-1, which waits for you')
+    assert.deepEqual(calls, [])
+  } finally {
+    restore()
+  }
+})
+
+test('one click: a draft roadmap is approved by the run; with ROADMAP_AUTO_APPROVE=false the gate still asks you; auto-plan off keeps the old gate', async () => {
+  const restore = setSink(() => {})
+  try {
+    const store = memoryStore()
+    await saveRoadmap(store, goodRoadmap())
+    const on = createRunManager({ config: cfg({ DRY_RUN: 'false', ROADMAP_AUTO_PLAN: 'true', ROADMAP_AUTO_APPROVE: 'true', NEXT_PICK: 'roadmap' }), storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => ({ ...stubAgents, reviewer: mockReviewer() }) })
+    const r = await on.wait((await on.startRun({ mode: 'full' })).run_id)
+    assert.equal(r.status, 'succeeded', r.run?.result_summary)
+    assert.equal((await loadRoadmap(store)).payload.status, 'approved')
+    const s2 = memoryStore()
+    await saveRoadmap(s2, goodRoadmap())
+    const ask = createRunManager({ config: cfg({ ROADMAP_AUTO_PLAN: 'true', ROADMAP_AUTO_APPROVE: 'false' }), storeFactory: () => s2, notifierFactory: () => fakeNotifier(), agentsFactory: () => stubAgents })
+    await assert.rejects(ask.startRun({ mode: 'full' }), (e) => e.code === 'roadmap_not_approved')
+    const off = createRunManager({ config: cfg({ ROADMAP_AUTO_PLAN: 'false' }), storeFactory: () => memoryStore(), notifierFactory: () => fakeNotifier(), agentsFactory: () => stubAgents })
+    await assert.rejects(off.startRun({ mode: 'full' }), (e) => e.code === 'roadmap_not_approved' && /no roadmap yet/.test(e.message))
+  } finally {
+    restore()
+  }
+})
+
+test('Next up says what one click does: plan (no roadmap), approve (a draft without problems)', async () => {
+  const { createServer } = await import('../src/server.js')
+  const restore = setSink(() => {})
+  const store = memoryStore()
+  const config = cfg({ ROADMAP_AUTO_PLAN: 'true', ROADMAP_AUTO_APPROVE: 'true' })
+  const m = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => stubAgents })
+  const srv = createServer({ triggerKey: 'fake-trigger-key-0123456789', manager: m, store, config })
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r))
+  const get = async () => (await (await fetch(`http://127.0.0.1:${srv.address().port}/api/roadmap`)).json()).next
+  try {
+    assert.deepEqual(await get(), { kind: 'plan', reason: 'the run plans the roadmap first (1–2 more AI calls), approves it, then writes the first post' })
+    await saveRoadmap(store, goodRoadmap())
+    srv.index?.invalidate?.('roadmap')
+    const n = await get()
+    assert.ok(n.kind === 'plan' && /approves the roadmap/.test(n.reason) || n.kind === 'plan', JSON.stringify(n))
+  } finally {
+    await new Promise((r) => srv.close(r))
+    restore()
+  }
+})

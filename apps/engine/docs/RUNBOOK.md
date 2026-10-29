@@ -66,6 +66,12 @@ What it changes:
   with **Not covered**. When the page says guides were published after the roadmap was made, regenerate it.
 - New posts link to the earlier guides ("New to M91? Start with …") and never explain again what they already explain.
 
+## One click
+
+Click **Run full pipeline** on Control. That is all: if there is no roadmap yet, the run plans it (1–2 AI calls) and
+approves it, then writes the next post and waits for your approval. Each card on Control shows the AI model it uses.
+You can still open the **Roadmap** page to read or change the plan.
+
 ## What the next run writes
 
 You do not pick topics. Each full run decides, and **Next up** (Roadmap page and Control) says what and why:

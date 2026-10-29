@@ -142,7 +142,10 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     // Phase 12: a pipeline run needs an approved roadmap with a slot ready (or a pinned topic due), before any AI call.
     if (mode === 'full' && config.roadmap?.enabled) {
       const t = await pickTarget(readStore(configForRun(config, { dryRun, params })), { now, config })
-      if (t.kind === 'none') throw new RunError(/Approve the roadmap first|no roadmap yet/.test(t.reason) ? 'roadmap_not_approved' : 'nothing_to_write', t.reason, 409)
+      const planned = /Approve the roadmap first|no roadmap yet/.test(t.reason ?? '')
+      // One click: the run plans the roadmap (and approves it) itself.
+      const oneClick = planned && config.roadmap.autoPlan && (/no roadmap yet/.test(t.reason) || config.roadmap.autoApprove)
+      if (t.kind === 'none' && !oneClick) throw new RunError(planned ? 'roadmap_not_approved' : 'nothing_to_write', t.reason, 409)
     }
     if (mode === 'writer') await checkWriterParams(params, configForRun(config, { dryRun, params }))
     if (mode === 'reviewer') await checkReviewerParams(params, configForRun(config, { dryRun, params }))
