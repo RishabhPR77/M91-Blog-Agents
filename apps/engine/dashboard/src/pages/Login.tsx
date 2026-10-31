@@ -1,6 +1,8 @@
 // Shown only when the API answers 401 (the login is on). The engine sets an HttpOnly session cookie. With the admin
 // login (always on when hosted) it asks for the admin ID and password; otherwise for the dashboard password only.
-import { useState, type FormEvent } from 'react'
+// A link opened from Slack arrives without the (SameSite=Strict) cookie and lands here: when the session is in fact
+// valid, the page goes on at once. A download (/api/...) is opened as a full page, not inside the dashboard.
+import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, errorMessage } from '../api/client'
@@ -22,6 +24,14 @@ export default function Login() {
   // Without a session /api/health says only how to log in.
   const health = useQuery({ queryKey: ['login-mode'], queryFn: () => api<Health>('/api/health'), retry: false, meta: { silent: true } })
   const admin = health.data?.login === 'admin'
+  const next = safeNext(params.get('next'))
+  const go = (to: string) => (to.startsWith('/api/') ? window.location.assign(to) : navigate(to, { replace: true }))
+  // A full health answer (it has the version) means the session is valid: no need to log in again.
+  const signedIn = Boolean((health.data as { version?: string } | undefined)?.version)
+  useEffect(() => {
+    if (signedIn) go(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedIn])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -31,7 +41,7 @@ export default function Login() {
       await api('/api/login', { method: 'POST', body: admin ? { username, password } : { password } })
       setPassword('')
       await qc.invalidateQueries()
-      navigate(safeNext(params.get('next')), { replace: true })
+      go(next)
     } catch (err) {
       setError(errorMessage(err))
     } finally {

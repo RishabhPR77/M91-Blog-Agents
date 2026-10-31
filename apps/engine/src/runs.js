@@ -29,6 +29,8 @@ import { saveFinalExport, previewExport, exportableDraft, latestExport, ExportEr
 import { createDocstar, publishToDocstar } from './publisher/docstar.js'
 import { createPublisher, publishPreflight, PublishError } from './publisher/index.js'
 import { draftsOf } from './writer/save.js'
+import { publishToSlack } from './publisher/slack.js'
+import { pickOfBrief } from './weekly/editor.js'
 import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopic, runApprovalReview } from './approval.js'
 import { runScout } from './scout/index.js'
 import { syncGuides, guidesSummary } from './guides/sync.js'
@@ -42,7 +44,7 @@ export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer
 // The Publisher's modes (Phase 7): code only, no AI calls.
 export const PUBLISH_MODES = Object.freeze(['publish', 'unpublish', 'set_index', 'rebuild_blog'])
 // Which publish modes each PUBLISH_TARGET supports (Phase 11). none: no publishing at all (the export is the output).
-export const TARGET_MODES = Object.freeze({ none: [], embarko: ['publish', 'unpublish', 'set_index', 'rebuild_blog'], docstar: ['publish', 'unpublish'] })
+export const TARGET_MODES = Object.freeze({ none: [], embarko: ['publish', 'unpublish', 'set_index', 'rebuild_blog'], docstar: ['publish', 'unpublish'], slack: ['publish'] })
 // The human's decisions on a draft that waits at awaiting_human (Phase 5.5).
 export const DECISION_MODES = Object.freeze(['approve', 'human_revise', 'reject_topic', 'approval_review'])
 export const TRIGGERS = Object.freeze(['manual', 'cron', 'api', 'cli'])
@@ -292,23 +294,35 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
 
   async function runMode({ mode, runId, params, runConfig, store, notifier, signal }) {
     const agentDeps = agentsFactory ? undefined : {}
+    // One top-level step with its events (started / finished + output / failed or cancelled): the decision and publish
+    // modes, and the approval a full run makes itself (AUTO_APPROVE).
+    const runStep = async (agent, fn) => {
+      emit('step.started', { agent, step: agent })
+      try {
+        const out = await fn()
+        emit('step.finished', { agent, step: agent })
+        const sum = summariseOutput(agent, out)
+        if (sum) emit('step.output', { agent, step: agent, ...sum })
+        return out
+      } catch (error) {
+        stepEnded(agent, error, signal)
+        throw error
+      }
+    }
+    const makePublisher = () => (publisherFactory ?? ((cfg, d) => createPublisher({ config: cfg, ...d })))(runConfig, { store, notifier })
     if (DECISION_MODES.includes(mode) || PUBLISH_MODES.includes(mode)) {
       const agents = agentsFactory?.(runConfig, { store, notifier }) ?? defaultAgents({ config: runConfig, store, notifier, agentDeps })
-      // One top-level step with its events (started / finished + output / failed or cancelled).
-      const runStep = async (agent, fn) => {
-        emit('step.started', { agent, step: agent })
-        try {
-          const out = await fn()
-          emit('step.finished', { agent, step: agent })
-          const sum = summariseOutput(agent, out)
-          if (sum) emit('step.output', { agent, step: agent, ...sum })
-          return out
-        } catch (error) {
-          stepEnded(agent, error, signal)
-          throw error
-        }
+      const publisher = makePublisher()
+      if (mode === 'publish' && runConfig.publish?.target === 'slack') {
+        // PUBLISH_TARGET=slack: the Slack message with the .md download link, again (0 AI calls).
+        const out = await runStep('publisher', async () => {
+          const d = (await draftsOf(store, params.brief_id)).find((x) => x.status === 'approved' || x.status === 'published')
+          const pick = await pickOfBrief(store, params.brief_id).catch(() => null)
+          const meta = { title: d?.payload?.title, total: d?.metadata?.review_total ?? null, words: d?.payload?.word_count ?? null, grade: d?.payload?.reading?.post_grade ?? null, reason: pick?.reason ?? null, auto: d?.metadata?.approved_by === 'auto' }
+          return publishToSlack({ notifier, config: runConfig, briefId: params.brief_id, exportRecord: await latestExport(store, params.brief_id), meta, store, now })
+        })
+        return { status: 'succeeded', brief_id: params.brief_id, summary: out.summary, warnings: out.warnings }
       }
-      const publisher = (publisherFactory ?? ((cfg, d) => createPublisher({ config: cfg, ...d })))(runConfig, { store, notifier })
       if (PUBLISH_MODES.includes(mode) && runConfig.publish?.target === 'docstar') {
         // Phase 11: Docstar (answers "not configured" until the DOCSTAR_* keys are set; nothing is sent).
         const docstar = createDocstar({ config: runConfig })
@@ -343,6 +357,18 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
       if (!params.brief_id) store.newBrief(briefId)
       const r = await runPipeline({ config: runConfig, store, notifier, agents, now, runId, briefId, lock: false, signal })
       const status = r.state === 'awaiting_human' ? 'succeeded' : r.state === 'cancelled' ? 'cancelled' : 'failed'
+      // AUTO_APPROVE: the post that passed the AI review (or the best version, APPROVE_BEST_ON_FAIL) is approved,
+      // exported and published in this same run. If that is refused, it simply waits for you.
+      if (status === 'succeeded' && runConfig.approval?.autoApprove) {
+        const best = r.best_of_failed ?? null
+        try {
+          const a = await runApprove({ briefId: r.briefId, runId, params: { brief_id: r.briefId, publish: true, auto: true, ...(best && { force_unreviewed: true, best_of_failed: best }) }, config: runConfig, store, notifier, agents, runStep, now, publisher: makePublisher() })
+          return { status, brief_id: r.briefId, summary: `${r.summary}; ${a.summary}`, warnings: [...(r.warnings ?? []), ...(a.warnings ?? [])], run_fields: a.run_fields }
+        } catch (error) {
+          if (isCancel(error, signal)) throw error
+          return { status, brief_id: r.briefId, summary: `${r.summary}; not approved automatically: ${error.message}`, warnings: [...(r.warnings ?? []), `not approved automatically (it waits for you): ${error.message}`] }
+        }
+      }
       return { status, brief_id: r.briefId, summary: r.error ?? r.summary ?? `pipeline ${r.state} (version ${r.version ?? 0})`, error: r.error, warnings: r.warnings }
     }
     const agents = agentsFactory?.(runConfig, { store, notifier })
@@ -554,6 +580,11 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     const target = runConfig.publish?.target ?? 'embarko'
     if (target === 'none') throw new RunError('publishing_off', 'publishing is off (PUBLISH_TARGET=none): the Markdown export is the output', 409)
     if (!TARGET_MODES[target].includes(mode)) throw new RunError('not_supported', `${mode} is not available with PUBLISH_TARGET=${target}`, 409)
+    if (target === 'slack') {
+      if (typeof params.brief_id !== 'string' || !params.brief_id.trim()) throw new RunError('bad_params', 'publish needs params.brief_id')
+      if (!(await latestExport(readStore(runConfig), params.brief_id))) throw new RunError('no_export', `brief ${params.brief_id} has no final Markdown export: approve it first`, 409)
+      return
+    }
     if (target === 'docstar') {
       if (mode === 'publish' && !(await latestExport(readStore(runConfig), params.brief_id))) throw new RunError('no_export', `brief ${params.brief_id} has no final Markdown export: approve it first`, 409)
       if (mode === 'publish' && params.draft !== undefined && typeof params.draft !== 'boolean') throw new RunError('bad_params', 'params.draft must be true or false')

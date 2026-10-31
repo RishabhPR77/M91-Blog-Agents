@@ -16,6 +16,8 @@ import { latestGuideDoc } from './experience/index.js'
 import { guideText } from './experience/review.js'
 import { saveFinalExport, latestExport } from './export/index.js'
 import { createDocstar, publishToDocstar } from './publisher/docstar.js'
+import { publishToSlack } from './publisher/slack.js'
+import { pickOfBrief } from './weekly/editor.js'
 import { createPublisher } from './publisher/index.js'
 import { finishTimely } from './timely/model.js'
 import { knowledgeOf, saveKnowledge } from './knowledge.js'
@@ -94,6 +96,9 @@ export async function checkDecision(mode, params, { store, config }) {
   if (mode === 'approve' && params.publish !== undefined && typeof params.publish !== 'boolean') {
     throw new ApprovalError('bad_params', 'publish must be true or false')
   }
+  if (mode === 'approve' && params.auto !== undefined && typeof params.auto !== 'boolean') {
+    throw new ApprovalError('bad_params', 'auto must be true or false')
+  }
   if (mode === 'human_revise') {
     const fb = params.feedback
     if (typeof fb !== 'string' || fb.trim().length < FEEDBACK_MIN_CHARS || fb.length > FEEDBACK_MAX_CHARS) {
@@ -170,8 +175,10 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
   // approved_unreviewed: no passing review of this version (force_unreviewed, or REREVIEW_AFTER_HUMAN=false).
   const unreviewed = (await reviewOfDraft(store, d))?.payload?.pass !== true
   if (unreviewed) warnings.push(`v${version} approved without a Reviewer pass (${params.force_unreviewed === true ? 'force_unreviewed' : 'REREVIEW_AFTER_HUMAN=false'})`)
-  await store.updateRecord(d.id, undefined, { status: 'approved', approved_by: 'human', approved_at: at, approved_unreviewed: unreviewed })
-  if (briefRec?.id) await store.updateRecord(briefRec.id, undefined, { status: 'approved', approved_by: 'human', approved_at: at })
+  // AUTO_APPROVE: the run approves it itself (approved_by "auto"); from the dashboard or the CLI it is you.
+  const by = params.auto === true ? 'auto' : 'human'
+  await store.updateRecord(d.id, undefined, { status: 'approved', approved_by: by, approved_at: at, approved_unreviewed: unreviewed })
+  if (briefRec?.id) await store.updateRecord(briefRec.id, undefined, { status: 'approved', approved_by: by, approved_at: at })
   // The timely lane: the card of this post (if any) is written.
   const timely = config.timely?.enabled ? await finishTimely(store, briefId, 'approved', { now }) : null
   const total = d.metadata?.review_total ?? null
@@ -190,9 +197,10 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
     warnings.push(`promo pack failed (approval stands): ${error.message}`)
   }
   const title = d.payload?.title ?? briefRec?.payload?.titles?.[0] ?? briefId
-  await notifySafe(notifier, warnings, 'slack', `✅ Approved by you: *${title}* · v${version}`)
+  // PUBLISH_TARGET=slack: the publish step's message says it all (one message per post, not two).
+  if (config.publish?.target !== 'slack') await notifySafe(notifier, warnings, 'slack', `✅ ${by === 'auto' ? 'Approved automatically' : 'Approved by you'}: *${title}* · v${version}`)
   if (promo?.pack) await notifySafe(notifier, warnings, 'slack', `Promo pack preview (${promo.status}):\n\nLinkedIn:\n${promo.pack.linkedin_post}\n\nNewsletter:\n${promo.pack.newsletter_blurb}`)
-  emit('approval.approved', { agent: 'human', message: `approved by you (v${version}${unreviewed ? ', unreviewed' : ''})`, data: { brief_id: briefId, version, total, approved_unreviewed: unreviewed } })
+  emit('approval.approved', { agent: by === 'auto' ? 'orchestrator' : 'human', message: `approved ${by === 'auto' ? 'automatically' : 'by you'} (v${version}${unreviewed ? ', unreviewed' : ''})`, data: { brief_id: briefId, version, total, approved_unreviewed: unreviewed } })
   const scoreText = unreviewed ? ', not reviewed' : total === null ? '' : `, score ${total}`
 
   // Phase 11: the final Markdown export (0 AI calls): the markdown_export record of the brief and the file in the
@@ -235,6 +243,19 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
   let published = null
   if (target === 'none') {
     await runStep('publisher', async () => ({ placeholder: true, message: 'Publishing is off (PUBLISH_TARGET=none): the Markdown export is the output' }))
+  } else if (target === 'slack') {
+    // One Slack message with the .md download link (sent when publishing now; "Approve only" sends nothing).
+    published = await runStep('publisher', async () => {
+      if (!publishNow) return { placeholder: true, message: 'Not sent to Slack: approved only. Use Publish in the dashboard (or npm run publish)' }
+      const pick = await pickOfBrief(store, briefId).catch(() => null)
+      const meta = { title, total, words: d.payload?.word_count ?? null, grade: d.payload?.reading?.post_grade ?? null, reason: pick?.reason ?? briefRec?.payload?.why_today ?? null, auto: by === 'auto', bestOfFailed: params.best_of_failed ?? null }
+      return publishToSlack({ notifier, config, briefId, exportRecord: await latestExport(store, briefId), meta, store, now })
+    }).catch((error) => {
+      if (isCancel(error)) throw error
+      warnings.push(`Slack message failed (the post stays approved; send it again with Publish): ${error.message}`)
+      return null
+    })
+    if (published?.warnings?.length) warnings.push(...published.warnings)
   } else if (target === 'docstar') {
     published = await runStep('publisher', async () => {
       if (!publishNow) return { placeholder: true, message: 'Not sent to Docstar: approved only. Use Publish in the dashboard (or npm run publish)' }
@@ -258,7 +279,8 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
   }
   const pubText = published?.url ? `; published → ${published.url}` : ''
   const expText = exported?.filename ? `; Markdown export: ${exported.filename}` : ''
-  return { status: 'succeeded', brief_id: briefId, summary: `approved by you (v${version}${scoreText})${expText}${pubText}`, warnings, run_fields: { approved_unreviewed: unreviewed } }
+  const slackText = target === 'slack' && published?.status === 'sent' ? '; sent to Slack' : ''
+  return { status: 'succeeded', brief_id: briefId, summary: `approved ${by === 'auto' ? 'automatically' : 'by you'} (v${version}${scoreText})${expText}${pubText}${slackText}`, warnings, run_fields: { approved_unreviewed: unreviewed, approved_by: by } }
 }
 
 /**

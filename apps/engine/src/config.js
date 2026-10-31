@@ -32,7 +32,7 @@ export const SECRET_KEYS = Object.freeze([
 
 // Phase 11: where an approved post goes. none: nowhere (the Markdown export is the output); embarko: the
 // Phase 7 blog; docstar: Docstar (the adapter answers "not configured" until the DOCSTAR_* keys are set).
-export const PUBLISH_TARGETS = Object.freeze(['none', 'embarko', 'docstar'])
+export const PUBLISH_TARGETS = Object.freeze(['none', 'embarko', 'docstar', 'slack'])
 
 const DEFAULTS = {
   VIASOCKET_API_BASE: 'https://flow-api.viasocket.com/',
@@ -91,6 +91,10 @@ const DEFAULTS = {
   WORK_STORE: 'local', WORK_KEEP_DAYS: '7',
   EMBARKO_API_BASE: 'https://ship.embarko.ai', EMBARKO_AGENT_NAME: 'm91-blog-engine', BLOG_BUILD_TIMEOUT_MS: '300000', PUBLISH_VERIFY_TIMEOUT_MS: '120000',
   MAX_HUMAN_REVISIONS: '5', REREVIEW_AFTER_HUMAN: 'true', M91_NOTIFY_ON_AWAITING: 'false',
+  // AUTO_APPROVE: a post that passes the AI review is approved, exported and published in the same run (no waiting for
+  // you). APPROVE_BEST_ON_FAIL: when the Reviewer still rejects it at the limit (MAX_WRITER_REVISIONS), the version with
+  // the highest score goes ahead instead of failing (only if its hard checks passed).
+  AUTO_APPROVE: 'true', APPROVE_BEST_ON_FAIL: 'true',
   // TEST-ONLY CLI commands (npm run test:await); never available through the API
   ALLOW_TEST_COMMANDS: 'false',
   // Phase 3.5: dashboard API
@@ -108,7 +112,10 @@ const DEFAULTS = {
   PROMO_ENABLED: 'false',
   // Phase 11 (fallback plan): the Experience Designer is off and nothing is published; the reviewed draft becomes a
   // Markdown file (apps/engine/exports unless EXPORT_DIR is set). Docstar is filled in once its keys exist.
-  EXPERIENCE_ENABLED: 'false', PUBLISH_TARGET: 'none', EXPORT_DIR: '',
+  EXPERIENCE_ENABLED: 'false', PUBLISH_TARGET: 'slack', EXPORT_DIR: '',
+  // The engine's own address, for links in Slack (the .md download, the post page). Empty: https://<APP_NAME>.embarko.app
+  // when hosted, else http://localhost:<PORT>.
+  ENGINE_PUBLIC_URL: '',
   DOCSTAR_API_URL: '', DOCSTAR_API_KEY: '', DOCSTAR_COLLECTION_ID: '', DOCSTAR_ORG_ID: '',
   BLOG_APP_NAME: 'm91-blog', BLOG_BASE_URL: 'https://m91-blog.embarko.app', NOINDEX_FIRST_N_POSTS: '10',
   // Phase 3: Strategist
@@ -396,7 +403,9 @@ export function loadConfig(env = process.env) {
     approval: {
       maxHumanRevisions: int('MAX_HUMAN_REVISIONS', { max: 50 }),
       rereviewAfterHuman: bool('REREVIEW_AFTER_HUMAN'),
-      notifyOnAwaiting: bool('M91_NOTIFY_ON_AWAITING')
+      notifyOnAwaiting: bool('M91_NOTIFY_ON_AWAITING'),
+      autoApprove: bool('AUTO_APPROVE'),
+      bestOnFail: bool('APPROVE_BEST_ON_FAIL')
     },
     gates: {
       passScoreMin: int('PASS_SCORE_MIN', { min: 0, max: 100 }),
@@ -428,6 +437,8 @@ export function loadConfig(env = process.env) {
     },
     runtime: {
       autoPublish: bool('AUTO_PUBLISH'),
+      // Links in Slack point here (no trailing slash).
+      publicUrl: (url('ENGINE_PUBLIC_URL') || (hosted ? `https://${env.APP_NAME.trim()}.embarko.app` : `http://localhost:${env.PORT || DEFAULTS.PORT}`)).replace(/\/+$/, ''),
       dryRun,
       triggerKey: str('PIPELINE_TRIGGER_KEY'),
       logLevel: oneOf('LOG_LEVEL', LOG_LEVELS),

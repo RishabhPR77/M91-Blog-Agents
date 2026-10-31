@@ -1,6 +1,6 @@
 // The login page: the admin ID + password form when the engine says so (always when hosted), the single password
 // form otherwise; wrong credentials show the engine's message; a right pair goes on to the page asked for.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
@@ -58,5 +58,18 @@ describe('Login', () => {
     await userEvent.type(screen.getByLabelText('Password'), 'whatever password')
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('too many login attempts; wait a minute'))
+  })
+
+  it('a link from Slack lands here without the cookie: a valid session goes on at once; a download opens as a full page', async () => {
+    mockFetch({ 'GET /api/health': { body: { ok: true, version: '0.2.0', run_in_progress: false } } })
+    const first = page('/login?next=%2Froadmap')
+    expect(await screen.findByText('roadmap page')).toBeInTheDocument()
+    first.unmount()
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign })
+    mockFetch({ 'GET /api/health': { body: { ok: true, version: '0.2.0', run_in_progress: false } } })
+    page('/login?next=%2Fapi%2Fexports%2F261031-1000-ABCD%2Fdownload')
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/api/exports/261031-1000-ABCD/download'))
+    vi.unstubAllGlobals()
   })
 })

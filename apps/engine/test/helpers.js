@@ -39,6 +39,8 @@ export function fakeEnv(overrides = {}) {
     // News cards exist (rapid response on); the news check before each run has its own tests, so it is off here.
     RAPID_RESPONSE_ENABLED: 'true',
     TIMELY_CHECK_ON_RUN: 'false',
+    // The older tests have the human approval step and a failed review stays failed; the auto-approve tests turn them on.
+    AUTO_APPROVE: 'false', APPROVE_BEST_ON_FAIL: 'false',
     // The guide sync reads msg91.com: off in unit tests unless a test turns it on (with a fake fetch).
     GUIDES_SYNC_ON_RUN: 'false',
     // The older tests run on the Mem0 backend (its fake client); the viaSocket memory store has its own tests.

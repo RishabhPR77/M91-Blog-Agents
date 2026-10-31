@@ -55,11 +55,12 @@ export function buildJourney({ briefs = [], drafts = [], reviews = [], exportRec
     ? { state: review.pass ? 'done' : 'failed', detail: `${review.total ?? '?'}/100 · ${review.pass ? 'pass' : 'needs work'}` }
     : { state: approved ? 'off' : 'todo', detail: approved ? 'not reviewed' : '' }
   s.you = draft?.status === 'awaiting_human' ? { state: 'waiting', detail: 'Waiting for your decision' }
-    : approved ? { state: 'done', detail: draft.metadata?.approved_at ? `Approved ${String(draft.metadata.approved_at).slice(0, 16).replace('T', ' ')}` : 'Approved' }
+    : approved ? { state: 'done', detail: `${draft.metadata?.approved_by === 'auto' ? 'Approved automatically' : 'Approved'}${draft.metadata?.approved_at ? ` ${String(draft.metadata.approved_at).slice(0, 16).replace('T', ' ')}` : ''}` }
       : ['rejected'].includes(draft?.status ?? brief?.status) ? { state: 'failed', detail: 'Topic rejected' }
         : { state: 'todo', detail: '' }
   s.export = { state: exportRec ? 'done' : 'todo', detail: exportRec?.payload?.filename ?? '' }
   s.published = target === 'none' ? { state: 'off', detail: 'Publishing is off: the Markdown export is the output' }
+    : target === 'slack' ? (exportRec?.payload?.slack_sent_at ? { state: 'done', detail: 'Sent to Slack' } : { state: 'todo', detail: '' })
     : live || docstarLive || draft?.status === 'published' ? { state: 'done', detail: exportRec?.payload?.docstar_url ?? live?.payload?.url ?? live?.metadata?.slug ?? 'Live' }
       : exportRec?.payload?.docstar_state === 'draft' ? { state: 'todo', detail: 'Sent to Docstar as a draft' }
         : { state: 'todo', detail: '' }

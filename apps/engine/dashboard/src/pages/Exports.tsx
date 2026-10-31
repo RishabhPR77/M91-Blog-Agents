@@ -19,7 +19,8 @@ type ExportDetail = ExportItem & { markdown: string; front_matter: Record<string
 const TARGET_TEXT = {
   none: 'Publishing is off (PUBLISH_TARGET=none): these files are the output.',
   embarko: 'Approved posts also go to the blog (PUBLISH_TARGET=embarko).',
-  docstar: 'Approved posts go to Docstar (PUBLISH_TARGET=docstar).'
+  docstar: 'Approved posts go to Docstar (PUBLISH_TARGET=docstar).',
+  slack: 'Approved posts go to Slack with a link to download their .md (PUBLISH_TARGET=slack).'
 } as const
 
 export default function Exports() {

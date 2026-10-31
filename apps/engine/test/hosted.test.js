@@ -242,6 +242,12 @@ test('every /api route needs the session except /api/health, the login and the l
     const lone = []
     for (const [method, path] of API_ROUTES) {
       const r = await call(method, path, method === 'GET' ? undefined : {})
+      // A Markdown download link (sent to Slack) goes to the login page first, then comes back to the download.
+      if (path.endsWith('/download')) {
+        assert.equal(r.status, 302, path)
+        assert.equal(r.headers.get('location'), `/login?next=${encodeURIComponent(path)}`)
+        continue
+      }
       if (r.status !== 401) lone.push(`${method} ${path} -> ${r.status}`)
       assert.equal(r.json?.error?.code, 'unauthorized', `${method} ${path}`)
     }

@@ -384,7 +384,7 @@ test('Phase 6: settings list built and decision modes and the approval settings 
     assert.ok(s.built_modes.includes('full') && s.built_modes.includes('approval_review'))
     assert.ok(['publish', 'unpublish', 'set_index', 'rebuild_blog'].every((m) => s.built_modes.includes(m)))
     assert.deepEqual(s.decision_modes, ['approve', 'human_revise', 'reject_topic', 'approval_review'])
-    assert.deepEqual(s.approval, { max_human_revisions: 4, rereview_after_human: false, m91_notify_on_awaiting: false })
+    assert.deepEqual(s.approval, { max_human_revisions: 4, rereview_after_human: false, m91_notify_on_awaiting: false, auto_approve: false, best_on_fail: false })
   })
 })
 

@@ -27,7 +27,7 @@ export type Settings = {
   content: Record<string, unknown>
   runtime: { dry_run: boolean; auto_publish: boolean; log_level: string }
   dashboard: { auth: boolean; port: number | null }
-  approval?: { max_human_revisions: number; rereview_after_human: boolean; m91_notify_on_awaiting: boolean }
+  approval?: { max_human_revisions: number; rereview_after_human: boolean; m91_notify_on_awaiting: boolean; auto_approve?: boolean; best_on_fail?: boolean }
   built_modes?: string[]
   decision_modes?: string[]
   /** Phase 7: the blog and the Publisher (deploy_token_set is yes/no only, never the token). */
@@ -35,7 +35,7 @@ export type Settings = {
   publish_modes?: string[]
   /** Phase 8: interactive blocks. */
   /** Phase 11: where approved posts go (none: the Markdown export is the output) and whether Docstar is set up. */
-  publish?: { target: 'none' | 'embarko' | 'docstar'; docstar_configured: boolean; auto_publish: boolean }
+  publish?: { target: 'none' | 'embarko' | 'docstar' | 'slack'; docstar_configured: boolean; auto_publish: boolean }
   designer?: { enabled?: boolean; max_components?: number; max_repairs: number; interactive_default: boolean; max_designer_revisions?: number | null; promo_enabled?: boolean }
 }
 

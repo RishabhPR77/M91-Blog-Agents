@@ -152,7 +152,7 @@ export default function ApprovalDetail() {
   const revisionsLeft = maxRevisions == null ? null : maxRevisions - usedRevisions
   const fbLen = feedback.trim().length
   const fbValid = fbLen >= FEEDBACK_MIN && feedback.length <= FEEDBACK_MAX
-  // "Approve and publish" while there is somewhere to publish (Docstar or the blog); with PUBLISH_TARGET=none the
+  // "Approve and publish" while there is somewhere to publish (Slack, Docstar or the blog); with PUBLISH_TARGET=none the
   // Markdown export is the output and the button is "Approve".
   const publishOn = flags.target !== 'none'
   const openApprove = (publish: boolean) => {
@@ -298,7 +298,7 @@ export default function ApprovalDetail() {
                   Approve only (publish later)
                 </button>
               )}
-              <p className="text-xs text-slate-500" data-testid="approve-explain">{publishOn ? `One run: approve, save the Markdown export, then ${flags.target === 'docstar' ? 'send it to Docstar' : 'publish it to the blog'}. No AI calls.` : 'Approving saves the final Markdown export (the output while publishing is off). No AI calls.'}</p>
+              <p className="text-xs text-slate-500" data-testid="approve-explain">{publishOn ? `One run: approve, save the Markdown export, then ${flags.target === 'docstar' ? 'send it to Docstar' : flags.target === 'slack' ? 'send it to Slack with a link to download the .md' : 'publish it to the blog'}. No AI calls.` : 'Approving saves the final Markdown export (the output while publishing is off). No AI calls.'}</p>
               {!hardPassed && (
                 <p className="text-xs text-red-600 dark:text-red-400" data-testid="approve-blocked">
                   Approve is off: the hard content checks did not pass{failedHard.length ? ` (${failedHard.map((c) => c.id).join(', ')})` : ' (no check results)'}. Send a counter prompt or reject the topic.
@@ -412,7 +412,7 @@ export default function ApprovalDetail() {
         </div>
       ) : (
         <ConfirmDialog open title={`${approvePublish ? 'Approve and publish' : 'Approve'} v${d.draft.version}?`} expectedCalls={approveCalls} expectedMem0={approveCost.mem0} confirmLabel={approvePublish ? 'Approve and publish' : 'Approve'} busy={busy} onConfirm={() => run(approveAction)} onCancel={() => setApproveOpen(false)}>
-          <p>{promoOn ? 'The promo pack is created, then the' : 'No AI call. One run:'} approval, the Markdown export{approvePublish ? `, then ${flags.target === 'docstar' ? 'the post goes to Docstar' : 'the post is published to the blog'}` : publishOn ? ' (publish it later with Publish)' : ''}. You see each step on this page.{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>
+          <p>{promoOn ? 'The promo pack is created, then the' : 'No AI call. One run:'} approval, the Markdown export{approvePublish ? `, then ${flags.target === 'docstar' ? 'the post goes to Docstar' : flags.target === 'slack' ? 'a Slack message with its .md download link' : 'the post is published to the blog'}` : publishOn ? ' (publish it later with Publish)' : ''}. You see each step on this page.{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>
         </ConfirmDialog>
       ))}
 

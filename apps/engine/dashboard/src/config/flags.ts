@@ -5,7 +5,7 @@
 // shows (Embarko is no longer used: with PUBLISH_TARGET=none no blog item may appear, not even for a moment).
 import type { Settings } from '../api/types'
 
-export type PublishTarget = 'none' | 'embarko' | 'docstar'
+export type PublishTarget = 'none' | 'embarko' | 'docstar' | 'slack'
 export type Flags = { experienceOn: boolean; target: PublishTarget; blogOn: boolean; docstarConfigured: boolean }
 
 export function flagsOf(s: Settings | undefined): Flags {

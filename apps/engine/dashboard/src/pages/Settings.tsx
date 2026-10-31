@@ -48,13 +48,15 @@ export default function Settings() {
               <dt className="text-slate-500">Max counter prompts</dt><dd data-testid="setting-max-revisions">{d.approval.max_human_revisions} per brief</dd>
               <dt className="text-slate-500">Re-review after a change</dt><dd>{yes(d.approval.rereview_after_human)}</dd>
               <dt className="text-slate-500">M91 alert when waiting</dt><dd>{yes(d.approval.m91_notify_on_awaiting)}</dd>
+              <dt className="text-slate-500">Approve automatically</dt><dd data-testid="setting-auto-approve">{d.approval.auto_approve === undefined ? 'not reported' : `${yes(d.approval.auto_approve)} (AUTO_APPROVE: a post that passes the AI review is approved and published in the same run)`}</dd>
+              <dt className="text-slate-500">Best version if all fail</dt><dd>{d.approval.best_on_fail === undefined ? 'not reported' : `${yes(d.approval.best_on_fail)} (APPROVE_BEST_ON_FAIL)`}</dd>
             </dl>
           ) : <p className="text-sm text-slate-500">Not reported by this engine (restart it).</p>}
         </Card>
         <Card title="Output and publishing">
           {d.publish ? (
             <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
-              <dt className="text-slate-500">Publish target</dt><dd data-testid="setting-publish-target">{d.publish.target === 'none' ? 'none: the Markdown export is the output' : d.publish.target === 'docstar' ? 'Docstar' : 'the blog (Embarko)'} (PUBLISH_TARGET)</dd>
+              <dt className="text-slate-500">Publish target</dt><dd data-testid="setting-publish-target">{d.publish.target === 'none' ? 'none: the Markdown export is the output' : d.publish.target === 'docstar' ? 'Docstar' : d.publish.target === 'slack' ? 'Slack: a message with a link to download the .md' : 'the blog (Embarko)'} (PUBLISH_TARGET)</dd>
               <dt className="text-slate-500">Markdown export</dt><dd>saved on every approval (Exports page)</dd>
               <dt className="text-slate-500">Docstar keys set</dt><dd data-testid="setting-docstar">{d.publish.docstar_configured ? 'yes' : 'no (DOCSTAR_API_URL, DOCSTAR_API_KEY, DOCSTAR_COLLECTION_ID)'}</dd>
             </dl>

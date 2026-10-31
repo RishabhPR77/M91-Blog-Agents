@@ -555,3 +555,21 @@ One post a week (the cron), so each run decides what is most useful now instead 
 - **Dashboard:** **This week** (in place of Roadmap: next run, the editor's decisions with reasons, signals, hook and
   runners-up with **Pin for next week**, the news cards, the live guides); **Why this post** on the post page; the
   topic line and last pick on Control; the Editor step in the run tracker.
+
+## Approved automatically, sent to Slack
+
+- `AUTO_APPROVE=true` (default): a full run that ends with a Reviewer pass calls the approve step itself
+  (`approved_by: "auto"`): the Markdown export, then the publish step. No "ready for your approval" messages.
+- `APPROVE_BEST_ON_FAIL=true` (default): when the review loop hits its limit without a pass, the best-scoring version
+  is saved as a new, newest version (`best_of: { version, total, reviews }`, its review copied) and goes ahead (approved
+  with `force_unreviewed`, so `approved_unreviewed: true`). Not when its hard checks failed.
+- `PUBLISH_TARGET=slack` (the new default): `src/publisher/slack.js` sends one message through the existing
+  `blog-slack-post` flow (body unchanged: `{ key, text }`): title, score, words, grade, the editor's reason, a link
+  to `GET /api/exports/:id/download` and to the post page; the export record keeps `slack_sent_at` (the journey's
+  Published step). The "publish" mode sends it again. `ENGINE_PUBLIC_URL` (default `https://<APP_NAME>.embarko.app`
+  when hosted) builds the links.
+- A signed-out browser opening the download link is sent to `/login?next=…`; the login page goes on at once when the
+  session is valid (the cookie is `SameSite=Strict`, so a click from Slack arrives without it) and opens a download as
+  a full page.
+- VIASOCKET-PENDING: viaSocket's Slack app has no "upload file" action (reported as a missing capability), so the
+  .md is a link, not an attachment.

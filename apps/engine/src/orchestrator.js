@@ -270,6 +270,8 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
   let guideDoc
   let designFeedback = []
   let best = null
+  // APPROVE_BEST_ON_FAIL: set when the best of the rejected versions went ahead ({ version, total, reviews, reason }).
+  let bestOfFailed = null
   let reviews = 0
   const warnings = []
   // What this run writes about: the weekly editor's pick, a due pinned topic or a Write now card.
@@ -482,7 +484,8 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
         if (!review?.record_id) await store.createRecord({ type: 'review', briefId, payload: review, status: review?.pass ? 'pass' : 'fail', version })
       }
       const total = review?.total ?? review?.score
-      if (typeof total === 'number') best = best === null || total > best.total ? { total, version, review } : best
+      // The best version so far (its draft too): APPROVE_BEST_ON_FAIL sends it on when the Reviewer never passes one.
+      if (typeof total === 'number') best = best === null || total > best.total ? { total, version, review, draft } : best
 
       throwIfCancelled(signal)
       const decision = decideAfterReview(review, counters, { ...limits, feedbackMaxItems: config.reviewer.feedbackMaxItems })
@@ -495,7 +498,12 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
         setState('awaiting_human')
         break
       }
-      if (decision.action === 'fail') throw Object.assign(new Error(decision.reason), { routing: true })
+      if (decision.action === 'fail') {
+        // APPROVE_BEST_ON_FAIL: the Reviewer rejected every version up to the limit, so the best-scoring one goes ahead
+        // (it waits for you, or is approved at once with AUTO_APPROVE). Only a version whose hard checks passed.
+        if (config.approval?.bestOnFail && (await takeBest(decision.reason))) break
+        throw Object.assign(new Error(decision.reason), { routing: true })
+      }
 
       counters.rounds++
       routeFeedback = decision.feedback ?? null
@@ -527,7 +535,7 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
 
     const summary = await awaitHuman()
     await runLog({ agent: 'orchestrator', model: null, ms: 0, result: 'awaiting_human', error: null })
-    return { briefId, state, version, counters, steps, summary, warnings }
+    return { briefId, state, version, counters, steps, summary, warnings, ...(bestOfFailed && { best_of_failed: bestOfFailed }) }
   } catch (error) {
     // Once a run is cancelled, a later error (e.g. a network failure mid-step) still ends it as cancelled: no failure alert.
     if (error instanceof CancelledError || signal?.aborted) {
@@ -592,16 +600,46 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     await setStatus(briefRecord?.id, 'awaiting_human', 'brief')
     const title = titleOf()
     const score = total === null ? 'not re-reviewed' : `score ${total}/100`
-    await send('slack', `📝 Ready for your approval: *${title}* · ${score} · v${version} · brief ${briefId}`)
-    const markdown = draft?.draft?.post_markdown ?? draft?.post_markdown
-    // DRY_RUN would only log a preview of each part, and log lines become events: no post text in events.
-    if (config.notify.postApproved && markdown && dryRun) log.info('DRY_RUN: draft not posted to Slack', { chars: markdown.length })
-    else if (config.notify.postApproved && markdown) await send('slack', markdown)
-    if (config.approval.notifyOnAwaiting) await send('m91', { title: 'Blog draft ready for approval', description: `${title} — ${score}. Open the dashboard.`, severity: 'LOW' })
-    const summary = `awaiting human approval (v${version}, ${total === null ? 'not re-reviewed' : `score ${total}`})`
+    // AUTO_APPROVE: the run approves it next and the publish step posts it, so no "ready for your approval" messages.
+    if (!config.approval.autoApprove) {
+      await send('slack', `📝 Ready for your approval: *${title}* · ${score} · v${version} · brief ${briefId}${bestOfFailed ? ` · best of ${bestOfFailed.reviews} versions (the AI review did not pass)` : ''}`)
+      const markdown = draft?.draft?.post_markdown ?? draft?.post_markdown
+      // DRY_RUN would only log a preview of each part, and log lines become events: no post text in events.
+      if (config.notify.postApproved && markdown && dryRun) log.info('DRY_RUN: draft not posted to Slack', { chars: markdown.length })
+      else if (config.notify.postApproved && markdown) await send('slack', markdown)
+      if (config.approval.notifyOnAwaiting) await send('m91', { title: 'Blog draft ready for approval', description: `${title} — ${score}. Open the dashboard.`, severity: 'LOW' })
+    }
+    const summary = `awaiting human approval (v${version}, ${total === null ? 'not re-reviewed' : `score ${total}`}${bestOfFailed ? `, best of ${bestOfFailed.reviews} rejected versions` : ''})`
     emit('step.output', { agent: 'orchestrator', step: 'approval', message: 'Awaiting human approval', data: { brief_id: briefId, version, total } })
     emit('approval.waiting', { agent: 'orchestrator', message: summary, data: { brief_id: briefId, version, total } })
     return summary
+  }
+
+  /**
+   * APPROVE_BEST_ON_FAIL: the best-scoring version goes ahead as a new, newest version (a copy of it, with its review),
+   * so the approval, the post page and the export all see it as the current one. Returns false when there is none, or
+   * its hard content checks failed (then the run fails as before).
+   */
+  async function takeBest(reason) {
+    if (!best?.draft) return false
+    const rec = best.draft.record_id ? (await store.getRecords({ type: 'draft', brief_id: briefId })).find((d) => d.id === best.draft.record_id) : null
+    const payload = rec?.payload ?? best.draft.draft ?? null
+    if (payload?.checks?.hard_passed !== true) {
+      warnings.push(`the best version (v${best.version}, ${best.total}/100) failed its hard content checks, so it was not sent on`)
+      return false
+    }
+    const bv = best.draft.brief_version ?? briefVersion ?? 1
+    const newVersion = version + 1
+    const copy = { ...payload, version: newVersion, brief_version: bv, best_of: { version: best.version, total: best.total, reviews } }
+    const saved = await store.createRecord({ type: 'draft', briefId, payload: copy, status: 'drafted', version: newVersion, topicGroup: brief?.topic_group ?? null, meta: { brief_version: bv, review_total: best.total } })
+    if (best.review) await store.createRecord({ type: 'review', briefId, payload: { ...best.review, record_id: undefined, brief_id: briefId, version: newVersion, brief_version: bv, copied_from_version: best.version }, status: 'fail', version: newVersion, meta: { brief_version: bv } })
+    draft = { record_id: saved.id, version: newVersion, brief_version: bv, title: copy.title, draft: copy }
+    version = newVersion
+    review = best.review
+    bestOfFailed = { version: best.version, total: best.total, reviews, reason }
+    setState('awaiting_human')
+    emit('step.output', { agent: 'orchestrator', step: 'approval', message: `The Reviewer did not pass any of ${reviews} versions (${reason}): the best one, v${best.version} (${best.total}/100), goes ahead as v${newVersion}`, data: { version: newVersion, best_version: best.version, total: best.total, reviews } })
+    return true
   }
 
   // D3: limits reached without a pass. Statuses → failed_review / failed, Slack with the best score, LOW M91 alert.

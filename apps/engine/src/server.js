@@ -98,7 +98,7 @@ export function publicSettings(config) {
     dashboard: { auth: Boolean(config.dashboard?.auth), port: config.dashboard?.port ?? null },
     approval: config.approval && {
       max_human_revisions: config.approval.maxHumanRevisions, rereview_after_human: config.approval.rereviewAfterHuman,
-      m91_notify_on_awaiting: config.approval.notifyOnAwaiting
+      m91_notify_on_awaiting: config.approval.notifyOnAwaiting, auto_approve: Boolean(config.approval.autoApprove), best_on_fail: Boolean(config.approval.bestOnFail)
     },
     // The blog and the Publisher (Phase 7): whether a deploy token is set, never its value.
     blog: config.blog && {
@@ -481,6 +481,11 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       return send(res, 200, { ok: true }, { 'set-cookie': `m91_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${cookieTail(req)}` })
     }
 
+    // A Markdown download link (from Slack) opened in a browser without a session: log in first, then download.
+    if (!authed(req) && method === 'GET' && /^\/api\/exports\/[\w-]+\/download$/.test(path)) {
+      res.writeHead(302, { location: `/login?next=${encodeURIComponent(path)}`, 'cache-control': 'no-store' })
+      return res.end()
+    }
     if (!authed(req)) return fail(res, 401, 'unauthorized', 'log in first (POST /api/login)')
     if (!manager || !store) return fail(res, 503, 'not_ready', 'the run manager is not available')
 

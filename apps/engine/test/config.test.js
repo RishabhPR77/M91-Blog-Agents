@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { loadConfig, ConfigError } from '../src/config.js'
 import { fakeEnv } from './helpers.js'
+import { hashPassword } from '../src/util/adminhash.js'
 
 const problemsFor = (env) => {
   try {
@@ -99,13 +100,22 @@ test('old PUBLISH_API_* keys in .env are ignored (removed in Phase 3.5); PUBLISH
   assert.match(problemsFor(fakeEnv({ PUBLISH_TARGET: 'x' })).join(), /PUBLISH_TARGET: must be one of none | embarko | docstar/)
 })
 
-test('Phase 11 keys: designer off and no publishing by default; Docstar empty until set; the Docstar key is a secret', async () => {
+test('Phase 11 keys: designer off and Slack publishing by default; Docstar empty until set; the Docstar key is a secret', async () => {
   const env = fakeEnv()
   delete env.EXPERIENCE_ENABLED
   delete env.PUBLISH_TARGET
+  delete env.AUTO_APPROVE
+  delete env.APPROVE_BEST_ON_FAIL
   const c = loadConfig(env)
   assert.equal(c.designer.enabled, false)
-  assert.equal(c.publish.target, 'none')
+  // An approved post goes to Slack (a message with the .md download link) unless PUBLISH_TARGET says otherwise.
+  assert.equal(c.publish.target, 'slack')
+  assert.equal(c.approval.autoApprove, true)
+  assert.equal(c.approval.bestOnFail, true)
+  assert.equal(c.runtime.publicUrl, 'http://localhost:8080')
+  const hash = await hashPassword('a-long-test-password-123', { params: { N: 16384, r: 8, p: 1, keylen: 32 } })
+  assert.equal(loadConfig(fakeEnv({ APP_NAME: 'm91-engine', DATA_DIR: '/data', ADMIN_USERNAME: 'admin', ADMIN_PASSWORD_HASH: hash })).runtime.publicUrl, 'https://m91-engine.embarko.app')
+  assert.equal(loadConfig(fakeEnv({ ENGINE_PUBLIC_URL: 'https://engine.example.com/' })).runtime.publicUrl, 'https://engine.example.com')
   assert.deepEqual(c.docstar, { apiUrl: undefined, apiKey: '', collectionId: '', orgId: '' })
   const d = loadConfig(fakeEnv({ DOCSTAR_API_URL: 'https://api.docstar.example/', DOCSTAR_API_KEY: 'hm_secret', DOCSTAR_COLLECTION_ID: 'col1' }))
   assert.equal(d.docstar.apiUrl, 'https://api.docstar.example')

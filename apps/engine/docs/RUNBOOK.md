@@ -86,6 +86,26 @@ Topic → Research → Plan → Draft → AI review → You → Export → Publi
 run did it, so the writing run and the approve run show on the same bar. **Posts & runs** lists the posts this way
 ("By post"); "All runs" is the old table.
 
+## Automatic approval and Slack
+
+With the defaults (`AUTO_APPROVE=true`, `APPROVE_BEST_ON_FAIL=true`, `PUBLISH_TARGET=slack`) you never have to click
+Approve:
+
+- A post that passes the AI review is **approved in the same run**, its final Markdown export is saved, and **one Slack
+  message** goes out through the `blog-slack-post` flow: the title, the AI score, the words and reading grade, why it
+  was written this week, a link to **download the .md**, and a link to the post page.
+- If the Reviewer rejects every version up to the limit (`MAX_WRITER_REVISIONS`: the first draft plus 2 revisions, so
+  3 rejections), the **highest-scoring version goes instead**, as a new version marked "best of N". The Slack message
+  says so ("the AI review did not pass any of 3 versions; this is the best one") so you read it before publishing. If
+  even the best one failed its hard checks (a broken link, a missing CTA), nothing is sent and the run fails as before.
+- The links point to the engine (`ENGINE_PUBLIC_URL`; on Embarko https://m91-engine.embarko.app). Opening one asks
+  for the dashboard login first, then the download starts.
+- viaSocket's Slack app cannot attach a file yet (reported to viaSocket), so the .md is a download link, not an
+  attachment.
+
+To check posts yourself before they go out, set `AUTO_APPROVE=false`: posts then wait on Approvals as before, and
+**Approve and publish** sends the Slack message. **Send to Slack** (under Run one agent) sends an approved post again.
+
 ## Run the pipeline
 
 1. Go to **Control**. On **Write the next post** you see what the next run writes about (a pinned topic, a Write now
