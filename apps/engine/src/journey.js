@@ -61,6 +61,7 @@ export function buildJourney({ briefs = [], drafts = [], reviews = [], exportRec
   s.export = { state: exportRec ? 'done' : 'todo', detail: exportRec?.payload?.filename ?? '' }
   s.published = target === 'none' ? { state: 'off', detail: 'Publishing is off: the Markdown export is the output' }
     : target === 'slack' ? (exportRec?.payload?.slack_sent_at ? { state: 'done', detail: 'Sent to Slack' } : { state: 'todo', detail: '' })
+    : target === 'email' ? (exportRec?.payload?.email_sent_at ? { state: 'done', detail: 'Emailed' } : { state: 'todo', detail: '' })
     : live || docstarLive || draft?.status === 'published' ? { state: 'done', detail: exportRec?.payload?.docstar_url ?? live?.payload?.url ?? live?.metadata?.slug ?? 'Live' }
       : exportRec?.payload?.docstar_state === 'draft' ? { state: 'todo', detail: 'Sent to Docstar as a draft' }
         : { state: 'todo', detail: '' }

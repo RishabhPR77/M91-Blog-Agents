@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadConfig, ConfigError } from '../src/config.js'
+import { loadConfig, ConfigError, SECRET_KEYS as SECRET_KEYS_LIST } from '../src/config.js'
 import { fakeEnv } from './helpers.js'
 import { hashPassword } from '../src/util/adminhash.js'
 
@@ -100,7 +100,7 @@ test('old PUBLISH_API_* keys in .env are ignored (removed in Phase 3.5); PUBLISH
   assert.match(problemsFor(fakeEnv({ PUBLISH_TARGET: 'x' })).join(), /PUBLISH_TARGET: must be one of none | embarko | docstar/)
 })
 
-test('Phase 11 keys: designer off and Slack publishing by default; Docstar empty until set; the Docstar key is a secret', async () => {
+test('Phase 11 keys: designer off and email publishing by default; Docstar empty until set; the Docstar key is a secret', async () => {
   const env = fakeEnv()
   delete env.EXPERIENCE_ENABLED
   delete env.PUBLISH_TARGET
@@ -108,8 +108,11 @@ test('Phase 11 keys: designer off and Slack publishing by default; Docstar empty
   delete env.APPROVE_BEST_ON_FAIL
   const c = loadConfig(env)
   assert.equal(c.designer.enabled, false)
-  // An approved post goes to Slack (a message with the .md download link) unless PUBLISH_TARGET says otherwise.
-  assert.equal(c.publish.target, 'slack')
+  // An approved post is emailed (the .md attached) unless PUBLISH_TARGET says otherwise.
+  assert.equal(c.publish.target, 'email')
+  assert.deepEqual([c.notify.mailTo, c.notify.fileLinkDays], [[], 7])
+  assert.throws(() => loadConfig(fakeEnv({ MAIL_TO: 'me@example.com, not-an-address' })), /MAIL_TO: not an email address: not-an-address/)
+  assert.ok(SECRET_KEYS_LIST.includes('MAIL_POST_WEBHOOK_URL'))
   assert.equal(c.approval.autoApprove, true)
   assert.equal(c.approval.bestOnFail, true)
   assert.equal(c.runtime.publicUrl, 'http://localhost:8080')

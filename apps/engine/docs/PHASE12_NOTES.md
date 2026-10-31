@@ -573,3 +573,16 @@ One post a week (the cron), so each run decides what is most useful now instead 
   a full page.
 - VIASOCKET-PENDING: viaSocket's Slack app has no "upload file" action (reported as a missing capability), so the
   .md is a link, not an attachment.
+
+## Email in place of Slack
+
+- `PUBLISH_TARGET=email` (the new default): `src/publisher/email.js` mails each approved post to `MAIL_TO` through the
+  `blog-mail-post` flow (`MAIL_POST_WEBHOOK_URL`, body `{ key, to, subject, html, attachment_url, filename }`, Gmail
+  Send Email). The export record keeps `email_sent_at`; the journey's Published step says "Emailed". The "publish"
+  mode sends it again. `src/publisher/send.js` picks email or Slack for both the approve and the publish step.
+- The .md is a real attachment: Gmail fetches it from a signed link, `GET /files/exports/<brief>/<exp>/<sig>/<file>.md`
+  (`src/util/filelink.js`: HMAC-SHA256 of brief and expiry, keyed from `WEBHOOK_SHARED_KEY`, 32 hex characters,
+  `FILE_LINK_DAYS` default 7). No login; 410 when expired, 404 for a bad signature or a file that is not the brief's
+  latest export.
+- No `MAIL_TO`: nothing is mailed, the publisher step and a warning say why. No flow URL: skipped as a pending flow.
+- Dashboard: "Send by email", the email texts on Control, the post page, Exports and Settings.

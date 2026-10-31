@@ -159,10 +159,11 @@ export function mockReviewer(script = ['pass']) {
 }
 
 export function fakeNotifier() {
-  const sent = { slack: [], m91: [] }
+  const sent = { slack: [], m91: [], mail: [] }
   return {
     sent,
     async slack(text) { sent.slack.push(text) },
+    async mail(args) { sent.mail.push(args) },
     async m91Alert(args) { sent.m91.push(args) }
   }
 }

@@ -27,6 +27,7 @@ import { pickTarget } from './weekly/pick.js'
 import { pickOfBrief } from './weekly/editor.js'
 import { listGuides } from './guides/sync.js'
 import { buildJourney } from './journey.js'
+import { checkFilePath } from './util/filelink.js'
 import { listOpportunities, nextTimely, applyAction, isExpired, OPEN_STATUSES, TimelyError } from './timely/model.js'
 import { istDate } from './util/time.js'
 import { previewExport, latestExport, ExportError } from './export/index.js'
@@ -899,6 +900,14 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         return send(res, 202, { accepted: true })
       }
       if (url.pathname.startsWith('/preview/') && (await servePreview(req, res, url))) return
+      // A signed link to a post's Markdown file (the email attachment): no login, valid until it expires.
+      if (url.pathname.startsWith('/files/exports/') && (req.method === 'GET' || req.method === 'HEAD')) {
+        const link = checkFilePath(url.pathname, { secret: config?.notify?.sharedKey, now })
+        if (!link.ok) return send(res, link.why === 'expired' ? 410 : 404, { error: link.why === 'expired' ? 'this link has expired' : 'not found' })
+        const rec = store ? await latestExport(store, link.briefId) : null
+        if (!rec || rec.payload?.filename !== link.filename) return send(res, 404, { error: 'not found' })
+        return sendMarkdown(res, rec.payload.markdown, rec.payload.filename, true)
+      }
       // With the login on, every page needs the session. Only the login page and the dashboard's script and style
       // files (no data in them) are served without it; anything else goes to /login.
       if (auth && !authed(req) && !PUBLIC_PAGE_RE.test(url.pathname)) {

@@ -361,7 +361,7 @@ test('DRY_RUN publish: builds locally, no deploy, no Mem0 writes, nothing sent',
   assert.deepEqual(blog.builds, [['how-agent-approval-works']])
   assert.equal(blog.deploys.length, 0)
   assert.deepEqual(s.store.writes, writes)
-  assert.deepEqual(notifier.sent, { slack: [], m91: [] })
+  assert.deepEqual(notifier.sent, { slack: [], m91: [], mail: [] })
 })
 
 test('unpublish and set_index: rebuild without the post / with the new flag; draft and brief back to approved', async () => {

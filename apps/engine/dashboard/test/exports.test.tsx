@@ -116,4 +116,10 @@ describe('Exports page', () => {
     renderApp(<Exports />, { route: '/exports' })
     expect(await screen.findByText(/No exports yet/)).toBeInTheDocument()
   })
+
+  it('PUBLISH_TARGET=email: says approved posts are emailed with the .md attached', async () => {
+    mockFetch({ 'GET /api/settings': { body: { ...OFF, publish: { target: 'email', docstar_configured: false, auto_publish: false } } }, 'GET /api/exports': { body: { exports: [] } } })
+    renderApp(<Exports />, { route: '/exports' })
+    expect(await screen.findByText(/emailed with their \.md attached \(PUBLISH_TARGET=email\)/)).toBeInTheDocument()
+  })
 })

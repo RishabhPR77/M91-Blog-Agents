@@ -27,12 +27,13 @@ export const SECRET_KEYS = Object.freeze([
   'EMBARKO_DEPLOY_TOKEN',
   'SLACK_POST_WEBHOOK_URL',
   'M91_ALERT_WEBHOOK_URL',
+  'MAIL_POST_WEBHOOK_URL',
   'DOCSTAR_API_KEY'
 ])
 
 // Phase 11: where an approved post goes. none: nowhere (the Markdown export is the output); embarko: the
 // Phase 7 blog; docstar: Docstar (the adapter answers "not configured" until the DOCSTAR_* keys are set).
-export const PUBLISH_TARGETS = Object.freeze(['none', 'embarko', 'docstar', 'slack'])
+export const PUBLISH_TARGETS = Object.freeze(['none', 'embarko', 'docstar', 'slack', 'email'])
 
 const DEFAULTS = {
   VIASOCKET_API_BASE: 'https://flow-api.viasocket.com/',
@@ -112,7 +113,10 @@ const DEFAULTS = {
   PROMO_ENABLED: 'false',
   // Phase 11 (fallback plan): the Experience Designer is off and nothing is published; the reviewed draft becomes a
   // Markdown file (apps/engine/exports unless EXPORT_DIR is set). Docstar is filled in once its keys exist.
-  EXPERIENCE_ENABLED: 'false', PUBLISH_TARGET: 'slack', EXPORT_DIR: '',
+  EXPERIENCE_ENABLED: 'false', PUBLISH_TARGET: 'email', EXPORT_DIR: '',
+  // PUBLISH_TARGET=email: the blog-mail-post flow (MAIL_POST_WEBHOOK_URL) mails each approved post to MAIL_TO with its
+  // .md attached; the attachment is a signed link that works without the login for FILE_LINK_DAYS days.
+  MAIL_TO: '', FILE_LINK_DAYS: '7',
   // The engine's own address, for links in Slack (the .md download, the post page). Empty: https://<APP_NAME>.embarko.app
   // when hosted, else http://localhost:<PORT>.
   ENGINE_PUBLIC_URL: '',
@@ -387,6 +391,9 @@ export function loadConfig(env = process.env) {
     notify: {
       // Optional here; notify.js refuses a real send when they are missing.
       slackWebhookUrl: url('SLACK_POST_WEBHOOK_URL'),
+      mailWebhookUrl: url('MAIL_POST_WEBHOOK_URL'),
+      mailTo: list('MAIL_TO'),
+      fileLinkDays: int('FILE_LINK_DAYS', { min: 1, max: 30 }),
       m91WebhookUrl: url('M91_ALERT_WEBHOOK_URL'),
       sharedKey: str('WEBHOOK_SHARED_KEY'),
       chunkChars: int('SLACK_CHUNK_CHARS', { min: 500, max: 3900 }),
@@ -510,6 +517,9 @@ export function loadConfig(env = process.env) {
   if (targetWordsMin !== undefined && targetWordsMax !== undefined && targetWordsMin > targetWordsMax) {
     problems.push('TARGET_WORDS_MIN: must not be greater than TARGET_WORDS_MAX')
   }
+  // MAIL_TO: plain addresses, comma-separated.
+  const badMail = (config.notify.mailTo ?? []).filter((m) => !/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(m))
+  if (badMail.length) problems.push(`MAIL_TO: not an email address: ${badMail.join(', ')}`)
 
   if (problems.length) throw new ConfigError(problems)
 

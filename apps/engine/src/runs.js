@@ -29,8 +29,7 @@ import { saveFinalExport, previewExport, exportableDraft, latestExport, ExportEr
 import { createDocstar, publishToDocstar } from './publisher/docstar.js'
 import { createPublisher, publishPreflight, PublishError } from './publisher/index.js'
 import { draftsOf } from './writer/save.js'
-import { publishToSlack } from './publisher/slack.js'
-import { pickOfBrief } from './weekly/editor.js'
+import { sendPost, postMeta, MESSAGE_TARGETS } from './publisher/send.js'
 import { checkDecision, ApprovalError, runApprove, runHumanRevise, runRejectTopic, runApprovalReview } from './approval.js'
 import { runScout } from './scout/index.js'
 import { syncGuides, guidesSummary } from './guides/sync.js'
@@ -44,7 +43,7 @@ export const BUILT_MODES = Object.freeze(['full', 'scout', 'strategist', 'writer
 // The Publisher's modes (Phase 7): code only, no AI calls.
 export const PUBLISH_MODES = Object.freeze(['publish', 'unpublish', 'set_index', 'rebuild_blog'])
 // Which publish modes each PUBLISH_TARGET supports (Phase 11). none: no publishing at all (the export is the output).
-export const TARGET_MODES = Object.freeze({ none: [], embarko: ['publish', 'unpublish', 'set_index', 'rebuild_blog'], docstar: ['publish', 'unpublish'], slack: ['publish'] })
+export const TARGET_MODES = Object.freeze({ none: [], embarko: ['publish', 'unpublish', 'set_index', 'rebuild_blog'], docstar: ['publish', 'unpublish'], slack: ['publish'], email: ['publish'] })
 // The human's decisions on a draft that waits at awaiting_human (Phase 5.5).
 export const DECISION_MODES = Object.freeze(['approve', 'human_revise', 'reject_topic', 'approval_review'])
 export const TRIGGERS = Object.freeze(['manual', 'cron', 'api', 'cli'])
@@ -313,13 +312,11 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     if (DECISION_MODES.includes(mode) || PUBLISH_MODES.includes(mode)) {
       const agents = agentsFactory?.(runConfig, { store, notifier }) ?? defaultAgents({ config: runConfig, store, notifier, agentDeps })
       const publisher = makePublisher()
-      if (mode === 'publish' && runConfig.publish?.target === 'slack') {
-        // PUBLISH_TARGET=slack: the Slack message with the .md download link, again (0 AI calls).
+      if (mode === 'publish' && MESSAGE_TARGETS.includes(runConfig.publish?.target)) {
+        // PUBLISH_TARGET=slack or email: the message (download link) or the email (.md attached), again (0 AI calls).
         const out = await runStep('publisher', async () => {
           const d = (await draftsOf(store, params.brief_id)).find((x) => x.status === 'approved' || x.status === 'published')
-          const pick = await pickOfBrief(store, params.brief_id).catch(() => null)
-          const meta = { title: d?.payload?.title, total: d?.metadata?.review_total ?? null, words: d?.payload?.word_count ?? null, grade: d?.payload?.reading?.post_grade ?? null, reason: pick?.reason ?? null, auto: d?.metadata?.approved_by === 'auto' }
-          return publishToSlack({ notifier, config: runConfig, briefId: params.brief_id, exportRecord: await latestExport(store, params.brief_id), meta, store, now })
+          return sendPost({ target: runConfig.publish.target, notifier, config: runConfig, store, briefId: params.brief_id, meta: await postMeta(store, params.brief_id, { draft: d }), now })
         })
         return { status: 'succeeded', brief_id: params.brief_id, summary: out.summary, warnings: out.warnings }
       }
@@ -580,7 +577,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     const target = runConfig.publish?.target ?? 'embarko'
     if (target === 'none') throw new RunError('publishing_off', 'publishing is off (PUBLISH_TARGET=none): the Markdown export is the output', 409)
     if (!TARGET_MODES[target].includes(mode)) throw new RunError('not_supported', `${mode} is not available with PUBLISH_TARGET=${target}`, 409)
-    if (target === 'slack') {
+    if (target === 'slack' || target === 'email') {
       if (typeof params.brief_id !== 'string' || !params.brief_id.trim()) throw new RunError('bad_params', 'publish needs params.brief_id')
       if (!(await latestExport(readStore(runConfig), params.brief_id))) throw new RunError('no_export', `brief ${params.brief_id} has no final Markdown export: approve it first`, 409)
       return

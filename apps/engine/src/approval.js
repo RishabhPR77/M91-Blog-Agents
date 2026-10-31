@@ -16,8 +16,7 @@ import { latestGuideDoc } from './experience/index.js'
 import { guideText } from './experience/review.js'
 import { saveFinalExport, latestExport } from './export/index.js'
 import { createDocstar, publishToDocstar } from './publisher/docstar.js'
-import { publishToSlack } from './publisher/slack.js'
-import { pickOfBrief } from './weekly/editor.js'
+import { sendPost, postMeta, MESSAGE_TARGETS } from './publisher/send.js'
 import { createPublisher } from './publisher/index.js'
 import { finishTimely } from './timely/model.js'
 import { knowledgeOf, saveKnowledge } from './knowledge.js'
@@ -197,8 +196,8 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
     warnings.push(`promo pack failed (approval stands): ${error.message}`)
   }
   const title = d.payload?.title ?? briefRec?.payload?.titles?.[0] ?? briefId
-  // PUBLISH_TARGET=slack: the publish step's message says it all (one message per post, not two).
-  if (config.publish?.target !== 'slack') await notifySafe(notifier, warnings, 'slack', `✅ ${by === 'auto' ? 'Approved automatically' : 'Approved by you'}: *${title}* · v${version}`)
+  // PUBLISH_TARGET=slack or email: the publish step's message says it all (one message per post, not two).
+  if (!MESSAGE_TARGETS.includes(config.publish?.target)) await notifySafe(notifier, warnings, 'slack', `✅ ${by === 'auto' ? 'Approved automatically' : 'Approved by you'}: *${title}* · v${version}`)
   if (promo?.pack) await notifySafe(notifier, warnings, 'slack', `Promo pack preview (${promo.status}):\n\nLinkedIn:\n${promo.pack.linkedin_post}\n\nNewsletter:\n${promo.pack.newsletter_blurb}`)
   emit('approval.approved', { agent: by === 'auto' ? 'orchestrator' : 'human', message: `approved ${by === 'auto' ? 'automatically' : 'by you'} (v${version}${unreviewed ? ', unreviewed' : ''})`, data: { brief_id: briefId, version, total, approved_unreviewed: unreviewed } })
   const scoreText = unreviewed ? ', not reviewed' : total === null ? '' : `, score ${total}`
@@ -243,16 +242,17 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
   let published = null
   if (target === 'none') {
     await runStep('publisher', async () => ({ placeholder: true, message: 'Publishing is off (PUBLISH_TARGET=none): the Markdown export is the output' }))
-  } else if (target === 'slack') {
-    // One Slack message with the .md download link (sent when publishing now; "Approve only" sends nothing).
+  } else if (MESSAGE_TARGETS.includes(target)) {
+    // One Slack message with a download link, or one email with the .md attached (sent when publishing now;
+    // "Approve only" sends nothing).
+    const where = target === 'email' ? 'email' : 'Slack message'
     published = await runStep('publisher', async () => {
-      if (!publishNow) return { placeholder: true, message: 'Not sent to Slack: approved only. Use Publish in the dashboard (or npm run publish)' }
-      const pick = await pickOfBrief(store, briefId).catch(() => null)
-      const meta = { title, total, words: d.payload?.word_count ?? null, grade: d.payload?.reading?.post_grade ?? null, reason: pick?.reason ?? briefRec?.payload?.why_today ?? null, auto: by === 'auto', bestOfFailed: params.best_of_failed ?? null }
-      return publishToSlack({ notifier, config, briefId, exportRecord: await latestExport(store, briefId), meta, store, now })
+      if (!publishNow) return { placeholder: true, message: `Not ${target === 'email' ? 'emailed' : 'sent to Slack'}: approved only. Use Publish in the dashboard (or npm run publish)` }
+      const meta = { ...(await postMeta(store, briefId, { draft: d, brief: briefRec?.payload, title, total, bestOfFailed: params.best_of_failed ?? null })), auto: by === 'auto' }
+      return sendPost({ target, notifier, config, store, briefId, meta, now })
     }).catch((error) => {
       if (isCancel(error)) throw error
-      warnings.push(`Slack message failed (the post stays approved; send it again with Publish): ${error.message}`)
+      warnings.push(`${where} failed (the post stays approved; send it again with Publish): ${error.message}`)
       return null
     })
     if (published?.warnings?.length) warnings.push(...published.warnings)
@@ -279,7 +279,7 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
   }
   const pubText = published?.url ? `; published → ${published.url}` : ''
   const expText = exported?.filename ? `; Markdown export: ${exported.filename}` : ''
-  const slackText = target === 'slack' && published?.status === 'sent' ? '; sent to Slack' : ''
+  const slackText = published?.status === 'sent' ? (target === 'email' ? '; emailed' : target === 'slack' ? '; sent to Slack' : '') : ''
   return { status: 'succeeded', brief_id: briefId, summary: `approved ${by === 'auto' ? 'automatically' : 'by you'} (v${version}${scoreText})${expText}${pubText}${slackText}`, warnings, run_fields: { approved_unreviewed: unreviewed, approved_by: by } }
 }
 

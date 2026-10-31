@@ -1,4 +1,4 @@
-// Slack + M91 alerts through two viaSocket webhook flows (docs/SETUP_FLOWS.md).
+// Slack, M91 alerts and the post email through viaSocket webhook flows (docs/SETUP_FLOWS.md).
 
 import { getConfig } from './config.js'
 import { log } from './util/log.js'
@@ -52,11 +52,11 @@ export class NotifyError extends Error {
 }
 
 export function createNotifier({ config = getConfig(), fetch = globalThis.fetch } = {}) {
-  const { slackWebhookUrl, m91WebhookUrl, sharedKey } = config.notify
+  const { slackWebhookUrl, m91WebhookUrl, mailWebhookUrl, sharedKey } = config.notify
   const dryRun = config.runtime.dryRun
 
   async function post(url, body, label) {
-    if (!url) throw new NotifyError(`${label} webhook URL is not set (${label === 'Slack' ? 'SLACK_POST_WEBHOOK_URL' : 'M91_ALERT_WEBHOOK_URL'})`)
+    if (!url) throw new NotifyError(`${label} webhook URL is not set (${{ Slack: 'SLACK_POST_WEBHOOK_URL', Mail: 'MAIL_POST_WEBHOOK_URL' }[label] ?? 'M91_ALERT_WEBHOOK_URL'})`)
     if (!sharedKey) throw new NotifyError('WEBHOOK_SHARED_KEY is not set')
     const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
     const text = await res.text()
@@ -93,6 +93,23 @@ export function createNotifier({ config = getConfig(), fetch = globalThis.fetch 
     return { dryRun: false, parts: parts.length }
   }
 
+  /**
+   * One email through the blog-mail-post flow: { to: [addresses], subject, html, attachment_url?, filename? }.
+   * The flow sends it with Gmail and attaches the file at attachment_url.
+   */
+  async function mail({ to = [], subject, html, attachment_url = null, filename = null } = {}) {
+    if (!to.length) throw new NotifyError('mail: no recipient (MAIL_TO is empty)')
+    if (!subject || !html) throw new NotifyError('mail: subject and html are required')
+    if (dryRun) {
+      log.info('DRY_RUN: would send an email', { to: to.length, subject, attachment: Boolean(attachment_url) })
+      return { dryRun: true }
+    }
+    if (!mailWebhookUrl) return pendingFlows('MAIL_POST_WEBHOOK_URL', `email "${subject}"`)
+    await post(mailWebhookUrl, { key: sharedKey, to: to.join(','), subject, html, attachment_url: attachment_url ?? '', filename: filename ?? '' }, 'Mail')
+    log.info('mail sent', { to: to.length, attachment: Boolean(attachment_url) })
+    return { dryRun: false }
+  }
+
   async function m91Alert({ title, description, severity = 'LOW' } = {}) {
     const level = String(severity).toUpperCase()
     if (!title) throw new NotifyError('m91Alert: title is required')
@@ -108,11 +125,12 @@ export function createNotifier({ config = getConfig(), fetch = globalThis.fetch 
     return { dryRun: false }
   }
 
-  return { slack, m91Alert }
+  return { slack, mail, m91Alert }
 }
 
 let defaultNotifier
 export const notify = {
   slack: (text) => (defaultNotifier ??= createNotifier()).slack(text),
+  mail: (args) => (defaultNotifier ??= createNotifier()).mail(args),
   m91Alert: (args) => (defaultNotifier ??= createNotifier()).m91Alert(args)
 }

@@ -1,13 +1,14 @@
-# Setting up the two viaSocket webhook flows
+# Setting up the viaSocket webhook flows
 
-The engine never talks to Slack or M91 directly. It POSTs JSON to two viaSocket **webhook flows**
-that you build once in the viaSocket UI. Both flows check a shared key first, so a leaked URL alone
+The engine never talks to Slack, Gmail or M91 directly. It POSTs JSON to viaSocket **webhook flows**
+that are built once in viaSocket. Every flow checks a shared key first, so a leaked URL alone
 cannot post anything.
 
 | Flow | Engine env key holding its URL | Body the engine sends |
 | --- | --- | --- |
 | `blog-slack-post` | `SLACK_POST_WEBHOOK_URL` | `{ "key": "<shared key>", "text": "…" }` |
 | `blog-m91-alert` | `M91_ALERT_WEBHOOK_URL` | `{ "key": "<shared key>", "title": "…", "description": "…", "severity": "LOW" }` |
+| `blog-mail-post` | `MAIL_POST_WEBHOOK_URL` | `{ "key": "<shared key>", "to": "a@x.com,b@y.com", "subject": "…", "html": "…", "attachment_url": "https://…/post.md", "filename": "post.md" }` |
 
 The shared key is `WEBHOOK_SHARED_KEY` in your `.env`. You paste the same value into each flow
 yourself; it never goes into this repo.
@@ -69,6 +70,20 @@ to one value in the flow (e.g. LOW), and I'll note that the engine's MEDIUM aler
 
 The JavaScript fallback works the same way as in Flow 1: check `body.key`, then call the registered
 **Send Channel Alert** action with `title`, `description` and `severity`, and return `{ ok: true }`.
+
+## Flow 3: `blog-mail-post` (PUBLISH_TARGET=email)
+
+1. **New flow** → `blog-mail-post` → **Webhook** trigger → its URL goes into `.env` (and Embarko) as
+   `MAIL_POST_WEBHOOK_URL`.
+2. **Key check** (an IF block on `body.key`, or one JavaScript step), as in Flow 1.
+3. **Gmail → Send Email** (connect the Gmail account that sends):
+   - To: `body.to` (comma-separated)
+   - Subject: `body.subject`
+   - Message Body (HTML): `body.html`
+   - Attachments: `body.attachment_url` (Gmail downloads the file from this URL while sending; it is a signed engine
+     link, valid `FILE_LINK_DAYS` days, so it must be reachable from the internet: the hosted engine's URL, not
+     localhost). `attachment_url` is `null` when the engine has no `WEBHOOK_SHARED_KEY`; the email then has no file.
+4. **Save.** Set `MAIL_TO` to the address(es) that get the posts.
 
 ## After building both
 

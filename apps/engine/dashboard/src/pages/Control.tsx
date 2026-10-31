@@ -127,7 +127,7 @@ export default function Control() {
   const lastPick = weekly.data?.picks?.[0]
   // AUTO_APPROVE: a post the AI review passes is approved and published in the same run.
   const autoApprove = settings.data?.approval?.auto_approve === true
-  const publishTitle = flags.blogOn ? 'Publish' : flags.target === 'slack' ? 'Send to Slack' : 'Send to Docstar'
+  const publishTitle = flags.blogOn ? 'Publish' : flags.target === 'slack' ? 'Send to Slack' : flags.target === 'email' ? 'Send by email' : 'Send to Docstar'
   // The timely lane: open cards (a badge) and a Write now card that waits.
   const timelyOn = settings.data?.timely?.enabled === true
   const timely = useTimely(timelyOn)
@@ -187,7 +187,7 @@ export default function Control() {
           </div>
         )}
 
-        <RunButton variant="hero" title="Write the next post" description={`One click: the editor reads this week's questions, news and M91 changes and picks the most useful post (never a repeat of a live guide); then it is researched, planned, written and reviewed by the AI (weak parts are rewritten). ${autoApprove ? (flags.target === 'slack' ? 'Then it is approved and sent to Slack with a link to download the .md (if no version passes, the best one goes).' : 'Then it is approved and published.') : 'It waits for your review.'}`}
+        <RunButton variant="hero" title="Write the next post" description={`One click: the editor reads this week's questions, news and M91 changes and picks the most useful post (never a repeat of a live guide); then it is researched, planned, written and reviewed by the AI (weak parts are rewritten). ${autoApprove ? (flags.target === 'slack' ? 'Then it is approved and sent to Slack with a link to download the .md (if no version passes, the best one goes).' : flags.target === 'email' ? 'Then it is approved and emailed to you with the .md attached (if no version passes, the best one goes).' : 'Then it is approved and published.') : 'It waits for your review.'}`}
           models={[['Editor', models?.editor], ['Scout', models?.scout], ['Strategist', models?.strategist], ['Writer', models?.writer], ...(flags.experienceOn ? [['Designer', models?.designer] as ModelRow] : []), ['Reviewer', models?.reviewer]]} costKey={flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason}
           onRun={() => ask('full', 'Write the next post', flags.experienceOn ? 'full' : 'full_plain', {}, [['Topic', nextRunText(weekly.data?.next, weekly.data?.model)]])}>
           <p className="text-[15px]" data-testid="control-next-up"><span className="font-semibold">Topic:</span> {weekly.isPending ? 'loading…' : nextRunText(weekly.data?.next, weekly.data?.model)}. <Link className="text-xs text-sky-700 underline dark:text-sky-300" to="/week">This week</Link></p>
@@ -300,9 +300,9 @@ export default function Control() {
               {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
             </select>
           </RunButton>
-          {flags.target !== 'none' && <RunButton title={publishTitle} description={flags.blogOn ? `Put an approved post on the blog: build, deploy, check it is live.${blog?.auto_publish ? ' (AUTO_PUBLISH is on: approving publishes too.)' : ''}` : flags.target === 'slack' ? 'Send an approved post to Slack again: its title, score and a link to download the .md.' : `Send an approved post's Markdown export to Docstar.${flags.docstarConfigured ? '' : ' Docstar is not configured yet (DOCSTAR_* keys): it answers "not configured".'}`} costKey="publish" lowCost={lowCost} built={isBuilt('publish')} comingIn="Phase 7"
+          {flags.target !== 'none' && <RunButton title={publishTitle} description={flags.blogOn ? `Put an approved post on the blog: build, deploy, check it is live.${blog?.auto_publish ? ' (AUTO_PUBLISH is on: approving publishes too.)' : ''}` : flags.target === 'slack' ? 'Send an approved post to Slack again: its title, score and a link to download the .md.' : flags.target === 'email' ? 'Email an approved post again: its title, score and the .md attached (MAIL_TO).' : `Send an approved post's Markdown export to Docstar.${flags.docstarConfigured ? '' : ' Docstar is not configured yet (DOCSTAR_* keys): it answers "not configured".'}`} costKey="publish" lowCost={lowCost} built={isBuilt('publish')} comingIn="Phase 7"
             disabledReason={busyReason ?? (publishBrief ? (flags.blogOn ? tokenReason : null) : 'Pick an approved draft')}
-            onRun={() => ask('publish', publishTitle, 'publish', { brief_id: publishBrief }, [['Approved draft of', publishBrief], ['Goes to', flags.blogOn ? blog?.base_url ?? '…' : flags.target === 'slack' ? 'Slack' : 'Docstar']])}>
+            onRun={() => ask('publish', publishTitle, 'publish', { brief_id: publishBrief }, [['Approved draft of', publishBrief], ['Goes to', flags.blogOn ? blog?.base_url ?? '…' : flags.target === 'slack' ? 'Slack' : flags.target === 'email' ? 'Email (MAIL_TO)' : 'Docstar']])}>
             <select aria-label="Approved draft to publish" className="input py-1.5" value={publishBrief} onChange={(e) => setPublishBrief(e.target.value)}>
               <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
               {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
@@ -361,7 +361,7 @@ export default function Control() {
       >
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1" data-testid="run-summary">
           <dt className="text-slate-500">Mode</dt><dd className="font-mono">{pending?.mode}</dd>
-          <dt className="text-slate-500">Dry run</dt><dd>{dryRun ?? true ? 'yes: nothing is saved or sent (AI is still called)' : 'no: results are saved and Slack/M91 may be sent'}</dd>
+          <dt className="text-slate-500">Dry run</dt><dd>{dryRun ?? true ? 'yes: nothing is saved or sent (AI is still called)' : 'no: results are saved and emails, Slack and M91 may be sent'}</dd>
           <dt className="text-slate-500">Preset</dt><dd data-testid="run-preset">{pending && NO_AI_MODES.includes(pending.mode) ? 'not used (no AI)' : lowCost ? `${PRESETS.lowcost.label} (Scout group ${effectiveGroup})` : PRESETS.normal.label}</dd>
           {pending?.details.map(([k, v]) => <Fragment key={k}><dt className="text-slate-500">{k}</dt><dd>{v}</dd></Fragment>)}
         </dl>
