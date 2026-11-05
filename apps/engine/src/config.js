@@ -9,11 +9,18 @@ export const DELIVERIES = Object.freeze(['sync', 'rtlayer'])
 export const LOG_LEVELS = Object.freeze(['debug', 'info', 'warn', 'error'])
 export const AGENTS = Object.freeze(['scout', 'strategist', 'writer', 'reviewer', 'promo'])
 
-// From ai.md "Choosing the model" (fetched 2026-10-17; list confirmed by viaSocket on 2026-10-14).
+// From ai.md "Models: pick by the job" (fetched 2026-11-06; viaSocket tested them on 2026-10-30): the table's
+// models first, then the older names that still answer, so an existing .env keeps working. Every agent here asks
+// for a json_schema answer, so the models ai.md says ignore json_schema are left out: claude-opus-5-5,
+// claude-sonnet-5, claude-opus-5, claude-fable-5. Also left out: gemini-3.1-flash-lite (502s on JSON) and
+// gemini-omni-1.1-flash (a video model).
 export const MODELS = Object.freeze({
-  openai: Object.freeze(['gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini']),
-  anthropic: Object.freeze(['claude-opus-4-7', 'claude-sonnet-4-6']),
-  gemini: Object.freeze(['gemini-2.5-pro', 'gemini-2.5-flash'])
+  openai: Object.freeze(['gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-6-astra', 'gpt-5-nano',
+    'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini']),
+  anthropic: Object.freeze(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1',
+    'claude-opus-4-7', 'claude-sonnet-4-6']),
+  gemini: Object.freeze(['gemini-3.8-flash', 'gemini-3.1-pro-preview',
+    'gemini-2.5-pro', 'gemini-2.5-flash'])
 })
 
 // Values that must never be printed. Webhook URLs count: their script_id is a credential.

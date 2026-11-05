@@ -72,6 +72,13 @@ test('service, delivery, number, boolean and range validation', () => {
   }
 })
 
+test('the newest models from ai.md are accepted; the ones that ignore json_schema are not', () => {
+  const ok = fakeEnv({ SCOUT_AI_MODEL: 'gpt-6-luna', STRATEGIST_AI_SERVICE: 'anthropic', STRATEGIST_AI_MODEL: 'claude-sonnet-5-5', WRITER_AI_SERVICE: 'anthropic', WRITER_AI_MODEL: 'claude-fable-5-1', REVIEWER_AI_MODEL: 'gpt-6.1-sol' })
+  const c = loadConfig(ok)
+  assert.deepEqual([c.scout.model, c.strategist.model, c.writer.model, c.reviewer.model], ['gpt-6-luna', 'claude-sonnet-5-5', 'claude-fable-5-1', 'gpt-6.1-sol'])
+  assert.match(problemsFor(fakeEnv({ WRITER_AI_SERVICE: 'anthropic', WRITER_AI_MODEL: 'claude-opus-5-5' })).join('\n'), /WRITER_AI_MODEL: got "claude-opus-5-5", which is not in ai\.md/)
+})
+
 test('model must be in the ai.md list for its service', () => {
   const problems = problemsFor(fakeEnv({ STRATEGIST_AI_MODEL: 'gpt-9-ultra' }))
   assert.match(problems.join('\n'), /STRATEGIST_AI_MODEL: got "gpt-9-ultra", which is not in ai.md/)
