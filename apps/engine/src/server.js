@@ -31,6 +31,7 @@ import { checkFilePath, fileLinkSecret } from './util/filelink.js'
 import { listOpportunities, nextTimely, applyAction, isExpired, OPEN_STATUSES, TimelyError } from './timely/model.js'
 import { istDate } from './util/time.js'
 import { previewExport, latestExport, ExportError } from './export/index.js'
+import { blogOnly } from './export/markdown.js'
 import { createDocstar } from './publisher/docstar.js'
 import { withMem0Count, mem0Requests, currentMem0Counts } from './util/mem0count.js'
 import { judgeRecords, filterRows, planDelete, createdMs, DEFAULT_STALE_DAYS } from './memory.js'
@@ -562,8 +563,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       if (!BRIEF_ID_RE.test(briefId)) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')
       const rec = await latestExport(store, briefId)
       if (!rec) return fail(res, 404, 'not_found', `no final Markdown export of ${briefId} yet: approve it first`)
-      if (seg[3] === 'download') return sendMarkdown(res, rec.payload.markdown, rec.payload.filename, true)
-      return send(res, 200, { export: { ...exportSummary(rec), markdown: rec.payload.markdown, front_matter: rec.payload.front_matter, warnings: rec.payload.warnings ?? [] } })
+      if (seg[3] === 'download') return sendMarkdown(res, blogOnly(rec.payload.markdown), rec.payload.filename, true)
+      return send(res, 200, { export: { ...exportSummary(rec), markdown: blogOnly(rec.payload.markdown), front_matter: rec.payload.front_matter, warnings: rec.payload.warnings ?? [] } })
     }
 
     // The timely lane: the cards (newest first; a card past its window shows as expired before a run marks it), the
@@ -918,7 +919,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         if (!link.ok) return send(res, link.why === 'expired' ? 410 : 404, { error: link.why === 'expired' ? 'this link has expired' : 'not found' })
         const rec = store ? await latestExport(store, link.briefId) : null
         if (!rec || rec.payload?.filename !== link.filename) return send(res, 404, { error: 'not found' })
-        return sendMarkdown(res, rec.payload.markdown, rec.payload.filename, true)
+        return sendMarkdown(res, blogOnly(rec.payload.markdown), rec.payload.filename, true)
       }
       // With the login on, every page needs the session. Only the login page and the dashboard's script and style
       // files (no data in them) are served without it; anything else goes to /login.

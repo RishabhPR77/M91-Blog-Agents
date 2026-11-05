@@ -53,14 +53,17 @@ const runWith = async (m, mode, params = {}) => {
 
 // ---------- the Markdown file ----------
 
-test('the export: YAML front matter, H1, description, TL;DR, the body, sources, the CTA; Markdown only', async () => {
+test('the export: only the post (H1, intro, TL;DR, the body, sources, the CTA), the metadata beside it; Markdown only', async () => {
   const { store, draft } = await seed()
   const out = buildMarkdownExport({ draft, brief: brief(), review: { total: 88, pass: true }, briefId: BRIEF_ID, config: config(), now })
   const md = out.markdown
-  assert.match(md, /^---\ntitle: ".+"\nslug: "[a-z0-9-]+"\ndescription: ".*"\n/)
-  for (const key of ['keyword', 'tags', 'topic', 'brief_id', 'version', 'review_score', 'date']) assert.match(md, new RegExp(`\\n${key}: `), key)
-  assert.match(md, /\nreview_score: 88\nreview_passed: true\ndate: "2026-10-18"\n---\n\n# /)
-  assert.match(md, new RegExp(`\\nbrief_id: "${BRIEF_ID}"\\nversion: 1\\n`))
+  // The file starts with the title: no front matter, no SEO description in it.
+  assert.match(md, /^# .+\n\n/)
+  assert.ok(!/^---$/m.test(md.split('\n## ')[0]) && !md.includes('brief_id'), 'no metadata in the file')
+  assert.equal(out.markdown, out.body)
+  const fm = out.front_matter
+  for (const key of ['title', 'slug', 'description', 'keyword', 'tags', 'topic', 'brief_id', 'version', 'review_score', 'date']) assert.ok(key in fm, key)
+  assert.deepEqual([fm.review_score, fm.review_passed, fm.date, fm.brief_id, fm.version], [88, true, '2026-10-18', BRIEF_ID, 1])
   // The title once (H1), the TL;DR as a list, the post's own TL;DR block not repeated.
   assert.equal((md.match(/^# /gm) ?? []).length, 1)
   assert.match(md, /\n## TL;DR\n\n- .+\n- .+\n- .+\n/)
@@ -85,7 +88,7 @@ test('raw HTML in the body is removed (code untouched); an existing Sources sect
   assert.equal((out.markdown.match(/^## Sources$/gm) ?? []).length, 1)
   assert.ok(!out.markdown.includes('## Try M91'), 'the body already links the CTA')
   assert.ok(out.warnings.some((w) => /removed 2 raw HTML tags/.test(w)))
-  assert.match(out.markdown, /\ntopic: "Fintech"\n/)
+  assert.equal(out.front_matter.topic, 'Fintech')
   assert.match(frontMatter({ a: 'x "q"', b: [1, 'two'], c: null }), /^---\na: "x \\"q\\""\nb: \[1, "two"\]\nc: null\n---\n$/)
 })
 
@@ -260,7 +263,7 @@ test('API: the Markdown preview (JSON, .md, download), the exports list and file
   await withApi({ PUBLISH_TARGET: 'none', EXPERIENCE_ENABLED: 'false' }, store, async (base, m) => {
     const j = await (await fetch(`${base}/api/approvals/${BRIEF_ID}/markdown`)).json()
     assert.equal(j.version, 1)
-    assert.match(j.markdown, /^---\ntitle: /)
+    assert.match(j.markdown, /^# How agent approval works/)
     const md = await fetch(`${base}/api/approvals/${BRIEF_ID}/markdown?format=md&download=1`)
     assert.equal(md.headers.get('content-type'), 'text/markdown; charset=utf-8')
     assert.match(md.headers.get('content-disposition'), /^attachment; filename="[a-z0-9-]+\.md"$/)
@@ -273,7 +276,7 @@ test('API: the Markdown preview (JSON, .md, download), the exports list and file
     assert.equal(list[0].brief_id, BRIEF_ID)
     assert.ok(!('markdown' in list[0]), 'the list has no file text')
     const one = (await (await fetch(`${base}/api/exports/${BRIEF_ID}`)).json()).export
-    assert.match(one.markdown, /^---\n/)
+    assert.match(one.markdown, /^# /)
     const dl = await fetch(`${base}/api/exports/${BRIEF_ID}/download`)
     assert.match(dl.headers.get('content-disposition'), /^attachment;/)
     const pv = await fetch(`${base}/api/approvals/${BRIEF_ID}/preview`, { method: 'POST' })

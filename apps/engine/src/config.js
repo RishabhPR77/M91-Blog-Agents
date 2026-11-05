@@ -61,7 +61,7 @@ const DEFAULTS = {
   // Below this score, or with a major problem, the post goes back to the Writer; otherwise it goes to you ("pass with notes").
   REVISE_BELOW_SCORE: '70',
   MAX_WRITER_REVISIONS: '2', MAX_STRATEGIST_REBRIEFS: '1', MAX_SCOUT_RETRIES: '1', MAX_AI_ROUNDS_PER_POST: '5',
-  TARGET_WORDS_MIN: '1200', TARGET_WORDS_MAX: '2000',
+  TARGET_WORDS_MIN: '1800', TARGET_WORDS_MAX: '2500',
   DEFAULT_TONE: 'friendly-teacher', TIMEZONE: 'Asia/Kolkata',
   AUTO_PUBLISH: 'false', DRY_RUN: 'false', LOG_LEVEL: 'info',
   // Phase 9: the engine's local data folder (run lock, Mem0 usage) and when a run lock counts as stale

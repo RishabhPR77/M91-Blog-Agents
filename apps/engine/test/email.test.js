@@ -125,7 +125,7 @@ test('no MAIL_TO: the post stays approved and the run says why; the signed link 
     const res = await fetch(base + url.pathname)
     assert.equal(res.status, 200)
     assert.match(res.headers.get('content-disposition'), /attachment; filename="how-agent-approval-works\.md"/)
-    assert.match(await res.text(), /^---\ntitle: /)
+    assert.match(await res.text(), /^# How agent approval works/, 'the attachment is only the post')
     assert.equal((await fetch(base + url.pathname.replace(/\/[a-f0-9]{32}\//, `/${'0'.repeat(32)}/`))).status, 404)
     const login = await fetch(`${base}/api/exports/${url.pathname.split('/')[3]}/download`, { redirect: 'manual' })
     assert.equal(login.status, 302, 'the dashboard download still asks for the login')

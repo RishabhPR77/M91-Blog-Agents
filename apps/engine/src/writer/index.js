@@ -52,6 +52,35 @@ export function fixAcronyms(text) {
   }))).join('')
 }
 
+const CTA_SECTION_RE = /^##\s+what to do next\s*[?.!]?\s*$/i
+// Closing sections that say the same as "What to do next" ("What should you do next?", "Next steps", …).
+const NEXT_STEPS_RE = /^##\s+(?:what\s+(?:should|can|do)\s+(?:you|i|we)\s+do\s+next|what(?:'|’|\s+i)?s\s+next|what\s+next|next\s+steps?|where\s+to\s+go\s+(?:from\s+here|next))\s*[?.!]?\s*$/i
+
+/**
+ * One closing section: a "What should you do next?" (or "Next steps", …) section next to "## What to do next" is
+ * merged into it (its text goes first, the call to action stays last). Code blocks are never read as headings.
+ * Returns { markdown, merged: [the removed headings] }.
+ */
+export function mergeNextSteps(markdown) {
+  const lines = String(markdown).split('\n')
+  const sections = [{ heading: null, lines: [] }]
+  let fence = null
+  for (const line of lines) {
+    const f = line.match(/^\s*(`{3,}|~{3,})/)
+    if (f) fence = fence ? (f[1][0] === fence ? null : fence) : f[1][0]
+    if (!fence && !f && /^##\s/.test(line)) sections.push({ heading: line, lines: [] })
+    else sections[sections.length - 1].lines.push(line)
+  }
+  const cta = sections.find((s) => s.heading && CTA_SECTION_RE.test(s.heading.trim()))
+  const extra = sections.filter((s) => s.heading && s !== cta && NEXT_STEPS_RE.test(s.heading.trim()))
+  if (!cta || !extra.length) return { markdown, merged: [] }
+  const moved = extra.map((s) => s.lines.join('\n').trim()).filter(Boolean)
+  const kept = sections.filter((s) => !extra.includes(s))
+  cta.lines = ['', ...moved.flatMap((t) => [t, '']), ...cta.lines.join('\n').trim().split('\n'), '']
+  const out = kept.map((s) => [...(s.heading ? [s.heading] : []), ...s.lines].join('\n')).join('\n')
+  return { markdown: out.replace(/\n{3,}/g, '\n\n'), merged: extra.map((s) => s.heading.replace(/^##\s+/, '').trim()) }
+}
+
 /** Automatic fixes (brief 10.1) on the draft. Never changes wording. Returns the fix notes. */
 export function autoFixDraft(draft, { config, brief }) {
   const fixes = []
@@ -119,6 +148,11 @@ export function autoFixDraft(draft, { config, brief }) {
   if (ctaUrl && !/^##\s+what to do next/im.test(md)) {
     md = `${md.trimEnd()}\n\n## What to do next\n\n[${brief.cta?.text || DEFAULT_CTA_TEXT}](${ctaUrl})\n`
     fixes.push('appended the missing "What to do next" CTA section')
+  }
+  const ending = mergeNextSteps(md)
+  if (ending.merged.length) {
+    md = ending.markdown
+    fixes.push(`merged ${ending.merged.map((h) => `"${h}"`).join(', ')} into "What to do next" (one closing section)`)
   }
   const tidy = md.replace(/[ \t]+$/gm, '').replace(/\n{4,}/g, '\n\n\n')
   if (tidy !== md) {

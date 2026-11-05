@@ -225,9 +225,9 @@ test('API: GET /api/guides lists the live guides; the roadmap endpoints are gone
 
 // ---------- posts like the hand-written guides ----------
 
-test('settings: 1,200–2,000 words, up to 10 sections, 8–14 secondary keywords', async () => {
+test('settings: 1,800–2,500 words, up to 10 sections, 8–14 secondary keywords', async () => {
   const c = fakeConfig()
-  assert.deepEqual([c.content.targetWordsMin, c.content.targetWordsMax, c.strategist.outlineMaxSections], [1200, 2000, 10])
+  assert.deepEqual([c.content.targetWordsMin, c.content.targetWordsMax, c.strategist.outlineMaxSections], [1800, 2500, 10])
   const { SUPPORTING_MIN, SUPPORTING_MAX } = await import('../src/strategist/checks.js')
   assert.deepEqual([SUPPORTING_MIN, SUPPORTING_MAX], [8, 14])
   assert.ok(c.guides.syncOnRun === false, 'off in unit tests (fakeEnv)')

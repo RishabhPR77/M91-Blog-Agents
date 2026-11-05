@@ -590,3 +590,15 @@ One post a week (the cron), so each run decides what is most useful now instead 
   handler's try and the unhandled rejection stopped the engine. A throw escaping a request is now logged as a 500.
 - No `MAIL_TO`: nothing is mailed, the publisher step and a warning say why. No flow URL: skipped as a pending flow.
 - Dashboard: "Send by email", the email texts on Control, the post page, Exports and Settings.
+
+## The .md file is only the post; one closing section; longer posts
+
+- The Markdown export is only the post, ready to paste: the title, the intro, the TL;DR, the sections, Sources and
+  "What to do next". No YAML front matter and no repeated SEO description in the file; the metadata stays in the
+  export record (`front_matter`) for the dashboard. Files saved before this lose their front matter when served
+  (download, the email attachment link, Copy in the dashboard): `blogOnly()` in `src/export/markdown.js`.
+- One closing section: the Strategist no longer plans its own "What should you do next?"; the Writer's clean-up
+  (`mergeNextSteps`) merges any such section ("Next steps", "Where to go from here", …) into "What to do next",
+  its text first and the call to action last.
+- Longer posts by default: `TARGET_WORDS_MIN=1800`, `TARGET_WORDS_MAX=2500` (were 1200 and 2000). A value in `.env`
+  wins over the default.

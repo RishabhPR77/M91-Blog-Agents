@@ -1,20 +1,18 @@
-// The final Markdown export (Phase 11): a reviewed draft as one clean, Docstar-ready Markdown file. Pure code,
-// 0 AI calls. Plain CommonMark with GFM tables and fenced code only (no HTML), metadata as YAML front matter:
+// The final Markdown export (Phase 11): a reviewed draft as one clean Markdown file that is only the post, ready
+// to paste where it is published. Pure code, 0 AI calls. Plain CommonMark with GFM tables and fenced code only
+// (no HTML), and no metadata in the file (it is kept beside it, in the export record's front_matter):
 //
-//   ---                 (front matter: title, slug, description, keyword, tags, topic, brief_id, version,
-//   …                    review score, date; for our records and Docstar's file import)
-//   ---
 //   # Title
-//   Description
+//   the intro           (the post's first sentences, as the Writer wrote them)
 //   ## TL;DR            (the three takeaways)
-//   …the body…          (the post without its H1 and TL;DR; old M91 site links → M91_CTA_URL; M91 docs links →
+//   …the body…          (the post's sections; old M91 site links → M91_CTA_URL; M91 docs links →
 //                        https://m91.msg91.com/; raw HTML removed)
 //   ## Sources          (every outside link, unless the body already has a Sources section; never a docs link)
 //   ## Try M91          (the call to action, unless the body already links to M91_CTA_URL)
 //
 // Docstar's editor turns pasted or imported Markdown into blocks; its documented syntax covers headings, lists,
-// quotes, fenced code with a language, tables, links and images. It documents no front matter, so the Docstar
-// adapter sends `body` (the file without its front matter) and the title and slug as separate fields.
+// quotes, fenced code with a language, tables, links and images. The Docstar adapter sends the file as the body
+// and the title and slug as separate fields.
 
 import { stripTitleAndTldr, chooseSlug, sourcesOf, tagsOf, rewriteOldSiteLinks } from '../publisher/post.js'
 import { urlKey } from '../checks/content.js'
@@ -27,6 +25,9 @@ const CTA_LINE = 'M91 rings a person’s phone when your software needs a decisi
 
 /** A YAML scalar: numbers and booleans as they are, every string double-quoted (a JSON string is valid YAML). */
 const yamlValue = (v) => (typeof v === 'number' || typeof v === 'boolean' ? String(v) : v === null || v === undefined ? 'null' : JSON.stringify(String(v)))
+
+/** The post alone: a file saved before exports dropped their front matter loses it here. */
+export const blogOnly = (markdown) => String(markdown ?? '').replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n+/, '')
 
 /** YAML front matter from a flat object (arrays become flow lists). Keys keep their order. */
 export function frontMatter(meta) {
@@ -84,11 +85,14 @@ export function buildMarkdownExport({ draft, brief = {}, review = null, briefId,
   const { text: body, removed } = stripHtml(docs.markdown)
   if (removed) warnings.push(`removed ${removed} raw HTML tag${removed === 1 ? '' : 's'} (the export is Markdown only)`)
 
+  // The post's own order: title, its intro sentences, the TL;DR, then the sections.
   const sections = [`# ${title}`]
-  if (description) sections.push(description)
+  const firstH2 = body.search(/^##\s/m)
+  const intro = firstH2 >= 0 ? body.slice(0, firstH2).trim() : ''
+  if (intro) sections.push(intro)
   const tldr = (d.tldr ?? []).map((t) => String(t).trim()).filter(Boolean)
   if (tldr.length) sections.push(`## TL;DR\n\n${tldr.map((t) => `- ${t}`).join('\n')}`)
-  sections.push(body.trim())
+  sections.push((firstH2 >= 0 ? body.slice(firstH2) : body).trim())
   const sources = sourcesOf(body, { baseUrl: config.blog?.baseUrl ?? '', ctaUrl }).filter((s) => urlKey(s.url) !== urlKey(M91_SITE_URL))
   if (sources.length && !hasHeading(body, /^sources?\b/i)) sections.push(`## Sources\n\n${sources.map((s, i) => `${i + 1}. [${s.title.replace(/[[\]]/g, '')}](${s.url})`).join('\n')}`)
   const linksCta = ctaUrl && sourcesOf(body, { baseUrl: '', ctaUrl: null }).some((s) => urlKey(s.url) === urlKey(ctaUrl))
@@ -111,5 +115,5 @@ export function buildMarkdownExport({ draft, brief = {}, review = null, briefId,
     review_passed: typeof review?.pass === 'boolean' ? review.pass : null,
     date: istDate(at)
   }
-  return { slug, filename: `${slug}.md`, title, markdown: `${frontMatter(meta)}\n${content}`, body: content, front_matter: meta, warnings, docs_links: docsLinksIn(content, config) }
+  return { slug, filename: `${slug}.md`, title, markdown: content, body: content, front_matter: meta, warnings, docs_links: docsLinksIn(content, config) }
 }
