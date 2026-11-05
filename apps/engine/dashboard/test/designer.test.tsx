@@ -81,7 +81,7 @@ describe('Interactive guide card on an approval', () => {
 
   it('older engines without interactive info show no card', async () => {
     page(detail('approved', undefined))
-    await screen.findByRole('heading', { name: 'Bind every AI approval to one tool call', level: 1 })
+    await screen.findByTestId('markdown-preview')
     expect(screen.queryByText('Interactive guide')).toBeNull()
   })
 })

@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ChevronDown, Inbox, Square } from 'lucide-react'
+import { AlertTriangle, ArrowRight, ChevronDown, Square } from 'lucide-react'
 import { api, errorMessage, isApiError } from '../api/client'
 import { useApprovals, useHealth, useRuns, useSettings } from '../api/queries'
 import type { RunSummary } from '../api/types'
@@ -35,6 +35,12 @@ const NO_AI_MODES = ['publish', 'unpublish', 'set_index', 'rebuild_blog', 'expor
 
 const useRecords = (key: string, query: string, enabled: boolean) =>
   useQuery({ queryKey: ['records', key], queryFn: async () => (await api<{ records: Trimmed[] }>(`/api/records?${query}`)).records, enabled, staleTime: 30_000 })
+
+/** Good morning / afternoon / evening, by the local hour. */
+function greeting() {
+  const h = new Date().getHours()
+  return h < 12 ? 'Good morning.' : h < 18 ? 'Good afternoon.' : 'Good evening.'
+}
 
 function aiCalls(r: RunSummary) {
   return (r.steps ?? []).reduce((n, s) => n + (s.ai_calls ?? 0), 0)
@@ -169,8 +175,11 @@ export default function Control() {
 
   return (
     <>
-      <PageHeader eyebrow={new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} title="Home" subtitle="One click writes the next post. Every run asks you first and shows what it costs." />
-      <div className="space-y-6">
+      <PageHeader eyebrow={new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} title={greeting()}
+        subtitle={waiting > 0
+          ? <><span className="marker font-medium text-ink">{waiting} post{waiting === 1 ? '' : 's'} waiting</span> for your review.{activeRun ? ' A run is writing right now.' : ' Write the next one whenever you like.'}</>
+          : activeRun ? <>A run is <span className="marker font-medium text-ink">writing right now</span>. Nothing else needs you.</> : 'Nothing needs you right now. Write the next post whenever you like.'} />
+      <div className="space-y-14">
         {outdated && (
           <div role="alert" data-testid="engine-outdated" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
@@ -187,133 +196,28 @@ export default function Control() {
           </div>
         )}
 
-        <RunButton variant="hero" title="Write the next post" description={`One click: the editor reads this week's questions, news and M91 changes and picks the most useful post (never a repeat of a live guide); then it is researched, planned, written and reviewed by the AI (weak parts are rewritten). ${autoApprove ? (flags.target === 'slack' ? 'Then it is approved and sent to Slack with a link to download the .md (if no version passes, the best one goes).' : flags.target === 'email' ? 'Then it is approved and emailed to you with the .md attached (if no version passes, the best one goes).' : 'Then it is approved and published.') : 'It waits for your review.'}`}
+        <RunButton variant="hero" title="Write the next post" description={`The editor picks this week's most useful topic from real questions, news and M91 changes; the AI researches, writes and reviews it. ${autoApprove ? (flags.target === 'slack' ? 'Then it is approved and sent to Slack with a link to download the .md (if no version passes, the best one goes).' : flags.target === 'email' ? 'Then it is approved and emailed to you with the .md attached (if no version passes, the best one goes).' : 'Then it is approved and published.') : 'It waits for your review.'}`}
           models={[['Editor', models?.editor], ['Scout', models?.scout], ['Strategist', models?.strategist], ['Writer', models?.writer], ...(flags.experienceOn ? [['Designer', models?.designer] as ModelRow] : []), ['Reviewer', models?.reviewer]]} costKey={flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason}
           onRun={() => ask('full', 'Write the next post', flags.experienceOn ? 'full' : 'full_plain', {}, [['Topic', nextRunText(weekly.data?.next, weekly.data?.model)]])}>
           <p className="text-[15px]" data-testid="control-next-up"><span className="font-semibold">Topic:</span> {weekly.isPending ? 'loading…' : nextRunText(weekly.data?.next, weekly.data?.model)}. <Link className="text-xs link" to="/week">This week</Link></p>
           {lastPick && <p className="text-sm text-slate-600 dark:text-slate-300" data-testid="control-last-pick"><span className="font-medium">Last pick:</span> {lastPick.pick.title} <span className="text-xs text-slate-500">({FORMAT_LABEL[lastPick.pick.format] ?? lastPick.pick.format}, {lastPick.date}): {lastPick.reason}</span></p>}
           {timelyOn && (timely.data?.open ?? 0) > 0 && <p className="text-sm" data-testid="control-timely"><Link to="/week#timely" className="pill pill-amber">{timely.data!.open} news item{timely.data!.open === 1 ? '' : 's'} this week</Link>{timely.data?.waiting ? <span className="ml-2 text-xs text-slate-500">“{timely.data.waiting.title}” waits: {timely.data.waiting.reason}</span> : null}</p>}
         </RunButton>
-        <div className="grid items-start gap-4 lg:grid-cols-3">
-          <Card title={<span className="flex items-center gap-1.5"><Inbox size={15} /> Waiting for you</span>}>
-            <p className="font-display text-5xl font-semibold tracking-[-0.03em] tabular-nums" data-testid="waiting-count">{waiting}</p>
-            <p className="mt-1 text-sm text-ink-2">{waiting === 1 ? 'post waits' : 'posts wait'} for your review.</p>
-            {firstWaiting ? (
-              <>
-                <p className="mt-4 line-clamp-2 text-sm font-medium" data-testid="first-waiting">{firstWaiting.title || firstWaiting.brief_id}</p>
-                <Link to={`/approvals/${firstWaiting.brief_id}`} className="btn-primary mt-3 w-full">Review it now</Link>
-              </>
-            ) : (
-              <Link to="/approvals" className="btn-secondary mt-4">Open Approvals</Link>
-            )}
-          </Card>
-          <div className={activeRun ? 'lg:col-span-2' : 'hidden'}>{activeRun && <CurrentRun run={activeRun} />}</div>
-          <details className={`panel group ${activeRun ? 'lg:col-span-3' : 'lg:col-span-2'}`} data-testid="run-options">
-            <summary className="flex cursor-pointer list-none items-center gap-2 p-5 text-sm font-semibold text-ink">
-              Run options <span className="font-normal text-ink-3">· {dryRun ?? true ? 'dry run' : 'live'} · {lowCost ? PRESETS.lowcost.label : PRESETS.normal.label}</span>
-              <ChevronDown size={14} className="ml-auto transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="border-t border-line p-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium">
-                    <input type="checkbox" checked={dryRun ?? true} onChange={(e) => setDryRun(e.target.checked)} aria-describedby="dry-note" />
-                    Dry run
-                  </label>
-                  <p id="dry-note" className="mt-1 text-xs text-slate-500">Dry run still uses AI credits; it only stops saving and sending.</p>
-                  <p className="mt-1 text-xs text-slate-500">Engine default: {settings.data ? (settings.data.runtime.dry_run ? 'dry run' : 'live') : '…'}</p>
-                </div>
-                <div>
-                  <fieldset>
-                    <legend className="text-sm font-medium">Preset</legend>
-                    {(Object.keys(PRESETS) as Preset[]).map((p) => (
-                      <label key={p} className="mt-1 flex items-start gap-2 text-sm" data-testid={`preset-${p}`}>
-                        <input type="radio" name="preset" className="mt-1" checked={preset === p} onChange={() => setPreset(p)} />
-                        <span>
-                          <span className="font-medium">{PRESETS[p].label}</span>
-                          <span className="block text-xs text-slate-500">{PRESETS[p].text} Full run: {expectedCalls('full', p === 'lowcost')} AI calls · memory {expectedMem0('full', p === 'lowcost')}.</span>
-                        </span>
-                      </label>
-                    ))}
-                  </fieldset>
-                  <label className="mt-2 flex items-center gap-2 text-xs">
-                    Scout question group
-                    <select aria-label="Scout question group" className="input w-auto py-1" value={effectiveGroup} disabled={!lowCost} onChange={(e) => setGroup(Number(e.target.value))}>
-                      {TOPIC_GROUPS.map((g) => <option key={g} value={g}>{g}{g === suggestedGroup ? ' (least used)' : ''}</option>)}
-                    </select>
-                  </label>
-                </div>
+        <div className={`grid gap-x-16 gap-y-12 pt-6 ${activeRun ? 'lg:grid-cols-2' : ''}`}>
+          <Card title="Waiting for you">
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
+              <p className="font-serif text-[64px] leading-none font-semibold tracking-[-0.03em] tabular-nums" data-testid="waiting-count">{waiting}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-ink-3">{waiting === 1 ? 'post waits' : 'posts wait'} for your review.</p>
+                {firstWaiting && <p className="mt-1 line-clamp-2 font-serif text-[22px] leading-snug font-semibold tracking-[-0.01em]" data-testid="first-waiting">{firstWaiting.title || firstWaiting.brief_id}</p>}
               </div>
+              {firstWaiting
+                ? <Link to={`/approvals/${firstWaiting.brief_id}`} className="btn-secondary">Review it now <ArrowRight size={16} /></Link>
+                : <Link to="/approvals" className="btn-secondary">Open Approvals</Link>}
             </div>
-          </details>
+          </Card>
+          {activeRun && <CurrentRun run={activeRun} />}
         </div>
-
-        <details className="group" data-testid="run-one-agent">
-          <summary className="flex cursor-pointer list-none items-center gap-2 py-1 text-sm font-semibold text-ink">
-            <ChevronDown size={16} className="-rotate-90 transition-transform group-open:rotate-0" /> Run one agent, or another action
-            <span className="font-normal text-ink-3">(Scout, Strategist, Writer, Reviewer, export{flags.target !== 'none' ? ', publish' : ''})</span>
-          </summary>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <RunButton title="Run Scout" description="Research: M91 facts, questions people ask, stories and tutorials." models={[['Scout', models?.scout]]} costKey="scout" lowCost={lowCost} built={isBuilt('scout')} disabledReason={busyReason}
-            onRun={() => ask('scout', 'Scout', 'scout')} />
-          <RunButton title="Run Strategist" description="Plan one brief from the latest Scout data." models={[['Strategist', models?.strategist]]} costKey="strategist" lowCost={lowCost} built={isBuilt('strategist')} disabledReason={busyReason}
-            onRun={() => ask('strategist', 'Strategist', 'strategist')} />
-          <RunButton title="Run Writer" description="Write a draft for a brief." models={[['Writer', models?.writer]]} costKey="writer" lowCost={lowCost} built={isBuilt('writer')} disabledReason={busyReason ?? (briefId ? null : 'Pick a brief')}
-            onRun={() => ask('writer', 'Writer', 'writer', { brief_id: briefId }, [['Brief', briefId]])}>
-            <select aria-label="Brief for the Writer" className="input py-1.5" value={briefId} onChange={(e) => setBriefId(e.target.value)}>
-              <option value="">Pick a brief…</option>
-              {(briefs.data ?? []).filter((b) => b.key_id).map((b) => <option key={b.id} value={b.key_id!}>{b.key_id} · {b.status} · {(b.title ?? '').slice(0, 60)}</option>)}
-            </select>
-          </RunButton>
-          <RunButton title="Run Reviewer" description="Review one draft (optionally with the revision loop)." models={[['Reviewer', models?.reviewer]]} costKey={route ? routeCost : 'reviewer'} lowCost={lowCost} built={isBuilt('reviewer')} disabledReason={busyReason ?? (draftKey ? null : 'Pick a draft')}
-            onRun={() => {
-              const [b, v] = draftKey.split('|')
-              ask('reviewer', route ? 'Reviewer + routing loop' : 'Reviewer', route ? routeCost : 'reviewer', { brief_id: b, version: Number(v), route }, [['Draft', `${b} v${v}`], ['Routing loop', route ? 'yes' : 'no']])
-            }}>
-            <select aria-label="Draft for the Reviewer" className="input py-1.5" value={draftKey} onChange={(e) => setDraftKey(e.target.value)}>
-              <option value="">Pick a draft…</option>
-              {draftOptions.map((d) => <option key={d.id} value={`${d.brief_id}|${d.version}`}>{d.brief_id} v{d.version} · {d.status} · {(d.title ?? '').slice(0, 50)}</option>)}
-            </select>
-            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={route} onChange={(e) => setRoute(e.target.checked)} /> Also run the routing loop</label>
-          </RunButton>
-          {settings.data?.designer?.promo_enabled !== false && (
-            <RunButton title="Create promo pack" description="LinkedIn post, X thread, newsletter blurb, video script for an approved draft." costKey="promo" lowCost={lowCost} built={isBuilt('promo')} disabledReason={busyReason ?? (promoBrief ? null : 'Pick an approved draft')}
-              onRun={() => ask('promo', 'Promo pack', 'promo', { brief_id: promoBrief }, [['Approved draft of', promoBrief]])}>
-              <select aria-label="Approved draft for the promo pack" className="input py-1.5" value={promoBrief} onChange={(e) => setPromoBrief(e.target.value)}>
-                <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
-                {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
-              </select>
-            </RunButton>
-          )}
-          {flags.experienceOn && <RunButton title="Experience Designer" description="Build the interactive guide again for an approved post (no review). Republish to put it live." costKey="designer" lowCost={lowCost} built={isBuilt('designer')} disabledReason={busyReason ?? (designBrief ? null : 'Pick an approved draft')}
-            onRun={() => ask('designer', 'Experience Designer', 'designer', { brief_id: designBrief }, [['Approved draft of', designBrief]])}>
-            <select aria-label="Approved draft for the Experience Designer" className="input py-1.5" value={designBrief} onChange={(e) => setDesignBrief(e.target.value)}>
-              <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
-              {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
-            </select>
-          </RunButton>}
-          <RunButton title="Export Markdown" description="Save the final Markdown export of an approved post again (Mem0 and apps/engine/exports). Approving already does this." costKey="export_save" lowCost={lowCost} built={isBuilt('export')}
-            disabledReason={busyReason ?? (exportBrief ? null : 'Pick an approved draft')}
-            onRun={() => ask('export', 'Export Markdown', 'export_save', { brief_id: exportBrief, save: true }, [['Approved draft of', exportBrief]])}>
-            <select aria-label="Approved draft to export" className="input py-1.5" value={exportBrief} onChange={(e) => setExportBrief(e.target.value)}>
-              <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
-              {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
-            </select>
-          </RunButton>
-          {flags.target !== 'none' && <RunButton title={publishTitle} description={flags.blogOn ? `Put an approved post on the blog: build, deploy, check it is live.${blog?.auto_publish ? ' (AUTO_PUBLISH is on: approving publishes too.)' : ''}` : flags.target === 'slack' ? 'Send an approved post to Slack again: its title, score and a link to download the .md.' : flags.target === 'email' ? 'Email an approved post again: its title, score and the .md attached (MAIL_TO).' : `Send an approved post's Markdown export to Docstar.${flags.docstarConfigured ? '' : ' Docstar is not configured yet (DOCSTAR_* keys): it answers "not configured".'}`} costKey="publish" lowCost={lowCost} built={isBuilt('publish')} comingIn="Phase 7"
-            disabledReason={busyReason ?? (publishBrief ? (flags.blogOn ? tokenReason : null) : 'Pick an approved draft')}
-            onRun={() => ask('publish', publishTitle, 'publish', { brief_id: publishBrief }, [['Approved draft of', publishBrief], ['Goes to', flags.blogOn ? blog?.base_url ?? '…' : flags.target === 'slack' ? 'Slack' : flags.target === 'email' ? 'Email (MAIL_TO)' : 'Docstar']])}>
-            <select aria-label="Approved draft to publish" className="input py-1.5" value={publishBrief} onChange={(e) => setPublishBrief(e.target.value)}>
-              <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
-              {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
-            </select>
-          </RunButton>}
-          {flags.blogOn && <RunButton title="Rebuild blog" description="Rebuild and redeploy the blog from the published posts without changing any post (after a change to the blog's code or look)." costKey="rebuild_blog" lowCost={lowCost} built={isBuilt('rebuild_blog')} comingIn="Phase 7"
-            disabledReason={busyReason ?? tokenReason}
-            onRun={() => ask('rebuild_blog', 'Rebuild blog', 'rebuild_blog', {}, [['Deploys to', blog?.base_url ?? '…']])} />}
-          </div>
-        </details>
-
         <Card title="Latest posts" actions={<Link to="/runs" className="text-sm link-quiet">All posts and runs →</Link>}>
           {posts.data?.length ? (
             <ul className="stagger divide-y divide-line" data-testid="latest-posts">
@@ -321,7 +225,7 @@ export default function Control() {
                 const line = journeyLine(p.stages)
                 return (
                   <li key={p.brief_id} className="flex flex-col gap-2 py-3.5 md:flex-row md:items-center md:gap-6">
-                    <Link to={`/approvals/${p.brief_id}`} className="min-w-0 flex-1 truncate text-sm font-medium underline-offset-[3px] hover:underline">{p.title || 'A post in the making'}</Link>
+                    <Link to={`/approvals/${p.brief_id}`} className="min-w-0 flex-1 truncate font-serif text-[18px] font-semibold tracking-[-0.01em] underline-offset-[4px] hover:underline">{p.title || 'A post in the making'}</Link>
                     <div className="w-full md:w-72"><JourneyBar stages={p.stages} compact /></div>
                     <span className={`pill ${line.tone === 'green' ? 'pill-green' : line.tone === 'red' ? 'pill-red' : line.tone === 'gray' ? 'pill-gray' : line.tone === 'violet' ? 'pill-blue font-semibold' : 'pill-blue'} md:w-48 md:justify-center`}>{line.text}</span>
                   </li>
@@ -347,6 +251,114 @@ export default function Control() {
             </ul>
           )}
         </Card>
+        <section className="border-t border-line pt-6">
+          <h2 className="mb-5 font-serif text-[21px] font-semibold tracking-[-0.01em]">More</h2>
+          <div className="space-y-5">
+            <details className="panel group" data-testid="run-options">
+              <summary className="flex cursor-pointer list-none items-center gap-2 p-5 text-sm font-semibold text-ink">
+                Run options <span className="font-normal text-ink-3">· {dryRun ?? true ? 'dry run' : 'live'} · {lowCost ? PRESETS.lowcost.label : PRESETS.normal.label}</span>
+                <ChevronDown size={14} className="ml-auto transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="border-t border-line p-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                      <input type="checkbox" checked={dryRun ?? true} onChange={(e) => setDryRun(e.target.checked)} aria-describedby="dry-note" />
+                      Dry run
+                    </label>
+                    <p id="dry-note" className="mt-1 text-xs text-slate-500">Dry run still uses AI credits; it only stops saving and sending.</p>
+                    <p className="mt-1 text-xs text-slate-500">Engine default: {settings.data ? (settings.data.runtime.dry_run ? 'dry run' : 'live') : '…'}</p>
+                  </div>
+                  <div>
+                    <fieldset>
+                      <legend className="text-sm font-medium">Preset</legend>
+                      {(Object.keys(PRESETS) as Preset[]).map((p) => (
+                        <label key={p} className="mt-1 flex items-start gap-2 text-sm" data-testid={`preset-${p}`}>
+                          <input type="radio" name="preset" className="mt-1" checked={preset === p} onChange={() => setPreset(p)} />
+                          <span>
+                            <span className="font-medium">{PRESETS[p].label}</span>
+                            <span className="block text-xs text-slate-500">{PRESETS[p].text} Full run: {expectedCalls('full', p === 'lowcost')} AI calls · memory {expectedMem0('full', p === 'lowcost')}.</span>
+                          </span>
+                        </label>
+                      ))}
+                    </fieldset>
+                    <label className="mt-2 flex items-center gap-2 text-xs">
+                      Scout question group
+                      <select aria-label="Scout question group" className="input w-auto py-1" value={effectiveGroup} disabled={!lowCost} onChange={(e) => setGroup(Number(e.target.value))}>
+                        {TOPIC_GROUPS.map((g) => <option key={g} value={g}>{g}{g === suggestedGroup ? ' (least used)' : ''}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </details>
+            <details className="group" data-testid="run-one-agent">
+              <summary className="flex cursor-pointer list-none items-center gap-2 py-1 text-sm font-semibold text-ink">
+                <ChevronDown size={16} className="-rotate-90 transition-transform group-open:rotate-0" /> Run one agent, or another action
+                <span className="font-normal text-ink-3">(Scout, Strategist, Writer, Reviewer, export{flags.target !== 'none' ? ', publish' : ''})</span>
+              </summary>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <RunButton title="Run Scout" description="Research: M91 facts, questions people ask, stories and tutorials." models={[['Scout', models?.scout]]} costKey="scout" lowCost={lowCost} built={isBuilt('scout')} disabledReason={busyReason}
+                onRun={() => ask('scout', 'Scout', 'scout')} />
+              <RunButton title="Run Strategist" description="Plan one brief from the latest Scout data." models={[['Strategist', models?.strategist]]} costKey="strategist" lowCost={lowCost} built={isBuilt('strategist')} disabledReason={busyReason}
+                onRun={() => ask('strategist', 'Strategist', 'strategist')} />
+              <RunButton title="Run Writer" description="Write a draft for a brief." models={[['Writer', models?.writer]]} costKey="writer" lowCost={lowCost} built={isBuilt('writer')} disabledReason={busyReason ?? (briefId ? null : 'Pick a brief')}
+                onRun={() => ask('writer', 'Writer', 'writer', { brief_id: briefId }, [['Brief', briefId]])}>
+                <select aria-label="Brief for the Writer" className="input py-1.5" value={briefId} onChange={(e) => setBriefId(e.target.value)}>
+                  <option value="">Pick a brief…</option>
+                  {(briefs.data ?? []).filter((b) => b.key_id).map((b) => <option key={b.id} value={b.key_id!}>{b.key_id} · {b.status} · {(b.title ?? '').slice(0, 60)}</option>)}
+                </select>
+              </RunButton>
+              <RunButton title="Run Reviewer" description="Review one draft (optionally with the revision loop)." models={[['Reviewer', models?.reviewer]]} costKey={route ? routeCost : 'reviewer'} lowCost={lowCost} built={isBuilt('reviewer')} disabledReason={busyReason ?? (draftKey ? null : 'Pick a draft')}
+                onRun={() => {
+                  const [b, v] = draftKey.split('|')
+                  ask('reviewer', route ? 'Reviewer + routing loop' : 'Reviewer', route ? routeCost : 'reviewer', { brief_id: b, version: Number(v), route }, [['Draft', `${b} v${v}`], ['Routing loop', route ? 'yes' : 'no']])
+                }}>
+                <select aria-label="Draft for the Reviewer" className="input py-1.5" value={draftKey} onChange={(e) => setDraftKey(e.target.value)}>
+                  <option value="">Pick a draft…</option>
+                  {draftOptions.map((d) => <option key={d.id} value={`${d.brief_id}|${d.version}`}>{d.brief_id} v{d.version} · {d.status} · {(d.title ?? '').slice(0, 50)}</option>)}
+                </select>
+                <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={route} onChange={(e) => setRoute(e.target.checked)} /> Also run the routing loop</label>
+              </RunButton>
+              {settings.data?.designer?.promo_enabled !== false && (
+                <RunButton title="Create promo pack" description="LinkedIn post, X thread, newsletter blurb, video script for an approved draft." costKey="promo" lowCost={lowCost} built={isBuilt('promo')} disabledReason={busyReason ?? (promoBrief ? null : 'Pick an approved draft')}
+                  onRun={() => ask('promo', 'Promo pack', 'promo', { brief_id: promoBrief }, [['Approved draft of', promoBrief]])}>
+                  <select aria-label="Approved draft for the promo pack" className="input py-1.5" value={promoBrief} onChange={(e) => setPromoBrief(e.target.value)}>
+                    <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
+                    {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
+                  </select>
+                </RunButton>
+              )}
+              {flags.experienceOn && <RunButton title="Experience Designer" description="Build the interactive guide again for an approved post (no review). Republish to put it live." costKey="designer" lowCost={lowCost} built={isBuilt('designer')} disabledReason={busyReason ?? (designBrief ? null : 'Pick an approved draft')}
+                onRun={() => ask('designer', 'Experience Designer', 'designer', { brief_id: designBrief }, [['Approved draft of', designBrief]])}>
+                <select aria-label="Approved draft for the Experience Designer" className="input py-1.5" value={designBrief} onChange={(e) => setDesignBrief(e.target.value)}>
+                  <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
+                  {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
+                </select>
+              </RunButton>}
+              <RunButton title="Export Markdown" description="Save the final Markdown export of an approved post again (Mem0 and apps/engine/exports). Approving already does this." costKey="export_save" lowCost={lowCost} built={isBuilt('export')}
+                disabledReason={busyReason ?? (exportBrief ? null : 'Pick an approved draft')}
+                onRun={() => ask('export', 'Export Markdown', 'export_save', { brief_id: exportBrief, save: true }, [['Approved draft of', exportBrief]])}>
+                <select aria-label="Approved draft to export" className="input py-1.5" value={exportBrief} onChange={(e) => setExportBrief(e.target.value)}>
+                  <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
+                  {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
+                </select>
+              </RunButton>
+              {flags.target !== 'none' && <RunButton title={publishTitle} description={flags.blogOn ? `Put an approved post on the blog: build, deploy, check it is live.${blog?.auto_publish ? ' (AUTO_PUBLISH is on: approving publishes too.)' : ''}` : flags.target === 'slack' ? 'Send an approved post to Slack again: its title, score and a link to download the .md.' : flags.target === 'email' ? 'Email an approved post again: its title, score and the .md attached (MAIL_TO).' : `Send an approved post's Markdown export to Docstar.${flags.docstarConfigured ? '' : ' Docstar is not configured yet (DOCSTAR_* keys): it answers "not configured".'}`} costKey="publish" lowCost={lowCost} built={isBuilt('publish')} comingIn="Phase 7"
+                disabledReason={busyReason ?? (publishBrief ? (flags.blogOn ? tokenReason : null) : 'Pick an approved draft')}
+                onRun={() => ask('publish', publishTitle, 'publish', { brief_id: publishBrief }, [['Approved draft of', publishBrief], ['Goes to', flags.blogOn ? blog?.base_url ?? '…' : flags.target === 'slack' ? 'Slack' : flags.target === 'email' ? 'Email (MAIL_TO)' : 'Docstar']])}>
+                <select aria-label="Approved draft to publish" className="input py-1.5" value={publishBrief} onChange={(e) => setPublishBrief(e.target.value)}>
+                  <option value="">{approvedOptions.length ? 'Pick an approved draft…' : 'No approved drafts yet'}</option>
+                  {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
+                </select>
+              </RunButton>}
+              {flags.blogOn && <RunButton title="Rebuild blog" description="Rebuild and redeploy the blog from the published posts without changing any post (after a change to the blog's code or look)." costKey="rebuild_blog" lowCost={lowCost} built={isBuilt('rebuild_blog')} comingIn="Phase 7"
+                disabledReason={busyReason ?? tokenReason}
+                onRun={() => ask('rebuild_blog', 'Rebuild blog', 'rebuild_blog', {}, [['Deploys to', blog?.base_url ?? '…']])} />}
+              </div>
+            </details>
+          </div>
+        </section>
       </div>
 
       <ConfirmDialog

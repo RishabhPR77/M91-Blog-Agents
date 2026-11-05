@@ -28,29 +28,32 @@ export function MarkdownExportView({ markdown, filename, frontMatter, downloadHr
   }
   return (
     <div data-testid="markdown-export">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1 font-mono text-xs text-slate-600 dark:text-slate-300"><FileText size={14} />{filename}</span>
-        <span className="text-xs text-slate-500">{markdown.length.toLocaleString('en-US')} characters</span>
+      <div className="mb-8 flex flex-wrap items-center gap-3">
+        <span className="inline-flex items-center gap-1.5 font-mono text-xs text-ink-2"><FileText size={14} />{filename}</span>
+        <span className="text-xs text-ink-3">{markdown.length.toLocaleString('en-US')} characters</span>
         <span className="flex-1" />
-        <button type="button" className="btn-secondary py-1.5 text-xs" onClick={() => setRaw((r) => !r)}>{raw ? 'Show rendered' : 'Show Markdown'}</button>
-        <button type="button" className="btn-secondary py-1.5 text-xs" onClick={() => void copy()} data-testid="copy-markdown">
+        <div className="inline-flex rounded-full bg-ink/[0.05] p-1 text-xs font-medium" role="group" aria-label="View">
+          <button type="button" className={`rounded-full px-3 py-1.5 transition-all ${!raw ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink'}`} aria-pressed={!raw} onClick={() => setRaw(false)}>Read</button>
+          <button type="button" className={`rounded-full px-3 py-1.5 transition-all ${raw ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink'}`} aria-pressed={raw} onClick={() => setRaw(true)}>Markdown</button>
+        </div>
+        <button type="button" className="btn-secondary px-3 py-1.5 text-xs" onClick={() => void copy()} data-testid="copy-markdown">
           <Copy size={14} /> {copied === 'done' ? 'Copied' : copied === 'failed' ? 'Copy failed' : 'Copy Markdown'}
         </button>
-        <a className="btn-primary py-1.5 text-xs" href={downloadHref} download={filename} data-testid="download-markdown"><Download size={14} /> Download .md</a>
+        <a className="btn-primary px-3.5 py-1.5 text-xs" href={downloadHref} download={filename} data-testid="download-markdown"><Download size={14} /> Download .md</a>
       </div>
       {warnings.length > 0 && (
         <ul className="mb-3 list-disc pl-5 text-xs text-amber-700 dark:text-amber-300">{warnings.map((w) => <li key={w}>{w}</li>)}</ul>
       )}
       {frontMatter && (
-        <dl className="mb-4 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 rounded-lg border border-slate-200 p-3 text-xs dark:border-slate-700" data-testid="front-matter">
+        <dl className="mx-auto mb-12 grid max-w-[680px] grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 border-y border-line py-4 text-xs" data-testid="front-matter">
           {Object.entries(frontMatter).map(([k, v]) => (
-            <div key={k} className="contents"><dt className="font-mono text-slate-500">{k}</dt><dd className="break-words">{Array.isArray(v) ? v.join(', ') : v === null || v === undefined ? '—' : String(v)}</dd></div>
+            <div key={k} className="contents"><dt className="font-mono text-ink-3">{k}</dt><dd className="break-words text-ink-2">{Array.isArray(v) ? v.join(', ') : v === null || v === undefined ? '—' : String(v)}</dd></div>
           ))}
         </dl>
       )}
       {raw
-        ? <pre className="max-h-[70vh] overflow-auto rounded-lg bg-slate-950 p-4 text-xs text-slate-100" data-testid="raw-markdown">{markdown}</pre>
-        : <MarkdownPreview markdown={bodyOf(markdown)} />}
+        ? <pre className="mx-auto max-h-[75vh] max-w-[760px] animate-fade overflow-auto rounded-2xl bg-[#0b0e12] p-6 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-[#e8eaed]" data-testid="raw-markdown">{markdown}</pre>
+        : <MarkdownPreview variant="article" className="mx-auto max-w-[680px] animate-fade" markdown={bodyOf(markdown)} />}
     </div>
   )
 }

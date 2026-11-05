@@ -3,12 +3,11 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, LogOut, Menu, Monitor, Moon, Settings as SettingsIcon, Sun, X } from 'lucide-react'
+import { ChevronDown, LogOut, Menu, Settings as SettingsIcon, X } from 'lucide-react'
 import { api } from '../api/client'
 import { keys, useApprovals, useHealth, useRuns, useSettings } from '../api/queries'
 import type { IndexStatus, Mem0Usage } from '../api/types'
 import { openEventStream } from '../api/sse'
-import { applyTheme, readThemePref, saveThemePref, watchSystemTheme, type ThemePref } from '../theme'
 import { toast } from './Toasts'
 import { IndexAge, IndexBanner } from './IndexStatus'
 import { QuotaBanner, QuotaPill } from './QuotaStatus'
@@ -82,24 +81,6 @@ function Logo() {
   )
 }
 
-function ThemeToggle() {
-  const [pref, setPref] = useState<ThemePref>(readThemePref)
-  const ref = useRef(pref)
-  ref.current = pref
-  useEffect(() => {
-    applyTheme(pref)
-    saveThemePref(pref)
-  }, [pref])
-  useEffect(() => watchSystemTheme(() => ref.current), [])
-  const next: Record<ThemePref, ThemePref> = { system: 'light', light: 'dark', dark: 'system' }
-  const icon = pref === 'light' ? <Sun size={17} /> : pref === 'dark' ? <Moon size={17} /> : <Monitor size={17} />
-  return (
-    <button type="button" className="btn-ghost" onClick={() => setPref(next[pref])} title={`Theme: ${pref} (click to change)`} aria-label={`Theme: ${pref}`}>
-      {icon}
-    </button>
-  )
-}
-
 /** One button for the engine's state ("● Live"); its details (version, data age, memory use, dry run) open below it. */
 function StatusMenu({ online, pending, version, live, dryRun, index, usage }: { online: boolean; pending: boolean; version?: string; live: LiveState; dryRun?: boolean; index?: IndexStatus; usage?: Mem0Usage }) {
   const [open, setOpen] = useState(false)
@@ -111,11 +92,11 @@ function StatusMenu({ online, pending, version, live, dryRun, index, usage }: { 
   return (
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="engine-status-panel" title="Engine status"
-        className="flex items-center gap-2 rounded-full border border-line bg-surface py-1 pr-3 pl-2.5 text-xs font-medium text-ink-2 transition-colors hover:border-line-strong hover:text-ink">
+        className="flex items-center gap-2 rounded-full py-1.5 pr-3 pl-2.5 text-[13px] font-medium text-ink-2 transition-colors hover:bg-ink/[0.05] hover:text-ink">
         <span className={`size-2 rounded-full ${dot}`} />
         <span data-testid="live-indicator">{word}</span>
       </button>
-      <div id="engine-status-panel" hidden={!open} className="absolute right-0 z-40 mt-2 w-72 animate-pop rounded-xl border border-line bg-surface p-3 text-sm shadow-(--shadow-float)">
+      <div id="engine-status-panel" hidden={!open} className="absolute right-0 z-40 mt-2 w-80 animate-pop rounded-2xl border border-line bg-surface p-4 text-sm shadow-(--shadow-float)">
         <p className="eyebrow px-1 pb-1">Engine</p>
         <div className="divide-y divide-line px-1">
           <div className={row}><span className="text-ink-2">Status</span><span data-testid="engine-status" className="font-medium">{online ? `Engine online · v${version}` : pending ? 'Checking engine…' : 'Engine offline'}</span></div>
@@ -132,9 +113,14 @@ function StatusMenu({ online, pending, version, live, dryRun, index, usage }: { 
 function NavTab({ item }: { item: NavItem }) {
   return (
     <NavLink to={item.to} end={item.end}
-      className={({ isActive }) => `relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors ${isActive ? 'bg-ink/[0.06] font-medium text-ink' : 'text-ink-2 hover:bg-ink/[0.04] hover:text-ink'}`}>
-      {item.label}
-      {item.badge ? <span className="min-w-5 rounded-full bg-hl px-1.5 text-center text-[11px] leading-5 font-semibold text-[#0b0e12] tabular-nums" aria-label={`${item.badge} waiting`}>{item.badge}</span> : null}
+      className={({ isActive }) => `group relative flex items-center gap-2 px-3 py-2 text-[14.5px] transition-colors ${isActive ? 'font-medium text-ink' : 'text-ink-2 hover:text-ink'}`}>
+      {({ isActive }) => (<>
+      <span className="relative">
+        <span aria-hidden className={`absolute inset-x-[-3px] bottom-[1px] h-[7px] origin-left rounded-sm bg-hl transition-transform duration-300 ease-[var(--ease-out)] ${isActive ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100 group-hover:opacity-50'}`} />
+        <span className="relative">{item.label}</span>
+      </span>
+      {item.badge ? <span className="min-w-5 rounded-full bg-ink px-1.5 text-center text-[11px] leading-5 font-semibold text-white tabular-nums" aria-label={`${item.badge} waiting`}>{item.badge}</span> : null}
+      </>)}
     </NavLink>
   )
 }
@@ -149,11 +135,11 @@ function MoreMenu({ items }: { items: NavItem[] }) {
   return (
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="more-menu"
-        className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm transition-colors ${active ? 'bg-ink/[0.06] font-medium text-ink' : 'text-ink-2 hover:bg-ink/[0.04] hover:text-ink'}`}>
+        className={`flex items-center gap-1 px-3 py-2 text-[14.5px] transition-colors ${active ? 'font-medium text-ink' : 'text-ink-2 hover:text-ink'}`}>
         More <ChevronDown size={14} className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
       {/* Always in the page (hidden with CSS while closed), so it can animate both ways and its links stay findable. */}
-      <div id="more-menu" className={`absolute left-0 z-40 mt-2 w-64 origin-top-left rounded-xl border border-line bg-surface p-1.5 shadow-(--shadow-float) transition-[opacity,transform,visibility] duration-200 ease-out ${open ? 'visible translate-y-0 scale-100 opacity-100' : 'invisible -translate-y-1 scale-[0.98] opacity-0'}`}>
+      <div id="more-menu" className={`absolute left-0 z-40 mt-2 w-72 origin-top-left rounded-2xl border border-line bg-surface p-1.5 shadow-(--shadow-float) transition-[opacity,transform,visibility] duration-200 ease-out ${open ? 'visible translate-y-0 scale-100 opacity-100' : 'invisible -translate-y-1 scale-[0.98] opacity-0'}`}>
         {items.map((item) => (
           <NavLink key={item.to} to={item.to} tabIndex={open ? 0 : -1} className={({ isActive }) => `block rounded-lg px-3 py-2 transition-colors ${isActive ? 'bg-ink/[0.06]' : 'hover:bg-ink/[0.04]'}`}>
             <span className="block text-sm font-medium text-ink">{item.label}</span>
@@ -213,35 +199,34 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full flex-col">
       <TopLoader />
-      <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-xl backdrop-saturate-150">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">
+      <header className="sticky top-0 z-30 border-b border-line/70 bg-bg/85 backdrop-blur-xl backdrop-saturate-150">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-5 sm:px-8">
           <button type="button" className="btn-ghost -ml-2 md:hidden" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" aria-expanded={menuOpen}>
             {menuOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <NavLink to="/" className="mr-3 flex items-center gap-2.5" aria-label="Blog Engine home">
+          <NavLink to="/" className="mr-5 flex items-center gap-2.5" aria-label="Blog Engine home">
             <Logo />
-            <span className="hidden text-sm font-semibold tracking-[-0.01em] sm:inline">Blog Engine</span>
+            <span className="hidden font-serif text-[17px] font-semibold tracking-[-0.01em] sm:inline">Blog Engine</span>
           </NavLink>
-          <nav className="hidden items-center gap-0.5 md:flex" aria-label="Main">
+          <nav className="hidden items-center md:flex" aria-label="Main">
             {primary.map((item) => <NavTab key={item.to} item={item} />)}
             <MoreMenu items={more} />
           </nav>
           <div className="ml-auto flex items-center gap-1.5">
             {activeRun && (
-              <NavLink to={`/runs/${activeRun.run_id}`} className="flex items-center gap-2 rounded-full bg-red-500/10 py-1 pr-3 pl-2.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-500/15 dark:text-red-300">
+              <NavLink to={`/runs/${activeRun.run_id}`} className="flex items-center gap-2 rounded-full py-1.5 pr-3 pl-2.5 text-[13px] font-semibold text-red-700 transition-colors hover:bg-red-500/10">
                 <span className="size-2 animate-signal rounded-full bg-signal text-signal" /> Live run
               </NavLink>
             )}
-            {dryRun && <span className="pill pill-amber hidden sm:inline-flex" data-testid="dry-run-default">Dry run <span className="sr-only">by default</span></span>}
+            {dryRun && <span className="pill pill-amber hidden px-2 sm:inline-flex" data-testid="dry-run-default">Dry run <span className="sr-only">by default</span></span>}
             <StatusMenu online={online} pending={health.isPending} version={health.data?.version} live={live} dryRun={dryRun} index={online ? health.data?.index : undefined} usage={online ? health.data?.mem0_usage : undefined} />
-            <ThemeToggle />
             <NavLink to="/settings" className={({ isActive }) => `btn-ghost ${isActive ? 'bg-ink/[0.06] text-ink' : ''}`} aria-label="Settings" title="Settings"><SettingsIcon size={17} /></NavLink>
             {auth && <button type="button" onClick={logout} className="btn-ghost" aria-label="Log out" title="Log out"><LogOut size={17} /></button>}
           </div>
         </div>
       </header>
       {menuOpen && (
-        <div className="fixed inset-x-0 top-14 bottom-0 z-40 animate-fade bg-bg/95 backdrop-blur-xl md:hidden">
+        <div className="fixed inset-x-0 top-16 bottom-0 z-40 animate-fade bg-bg/95 backdrop-blur-xl md:hidden">
           <nav className="stagger mx-auto flex max-w-md flex-col gap-1 p-4" aria-label="Menu">
             {[...primary, ...more].map((item) => (
               <NavLink key={item.to} to={item.to} end={item.end}
@@ -260,7 +245,7 @@ export function Layout({ children }: { children: ReactNode }) {
       )}
       {online && <QuotaBanner usage={health.data?.mem0_usage} />}
       {online && <IndexBanner index={health.data?.index} running={Boolean(health.data?.run_in_progress)} />}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-8 pb-20 sm:px-6 sm:pt-10">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-5 pt-12 pb-28 sm:px-8 sm:pt-16">
         <div key={location.pathname} className="animate-enter">{children}</div>
       </main>
     </div>

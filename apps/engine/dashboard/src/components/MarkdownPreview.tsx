@@ -22,8 +22,8 @@ const components: Components = {
   img: ({ node: _n, alt }) => <span className="text-slate-500">[image: {alt}]</span>
 }
 
-// The reading view: the post as a reader sees it on msg91.com/guide (bigger type, calm headings, roomy lines).
-const ARTICLE = 'article-view mx-auto max-w-[70ch] text-[17px] leading-8 text-slate-800 dark:text-slate-200'
+// The reading view: the post as a reader sees it (a serif column, large type, roomy lines; styles in tailwind.css).
+const ARTICLE = 'article-view'
 
 export const MarkdownPreview = forwardRef<HTMLDivElement, { markdown: string; className?: string; variant?: 'plain' | 'article' }>(function MarkdownPreview({ markdown, className = '', variant = 'plain' }, ref) {
   return (

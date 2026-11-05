@@ -3,23 +3,24 @@ import type { ReactNode } from 'react'
 
 export function PageHeader({ title, subtitle, actions, eyebrow }: { title: string; subtitle?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode }) {
   return (
-    <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-      <div className="min-w-0">
-        {eyebrow && <p className="eyebrow mb-2">{eyebrow}</p>}
-        <h1 className="font-display text-[28px] leading-[1.15] font-semibold tracking-[-0.025em] text-ink sm:text-[32px]">{title}</h1>
-        {subtitle && <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-ink-2">{subtitle}</p>}
+    <header className="mb-12 flex flex-wrap items-end justify-between gap-6">
+      <div className="min-w-0 animate-rise">
+        {eyebrow && <p className="eyebrow mb-3">{eyebrow}</p>}
+        <h1 className="font-serif text-[38px] leading-[1.08] font-semibold tracking-[-0.025em] text-ink sm:text-[46px]">{title}</h1>
+        {subtitle && <p className="mt-3 max-w-2xl text-[15.5px] leading-relaxed text-ink-2">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-3">{actions}</div>}
     </header>
   )
 }
 
+/** A section of a page: a hairline on top, a small serif title, no box. */
 export function Card({ title, children, className = '', actions }: { title?: ReactNode; children: ReactNode; className?: string; actions?: ReactNode }) {
   return (
-    <section className={`panel p-5 sm:p-6 ${className}`}>
+    <section className={`border-t border-line pt-6 pb-2 ${className}`}>
       {(title || actions) && (
-        <div className="mb-4 flex items-center justify-between gap-3">
-          {title && <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{title}</h2>}
+        <div className="mb-5 flex items-center justify-between gap-3">
+          {title && <h2 className="font-serif text-[21px] font-semibold tracking-[-0.01em] text-ink [&_svg]:hidden">{title}</h2>}
           {actions}
         </div>
       )}
@@ -29,7 +30,7 @@ export function Card({ title, children, className = '', actions }: { title?: Rea
 }
 
 export function EmptyState({ children }: { children: ReactNode }) {
-  return <div className="rounded-xl border border-dashed border-line-strong px-6 py-10 text-center text-sm text-ink-3">{children}</div>
+  return <div className="rounded-2xl bg-surface-2/70 px-6 py-10 text-center text-[15px] text-ink-2">{children}</div>
 }
 
 /** One grey shape with a light passing over it. Size it with classes (h-4 w-40, …). */
@@ -55,21 +56,14 @@ export function LoadingRows({ rows = 3, label = 'Loading' }: { rows?: number; la
 export function PageSkeleton() {
   return (
     <div role="status" aria-busy="true" aria-label="Loading the page" className="animate-fade">
-      <Skeleton className="mb-3 h-3 w-24" />
-      <Skeleton className="mb-3 h-8 w-72 max-w-full" />
-      <Skeleton className="mb-10 h-4 w-[28rem] max-w-full" />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="panel space-y-4 p-6 lg:col-span-2">
-          <Skeleton className="h-5 w-48" />
-          <Skeleton className="h-3.5 w-full" />
-          <Skeleton className="h-3.5 w-5/6" />
-          <Skeleton className="h-3.5 w-2/3" />
-        </div>
-        <div className="panel space-y-4 p-6">
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-10 w-20" />
-          <Skeleton className="h-9 w-full rounded-[10px]" />
-        </div>
+      <Skeleton className="mb-4 h-3 w-28" />
+      <Skeleton className="mb-4 h-11 w-[26rem] max-w-full" />
+      <Skeleton className="mb-14 h-4 w-[30rem] max-w-full" />
+      <div className="space-y-5 border-t border-line pt-8">
+        <Skeleton className="h-6 w-56" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-11/12" />
+        <Skeleton className="h-4 w-4/6" />
       </div>
     </div>
   )

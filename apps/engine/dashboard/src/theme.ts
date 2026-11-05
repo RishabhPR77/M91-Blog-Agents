@@ -1,38 +1,13 @@
-// Light / dark theme: follows the system setting unless the user picks one (remembered in this browser only).
-export type ThemePref = 'system' | 'light' | 'dark'
-const KEY = 'm91-dashboard-theme'
+// One light theme ("paper"). The dashboard used to follow the system's dark mode; the user chose a single,
+// calm light look, so the page is always light and a choice saved by older versions is cleared.
+const OLD_KEY = 'm91-dashboard-theme'
 
-export function readThemePref(): ThemePref {
+export function applyTheme() {
+  document.documentElement.classList.remove('dark')
+  document.documentElement.style.colorScheme = 'light'
   try {
-    const v = localStorage.getItem(KEY)
-    return v === 'light' || v === 'dark' ? v : 'system'
+    localStorage.removeItem(OLD_KEY)
   } catch {
-    return 'system'
+    // Storage may be blocked: nothing to clear.
   }
-}
-
-export function saveThemePref(pref: ThemePref) {
-  try {
-    if (pref === 'system') localStorage.removeItem(KEY)
-    else localStorage.setItem(KEY, pref)
-  } catch {
-    // Storage may be blocked; the theme still applies for this page view.
-  }
-}
-
-const systemDark = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches === true
-
-export function applyTheme(pref: ThemePref) {
-  const dark = pref === 'dark' || (pref === 'system' && systemDark())
-  document.documentElement.classList.toggle('dark', dark)
-  document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
-}
-
-/** Re-applies the theme when the system setting changes (only matters for 'system'). */
-export function watchSystemTheme(getPref: () => ThemePref): () => void {
-  const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
-  if (!mq) return () => {}
-  const onChange = () => applyTheme(getPref())
-  mq.addEventListener('change', onChange)
-  return () => mq.removeEventListener('change', onChange)
 }

@@ -43,29 +43,29 @@ export default function Exports() {
       {list.data && list.data.length === 0 ? (
         <EmptyState>No exports yet. Approve a draft on <Link className="underline" to="/approvals">Approvals</Link>: approving saves its Markdown export. Any reviewed draft's file can also be previewed there.</EmptyState>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-5">
-          <Card title="Approved posts" className="lg:col-span-2">
-            <ul className="divide-y divide-slate-200 dark:divide-slate-800" data-testid="export-list">
+        <div className="grid items-start gap-14 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <Card title="Approved posts" className="lg:sticky lg:top-24">
+            <ul className="stagger space-y-1" data-testid="export-list">
               {(list.data ?? []).map((e) => (
                 <li key={e.brief_id}>
                   <button type="button" onClick={() => setSelected(e.brief_id)} aria-current={e.brief_id === chosen ? 'true' : undefined}
-                    className={`w-full px-2 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 ${e.brief_id === chosen ? 'bg-slate-100 dark:bg-slate-800' : ''}`}>
-                    <span className="block font-medium">{e.title}</span>
-                    <span className="block text-xs text-slate-500">
+                    className={`w-full rounded-xl px-3 py-3 text-left text-sm transition-colors ${e.brief_id === chosen ? 'bg-hl-tint' : 'hover:bg-ink/[0.04]'}`}>
+                    <span className="block font-serif text-[16px] leading-snug font-semibold">{e.title || e.filename}</span>
+                    <span className="mt-1 block text-xs text-ink-3">
                       v{e.version} · {e.review_score != null ? `score ${e.review_score} · ` : ''}{e.exported_at ? fmtDateTime(e.exported_at) : ''}{e.docstar_page_id ? ' · on Docstar' : ''}
                     </span>
-                    <span className="block font-mono text-xs text-slate-500">{e.filename}</span>
+                    <span className="block truncate font-mono text-[11px] text-ink-3">{e.filename}</span>
                   </button>
                 </li>
               ))}
             </ul>
           </Card>
-          <Card title={detail.data?.title ?? 'Export'} className="lg:col-span-3">
+          <Card className="min-w-0">
             {detail.isPending && chosen ? <LoadingRows />
               : detail.error ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{errorMessage(detail.error)}</p>
               : detail.data ? (
                 <>
-                  <p className="mb-3 text-xs text-slate-500">Brief <Link className="underline" to={`/approvals/${detail.data.brief_id}`}>{detail.data.brief_id}</Link></p>
+                  <p className="mb-3 text-xs text-ink-3">Brief <Link className="link-quiet underline" to={`/approvals/${detail.data.brief_id}`}>{detail.data.brief_id}</Link></p>
                   <MarkdownExportView markdown={detail.data.markdown} filename={detail.data.filename} frontMatter={detail.data.front_matter} warnings={detail.data.warnings}
                     downloadHref={`/api/exports/${encodeURIComponent(detail.data.brief_id)}/download`} />
                 </>

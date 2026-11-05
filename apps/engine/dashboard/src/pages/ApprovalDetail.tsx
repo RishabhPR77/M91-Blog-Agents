@@ -222,32 +222,37 @@ export default function ApprovalDetail() {
 
   return (
     <>
-      <PageHeader
-        title={d.draft.title || '(untitled draft)'}
-        subtitle={<>v{d.draft.version}{d.draft.waiting_since && waiting ? ` · waiting for you since ${fmtDateTime(d.draft.waiting_since)}` : ''} · <span className="font-mono text-xs">{d.brief_id}</span></>}
-        actions={<><StatusBadge status={d.draft.status} label={waiting ? 'waiting for you' : undefined} />{!reviewed && <span className="pill pill-amber" data-testid="not-reviewed">Not reviewed</span>}</>}
-      />
+      <div className="read-progress" aria-hidden />
+      <div className="mb-8 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-ink-3 animate-fade">
+        <Link to="/approvals" className="link-quiet">← Review</Link>
+        <span aria-hidden>·</span>
+        <StatusBadge status={d.draft.status} label={waiting ? 'waiting for you' : undefined} />
+        {!reviewed && <span className="pill pill-amber" data-testid="not-reviewed">Not reviewed</span>}
+        <span>v{d.draft.version}{d.draft.waiting_since && waiting ? ` · since ${fmtDateTime(d.draft.waiting_since)}` : ''}</span>
+        <span className="font-mono text-xs">{d.brief_id}</span>
+      </div>
+      {!/^#\s/m.test(d.draft.post_markdown ?? '') && <h1 className="mb-8 max-w-3xl font-serif text-[40px] leading-[1.1] font-semibold tracking-[-0.022em]">{d.draft.title || '(untitled draft)'}</h1>}
       <JourneyCard journey={journey.data} />
       {d.pick && (
         <Card className="mb-4" title="Why this post">
           <PickCard pick={d.pick} canPin={waiting} />
         </Card>
       )}
-      {!waiting && <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900">This version is <strong>{d.draft.status.replace(/_/g, ' ')}</strong>. The decision buttons are only for a draft that waits for you.{d.draft.approved_unreviewed ? ' It was approved without a Reviewer pass.' : ''}</div>}
+      {!waiting && <div className="mb-8 rounded-2xl bg-surface-2 px-5 py-4 text-[15px] text-ink-2">This version is <strong>{d.draft.status.replace(/_/g, ' ')}</strong>. The decision buttons are only for a draft that waits for you.{d.draft.approved_unreviewed ? ' It was approved without a Reviewer pass.' : ''}</div>}
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="min-w-0 space-y-4">
-          <Card className="overflow-hidden p-0!">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 px-5 py-3 text-sm dark:border-slate-800">
-              <span className="flex items-center gap-1.5 font-medium"><BookOpenText size={16} /> {compareOn ? 'Compare versions' : 'The post, as readers will see it'}</span>
-              <span className="text-slate-500 dark:text-slate-400" data-testid="reading">{words?.toLocaleString('en-US') ?? '—'} words · {words ? `${Math.max(1, Math.round(words / 230))} min read · ` : ''}reading grade {d.draft.reading?.post_grade ?? '—'} (intro {d.draft.reading?.intro_grade ?? '—'})</span>
+      <div className="grid items-start gap-14 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_350px] xl:gap-20">
+        <div className="min-w-0 space-y-12">
+          <article className="animate-enter [animation-delay:80ms]">
+            <div className="mx-auto mb-10 flex max-w-[680px] flex-wrap items-center gap-x-4 gap-y-2 border-b border-line pb-4 text-[13px] text-ink-3">
+              <span className="flex items-center gap-1.5 font-medium text-ink-2"><BookOpenText size={15} /> {compareOn ? 'Compare versions' : 'The post, as readers will see it'}</span>
+              <span data-testid="reading">{words?.toLocaleString('en-US') ?? '—'} words · {words ? `${Math.max(1, Math.round(words / 230))} min read · ` : ''}reading grade {d.draft.reading?.post_grade ?? '—'} (intro {d.draft.reading?.intro_grade ?? '—'})</span>
               {versions.length > 1 && (
-                <button type="button" className="btn-secondary ml-auto py-1 text-xs" aria-pressed={compareOn} onClick={() => setCompareOn((o) => !o)}>
+                <button type="button" className="btn-secondary ml-auto px-3 py-1 text-xs" aria-pressed={compareOn} onClick={() => setCompareOn((o) => !o)}>
                   <GitCompare size={14} /> {compareOn ? 'Back to the post' : 'Compare versions'}
                 </button>
               )}
             </div>
-            <div className="px-5 py-6 sm:px-8 sm:py-8">
+            <div>
               {compareOn ? (
                 <>
                   <CompareControls versions={versions.map((v) => v.version)} onCompare={(a, b) => setCompare({ a, b })} />
@@ -256,24 +261,24 @@ export default function ApprovalDetail() {
               ) : (
                 <>
                   {d.draft.tldr?.length ? (
-                    <div className="mx-auto mb-8 max-w-[70ch] rounded-2xl border border-lime-300/60 bg-hl-tint p-5 text-[15px] dark:border-lime-300/20">
-                      <div className="mb-1 eyebrow text-hl-ink">TL;DR</div>
-                      <ul className="list-disc space-y-1 pl-5">{d.draft.tldr.map((t, i) => <li key={i}>{t}</li>)}</ul>
-                    </div>
+                    <aside className="mx-auto mb-12 max-w-[680px] rounded-2xl bg-hl-tint px-7 py-6">
+                      <div className="eyebrow mb-3 text-hl-ink">TL;DR · In short</div>
+                      <ul className="space-y-2 font-serif text-[18px] leading-snug text-ink">{d.draft.tldr.map((t, i) => <li key={i} className="flex gap-3"><span aria-hidden className="mt-[0.55em] size-1.5 shrink-0 rounded-full bg-ink" />{t}</li>)}</ul>
+                    </aside>
                   ) : null}
-                  <MarkdownPreview ref={preview} variant="article" markdown={d.draft.post_markdown ?? ''} />
+                  <MarkdownPreview ref={preview} variant="article" className="mx-auto max-w-[680px]" markdown={d.draft.post_markdown ?? ''} />
                 </>
               )}
             </div>
-            <details className="border-t border-slate-200 px-5 py-3 text-sm dark:border-slate-800">
-              <summary className="cursor-pointer text-slate-600 dark:text-slate-300">Search result preview (SEO title, description, slug)</summary>
-              <div className="mt-3 max-w-xl rounded-lg border border-slate-200 p-3 dark:border-slate-800" data-testid="seo">
+            <details className="mx-auto mt-14 max-w-[680px] border-t border-line pt-4 text-sm">
+              <summary className="cursor-pointer text-ink-2 hover:text-ink">Search result preview (SEO title, description, slug)</summary>
+              <div className="panel mt-4 max-w-xl p-4" data-testid="seo">
                 <div className="truncate text-[17px] font-medium text-ink">{d.draft.seo?.title_tag ?? '—'}</div>
                 <div className="truncate font-mono text-xs text-emerald-700 dark:text-emerald-400">msg91.com/guide/{d.draft.seo?.slug_suggestion ?? '—'}</div>
                 <p className="mt-1 text-slate-600 dark:text-slate-400">{d.draft.seo?.meta_description ?? '—'}</p>
               </div>
             </details>
-          </Card>
+          </article>
           {d.draft.revision_notes?.length ? (
             <Card title="What the Writer changed in this version">
               <ul className="space-y-2 text-sm">
@@ -286,8 +291,8 @@ export default function ApprovalDetail() {
           {flags.blogOn && <PreviewCard briefId={d.brief_id} version={d.draft.version} preview={d.preview} />}
         </div>
 
-        <aside className="space-y-4 lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto lg:pr-1" aria-label="Review and decision">
-          <Card title="Your decision">
+        <aside className="space-y-10 animate-enter [animation-delay:200ms] lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1" aria-label="Review and decision">
+          <Card title="Your decision" className="panel p-6!">
             <div className="space-y-2">
               {error && <ActionError error={error} onClose={() => setError(null)} />}
               <button type="button" className="btn-primary w-full py-2.5" disabled={!waiting || !hardPassed} onClick={() => openApprove(publishOn)}>
@@ -369,14 +374,14 @@ export default function ApprovalDetail() {
         </aside>
       </div>
 
-      <h2 className="mt-8 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">More about this post</h2>
-      <div className="grid items-start gap-4 md:grid-cols-2">
+      <h2 className="mt-20 mb-6 font-serif text-[26px] font-semibold tracking-[-0.015em]">More about this post</h2>
+      <div className="grid items-start gap-x-12 gap-y-8 md:grid-cols-2">
         <ExportCard briefId={d.brief_id} version={d.draft.version} status={d.draft.status} />
         {flags.blogOn && <PublishCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} title={d.draft.title} />}
         {flags.experienceOn && <InteractiveCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} info={d.interactive} />}
       </div>
 
-      <Card title="Versions" className="mt-4">
+      <Card title="Versions" className="mt-10">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-xs text-slate-500"><tr className="border-b border-slate-200 dark:border-slate-800"><th className="px-2 py-1.5 font-medium">Version</th><th className="px-2 py-1.5 font-medium">Status</th><th className="px-2 py-1.5 font-medium">Score</th><th className="px-2 py-1.5 font-medium">Title</th><th className="px-2 py-1.5 font-medium">Your counter prompt</th></tr></thead>
