@@ -1,57 +1,386 @@
 @import "tailwindcss";
 
-/* Dark mode follows the .dark class on <html> (set from the system setting or the theme toggle). */
+/* Dark mode follows the .dark class on <html> (set from the system setting or the theme control). A .dark class
+   on any element also makes its subtree dark: the "Write the next post" panel is such an island. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* M91 Ink: the M91 brand (as on m91.msg91.com and the blog): ink on paper, a lime highlight for "now / your turn",
+   the M91 red as the live signal; deep navy at night. The colour scales below are re-tuned to the brand, so every
+   screen speaks it: slate = ink neutrals, lime = the highlight, emerald = done, amber = attention, red = M91 red. */
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --font-sans: "Inter var", "Inter", "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Inter Display", "Inter var", "Inter", "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-slate-50: #f6f7f9;
+  --color-slate-100: #eef0f3;
+  --color-slate-200: #e4e8ed;
+  --color-slate-300: #c9cfd6;
+  --color-slate-400: #9aa4b0;
+  --color-slate-500: #6b7480;
+  --color-slate-600: #5a646f;
+  --color-slate-700: #3a434d;
+  --color-slate-800: #22282f;
+  --color-slate-900: #0b0e12;
+  --color-slate-950: #06080b;
+
+  --color-lime-50: #fbfee8;
+  --color-lime-100: #f4fbd3;
+  --color-lime-200: #ebf7ae;
+  --color-lime-300: #dff56b;
+  --color-lime-400: #c9e34a;
+  --color-lime-500: #a6c22a;
+  --color-lime-600: #7f971c;
+  --color-lime-700: #5f7218;
+  --color-lime-800: #4a5915;
+  --color-lime-900: #3a4613;
+  --color-lime-950: #1f2708;
+
+  --color-emerald-50: #f1f8ea;
+  --color-emerald-100: #e4f1d5;
+  --color-emerald-200: #c9e4ab;
+  --color-emerald-300: #a6d27a;
+  --color-emerald-400: #7fbb4e;
+  --color-emerald-500: #5a9a2e;
+  --color-emerald-600: #3b7a17;
+  --color-emerald-700: #3b6d11;
+  --color-emerald-800: #2d5410;
+  --color-emerald-900: #22400d;
+  --color-emerald-950: #132508;
+
+  --color-amber-50: #fffaeb;
+  --color-amber-100: #fff1cc;
+  --color-amber-200: #ffe199;
+  --color-amber-300: #ffcb5c;
+  --color-amber-400: #f7b02e;
+  --color-amber-500: #e5940e;
+  --color-amber-600: #c27506;
+  --color-amber-700: #985807;
+  --color-amber-800: #7a460c;
+  --color-amber-900: #643a0e;
+  --color-amber-950: #3a1f04;
+
+  --color-red-50: #fff3f2;
+  --color-red-100: #ffe2e0;
+  --color-red-200: #ffc9c5;
+  --color-red-300: #fca19b;
+  --color-red-400: #f6685f;
+  --color-red-500: #e93a34;
+  --color-red-600: #d91f26;
+  --color-red-700: #b3161d;
+  --color-red-800: #93161c;
+  --color-red-900: #7a171c;
+  --color-red-950: #42070a;
+
+  /* The rest of the old palette, folded into the brand: indigo (old primary buttons and links) = ink, sky / blue
+     (old "running" and info) and violet / purple (old "your turn") = the lime "now", green = emerald, rose = red,
+     yellow = amber, gray = slate. Pages not rewritten yet still speak M91 this way. */
+  --color-indigo-50: #f4fbd3;
+  --color-indigo-100: #ebf7ae;
+  --color-indigo-200: #dff56b;
+  --color-indigo-300: #c9e34a;
+  --color-indigo-400: #3a434d;
+  --color-indigo-500: #262d35;
+  --color-indigo-600: #0b0e12;
+  --color-indigo-700: #0b0e12;
+  --color-indigo-800: #06080b;
+  --color-indigo-900: #4a5915;
+  --color-indigo-950: #3a4613;
+  --color-sky-50: #fbfee8;
+  --color-sky-100: #f4fbd3;
+  --color-sky-200: #ebf7ae;
+  --color-sky-300: #dff56b;
+  --color-sky-400: #c9e34a;
+  --color-sky-500: #a6c22a;
+  --color-sky-600: #7f971c;
+  --color-sky-700: #5f7218;
+  --color-sky-800: #4a5915;
+  --color-sky-900: #3a4613;
+  --color-sky-950: #1f2708;
+  --color-blue-50: #fbfee8;
+  --color-blue-100: #f4fbd3;
+  --color-blue-200: #ebf7ae;
+  --color-blue-300: #dff56b;
+  --color-blue-400: #c9e34a;
+  --color-blue-500: #a6c22a;
+  --color-blue-600: #7f971c;
+  --color-blue-700: #5f7218;
+  --color-blue-800: #4a5915;
+  --color-blue-900: #3a4613;
+  --color-violet-50: #fbfee8;
+  --color-violet-100: #f4fbd3;
+  --color-violet-200: #ebf7ae;
+  --color-violet-300: #dff56b;
+  --color-violet-400: #c9e34a;
+  --color-violet-500: #0b0e12;
+  --color-violet-600: #0b0e12;
+  --color-violet-700: #4a5915;
+  --color-violet-800: #3a4613;
+  --color-violet-900: #1f2708;
+  --color-purple-50: #fbfee8;
+  --color-purple-100: #f4fbd3;
+  --color-purple-200: #ebf7ae;
+  --color-purple-300: #dff56b;
+  --color-purple-400: #c9e34a;
+  --color-purple-500: #0b0e12;
+  --color-purple-600: #0b0e12;
+  --color-purple-700: #4a5915;
+  --color-purple-800: #3a4613;
+  --color-purple-900: #1f2708;
+  --color-green-50: #f1f8ea;
+  --color-green-100: #e4f1d5;
+  --color-green-200: #c9e4ab;
+  --color-green-300: #a6d27a;
+  --color-green-400: #7fbb4e;
+  --color-green-500: #5a9a2e;
+  --color-green-600: #3b7a17;
+  --color-green-700: #3b6d11;
+  --color-green-800: #2d5410;
+  --color-green-900: #22400d;
+  --color-rose-50: #fff3f2;
+  --color-rose-100: #ffe2e0;
+  --color-rose-200: #ffc9c5;
+  --color-rose-300: #fca19b;
+  --color-rose-400: #f6685f;
+  --color-rose-500: #e93a34;
+  --color-rose-600: #d91f26;
+  --color-rose-700: #b3161d;
+  --color-rose-800: #93161c;
+  --color-rose-900: #7a171c;
+  --color-yellow-50: #fffaeb;
+  --color-yellow-100: #fff1cc;
+  --color-yellow-200: #ffe199;
+  --color-yellow-300: #ffcb5c;
+  --color-yellow-400: #f7b02e;
+  --color-yellow-500: #e5940e;
+  --color-yellow-600: #c27506;
+  --color-yellow-700: #985807;
+  --color-yellow-800: #7a460c;
+  --color-yellow-900: #643a0e;
+  --color-gray-50: #f6f7f9;
+  --color-gray-100: #eef0f3;
+  --color-gray-200: #e4e8ed;
+  --color-gray-300: #c9cfd6;
+  --color-gray-400: #9aa4b0;
+  --color-gray-500: #6b7480;
+  --color-gray-600: #5a646f;
+  --color-gray-700: #3a434d;
+  --color-gray-800: #22282f;
+  --color-gray-900: #0b0e12;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --animate-enter: enter 360ms var(--ease-out) both;
+  --animate-fade: fade 240ms var(--ease-out) both;
+  --animate-pop: pop 220ms var(--ease-out) both;
+  --animate-slide-in: slide-in 300ms var(--ease-out) both;
+  --animate-signal: signal 1.6s ease-out infinite;
+  --animate-stripes: stripes 900ms linear infinite;
+}
+
+/* Motion: short and soft; all of it stops for people who ask for reduced motion (see the end of this file). */
+@keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes slide-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@keyframes signal { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
+@keyframes stripes { from { background-position: 0 0; } to { background-position: 20px 0; } }
+
+/* Semantic tokens: paper, ink and the brand colours, for both themes. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #fafbfc;
+  --line: #e4e8ed;
+  --line-strong: #c9cfd6;
+  --ink: #0b0e12;
+  --ink-2: #5a646f;
+  --ink-3: #6b7480;
+  --primary: #0b0e12;
+  --primary-hover: #262d35;
+  --primary-fg: #ffffff;
+  --hl: #dff56b;
+  --hl-tint: #f4fbd3;
+  --hl-ink: #4a5915;
+  --signal: #d91f26;
+  --ring: #0b0e12;
+  --shadow-panel: 0 1px 2px rgb(11 14 18 / 0.04), 0 0 0 1px rgb(11 14 18 / 0.02);
+  --shadow-float: 0 12px 32px -8px rgb(11 14 18 / 0.18), 0 2px 6px rgb(11 14 18 / 0.06);
+  interpolate-size: allow-keywords;
+}
+
+.dark {
+  --bg: #0b1119;
+  --surface: #111823;
+  --surface-2: #16202d;
+  --line: #1f2a38;
+  --line-strong: #2e3b4d;
+  --ink: #edf0f3;
+  --ink-2: #a3adb9;
+  --ink-3: #8592a0;
+  --primary: #dff56b;
+  --primary-hover: #ebfa9a;
+  --primary-fg: #0b0e12;
+  --hl: #dff56b;
+  --hl-tint: rgb(223 245 107 / 0.1);
+  --hl-ink: #e6f88f;
+  --signal: #ff4f56;
+  --ring: #dff56b;
+  --shadow-panel: none;
+  --shadow-float: 0 16px 40px -10px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.04);
+
+  /* Night neutrals: the same scale, on the brand navy. */
+  --color-slate-50: #f6f8fa;
+  --color-slate-100: #edf0f3;
+  --color-slate-200: #d7dce2;
+  --color-slate-300: #b9c1cb;
+  --color-slate-400: #9aa4b0;
+  --color-slate-500: #7f8b98;
+  --color-slate-600: #4f5c6d;
+  --color-slate-700: #2e3b4d;
+  --color-slate-800: #1f2a38;
+  --color-slate-900: #111823;
+  --color-slate-950: #0b1119;
+  --color-gray-100: #edf0f3;
+  --color-gray-200: #d7dce2;
+  --color-gray-300: #b9c1cb;
+  --color-gray-400: #9aa4b0;
+  --color-gray-500: #7f8b98;
+  --color-gray-600: #4f5c6d;
+  --color-gray-700: #2e3b4d;
+  --color-gray-800: #1f2a38;
+  --color-gray-900: #111823;
+  /* Old primary buttons and links: lime at night (their text is set per component, see btn-primary). */
+  --color-indigo-50: rgb(223 245 107 / 0.1);
+  --color-indigo-100: rgb(223 245 107 / 0.16);
+  --color-indigo-200: #e6f88f;
+  --color-indigo-300: #e6f88f;
+  --color-indigo-400: #dff56b;
+  --color-indigo-500: #dff56b;
+  --color-indigo-600: #c9e34a;
+  --color-indigo-700: #e6f88f;
+  --color-indigo-800: #e6f88f;
+  --color-indigo-900: #e6f88f;
+  --color-indigo-950: #e6f88f;
+  --color-violet-500: #dff56b;
+  --color-violet-600: #dff56b;
+  --color-purple-500: #dff56b;
+  --color-purple-600: #dff56b;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-hl: var(--hl);
+  --color-hl-tint: var(--hl-tint);
+  --color-hl-ink: var(--hl-ink);
+  --color-signal: var(--signal);
 }
 
 html, body, #root { height: 100%; }
-
-/* Dark mode = graphite: neutral greys, the page darkest, cards one step up, borders one more; grey text bright
-   enough to read. Only the dark theme redefines these, so light mode keeps Tailwind's slate. */
-.dark {
-  --color-slate-50: #fafafa;
-  --color-slate-100: #f1f1f3;
-  --color-slate-200: #e2e2e6;
-  --color-slate-300: #cfcfd5;
-  --color-slate-400: #ababb3;
-  --color-slate-500: #8f8f98;
-  --color-slate-600: #5c5c64;
-  --color-slate-700: #3b3b41;
-  --color-slate-800: #2b2b30;
-  --color-slate-900: #1c1c1f;
-  --color-slate-950: #131315;
+body {
+  @apply bg-bg text-[14px] leading-normal text-ink antialiased;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  text-rendering: optimizeLegibility;
 }
-body { @apply bg-slate-100/70 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100; }
+::selection { background: var(--hl); color: #0b0e12; }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 
-/* Small shared component classes (Tailwind 4 utilities, so they can be combined with @apply). */
-@utility btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50; }
-@utility btn-primary { @apply btn bg-indigo-600 text-white shadow-sm hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:bg-slate-100 dark:text-slate-950 dark:shadow-none dark:hover:bg-white dark:focus-visible:outline-slate-300; }
-@utility btn-secondary { @apply btn border border-slate-300 bg-white text-slate-800 shadow-xs hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800; }
-@utility btn-danger { @apply btn bg-red-600 text-white hover:bg-red-500; }
-@utility btn-ghost { @apply inline-flex items-center justify-center rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800; }
-@utility pill { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap; }
-@utility pill-green { @apply bg-emerald-100 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-1 dark:ring-emerald-400/25 dark:ring-inset; }
-@utility pill-red { @apply bg-red-100 text-red-800 dark:bg-red-400/10 dark:text-red-300 dark:ring-1 dark:ring-red-400/25 dark:ring-inset; }
-@utility pill-amber { @apply bg-amber-200 text-amber-950 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-1 dark:ring-amber-400/25 dark:ring-inset; }
-@utility pill-blue { @apply bg-sky-100 text-sky-800 dark:bg-sky-400/10 dark:text-sky-300 dark:ring-1 dark:ring-sky-400/25 dark:ring-inset; }
-@utility pill-gray { @apply bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:ring-1 dark:ring-slate-700 dark:ring-inset; }
-@utility input { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:border-slate-500 dark:focus:ring-slate-700/60; }
-@utility label { @apply mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300; }
+/* Components (Tailwind utilities, so they combine with other classes and @apply). */
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-3.5 py-2 text-sm font-medium whitespace-nowrap select-none;
+  transition: background-color 150ms, border-color 150ms, color 150ms, box-shadow 150ms, transform 120ms var(--ease-out), opacity 150ms;
+  &:active:not(:disabled) { transform: scale(0.97); }
+  &:disabled { cursor: not-allowed; opacity: 0.45; }
+}
+@utility btn-primary { @apply btn bg-primary text-primary-fg shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] hover:bg-primary-hover; }
+@utility btn-secondary { @apply btn border border-line bg-surface text-ink shadow-[0_1px_1px_rgb(11_14_18/0.04)] hover:border-line-strong hover:bg-surface-2; }
+@utility btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
+@utility btn-ghost { @apply inline-flex items-center justify-center rounded-lg p-2 text-ink-2 transition-colors hover:bg-ink/[0.06] hover:text-ink; }
 
-/* The reading view (the post as on msg91.com/guide): headings and blocks a little larger than in plain previews. */
-.article-view h1 { @apply mt-0 mb-6 text-3xl leading-tight font-bold tracking-tight text-slate-900 dark:text-white; }
-.article-view h2 { @apply mt-12 mb-4 border-t border-slate-200 pt-8 text-2xl leading-snug font-bold tracking-tight text-slate-900 dark:border-slate-800 dark:text-white; }
-.article-view h3 { @apply mt-8 mb-3 text-xl font-semibold text-slate-900 dark:text-white; }
-.article-view p { @apply my-4 leading-8; }
-.article-view li { @apply leading-7; }
+/* Tags: a dot and a word. The tone names stay (green, red, amber, blue = "now", gray). */
+@utility pill {
+  @apply inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap;
+  &::before { content: ""; width: 6px; height: 6px; border-radius: 9999px; background: currentColor; opacity: 0.85; flex: none; }
+}
+@utility pill-green { @apply bg-emerald-50 text-emerald-700 ring-1 ring-emerald-700/15 ring-inset dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-300/20; }
+@utility pill-red { @apply bg-red-50 text-red-700 ring-1 ring-red-700/15 ring-inset dark:bg-red-400/10 dark:text-red-300 dark:ring-red-300/20; }
+@utility pill-amber { @apply bg-amber-50 text-amber-800 ring-1 ring-amber-700/20 ring-inset dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-300/20; }
+@utility pill-blue { @apply bg-hl-tint text-hl-ink ring-1 ring-lime-700/20 ring-inset dark:ring-lime-300/25; }
+@utility pill-gray { @apply bg-ink/[0.05] text-ink-2 ring-1 ring-ink/10 ring-inset; }
+
+@utility input {
+  @apply w-full rounded-[10px] border border-line bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3;
+  transition: border-color 150ms, box-shadow 150ms;
+  &:hover { border-color: var(--line-strong); }
+  &:focus { border-color: var(--ink); box-shadow: 0 0 0 4px color-mix(in oklab, var(--ink) 10%, transparent); }
+  &:disabled { opacity: 0.55; cursor: not-allowed; }
+}
+@utility label { @apply mb-1.5 block text-xs font-medium text-ink-2; }
+@utility panel { @apply rounded-2xl border border-line bg-surface shadow-(--shadow-panel); }
+@utility eyebrow { @apply text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase; }
+@utility link { @apply text-ink underline decoration-ink/30 underline-offset-[3px] transition-colors hover:decoration-ink; }
+@utility link-quiet { @apply text-ink-2 underline-offset-[3px] transition-colors hover:text-ink hover:underline; }
+
+/* Loading: shapes of the content to come, with a soft light passing over them. */
+@utility skeleton {
+  @apply relative overflow-hidden rounded-md bg-ink/[0.06];
+  &::after {
+    content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--surface) 70%, transparent), transparent);
+    animation: shimmer 1.4s var(--ease-in-out) infinite;
+  }
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
+
+/* The thin line on top of the page while data loads. */
+.top-loader { position: fixed; inset: 0 0 auto 0; height: 2px; z-index: 60; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity 300ms; }
+.top-loader[data-on="true"] { opacity: 1; transition-delay: 150ms; }
+.top-loader::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--ink) 30%, var(--hl) 70%, transparent); animation: loader 1.1s var(--ease-in-out) infinite; }
+.dark .top-loader::after { background: linear-gradient(90deg, transparent, var(--hl) 50%, transparent); }
+@keyframes loader { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+/* Lists that come in one row after another. */
+.stagger > * { animation: enter 420ms var(--ease-out) both; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(6) { animation-delay: 200ms; }
+.stagger > *:nth-child(n + 7) { animation-delay: 240ms; }
+
+/* Disclosures open and close smoothly where the browser supports it. */
+details::details-content { block-size: 0; overflow: clip; transition: block-size 260ms var(--ease-out), content-visibility 260ms allow-discrete; }
+details[open]::details-content { block-size: auto; }
+
+/* A progress bar that is still moving. */
+.bar-live { background-image: linear-gradient(135deg, rgb(255 255 255 / 0.28) 25%, transparent 25%, transparent 50%, rgb(255 255 255 / 0.28) 50%, rgb(255 255 255 / 0.28) 75%, transparent 75%); background-size: 20px 20px; animation: stripes 900ms linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; animation-delay: 0ms !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+}
+
+/* The reading view (the post as readers see it): a calm column with larger type. */
+.article-view { @apply text-[16.5px] leading-[1.75] text-ink; }
+.article-view h1 { @apply mt-0 mb-6 font-display text-[34px] leading-[1.15] font-semibold tracking-[-0.025em] text-ink; }
+.article-view h2 { @apply mt-14 mb-4 font-display text-[24px] leading-snug font-semibold tracking-[-0.02em] text-ink; }
+.article-view h3 { @apply mt-9 mb-3 text-[19px] font-semibold tracking-[-0.01em] text-ink; }
+.article-view p { @apply my-5; }
+.article-view li { @apply leading-[1.7]; }
 .article-view table { @apply text-[15px]; }
-.article-view pre { @apply text-[13.5px] leading-6; }
-.article-view blockquote { @apply rounded-r-lg bg-slate-50 py-2 dark:bg-slate-800/40; }
+.article-view pre { @apply rounded-xl text-[13.5px] leading-6; }
+.article-view blockquote { @apply rounded-r-xl border-l-2 border-lime-400 bg-hl-tint/60 py-2 pl-4 not-italic; }
 
 /* "Show in post": the sentence a review note quotes, flashed in the reading view. */
-.review-mark { @apply rounded bg-amber-200/80 px-0.5 text-inherit ring-2 ring-amber-300 transition-colors dark:bg-amber-400/30 dark:ring-amber-500/60; }
-.review-flash { @apply rounded-lg bg-amber-50 ring-2 ring-amber-300 transition-shadow dark:bg-amber-400/10 dark:ring-amber-500/50; }
+.review-mark { @apply rounded bg-hl px-0.5 text-slate-900 ring-2 ring-hl transition-colors dark:bg-lime-300/30 dark:text-ink dark:ring-lime-300/50; }
+.review-flash { @apply rounded-xl bg-hl-tint ring-2 ring-lime-400 transition-shadow dark:ring-lime-300/60; }

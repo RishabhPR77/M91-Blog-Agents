@@ -16,7 +16,7 @@ export function JourneyCard({ journey, title }: { journey: PostJourney | undefin
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         {title}
         <span className={`pill pill-${line.tone === 'violet' ? 'blue' : line.tone}`} data-testid="journey-line">{line.text}</span>
-        {journey.active_run_id && <Link to={`/runs/${journey.active_run_id}`} className="text-xs text-sky-700 underline dark:text-sky-300">Watch the run</Link>}
+        {journey.active_run_id && <Link to={`/runs/${journey.active_run_id}`} className="text-xs link">Watch the run</Link>}
       </div>
       <JourneyBar stages={journey.stages} />
       {journey.runs.length > 0 && (

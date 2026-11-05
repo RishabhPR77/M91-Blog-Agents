@@ -20,7 +20,7 @@ describe('Layout', () => {
     renderApp(<Layout><p>page</p></Layout>)
     expect(await screen.findByText('Engine online · v0.2.0')).toBeInTheDocument()
     expect(await screen.findByLabelText('1 waiting')).toBeInTheDocument()
-    expect(await screen.findByTestId('dry-run-default')).toHaveTextContent('DRY RUN default')
+    expect(await screen.findByTestId('dry-run-default')).toHaveTextContent('Dry run by default')
     await waitFor(() => expect(FakeEventSource.instances.map((e) => e.url)).toContain('/api/events'))
     FakeEventSource.instances[0].open()
     expect(await screen.findByText('Live')).toBeInTheDocument()

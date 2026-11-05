@@ -1,50 +1,33 @@
-// One bar per post: Topic → Research → Plan → Draft → AI review → You → Export → Published. Each step is green when
-// done, whichever run did it; the step a run is on pulses; "You" turns violet when the post waits for you.
+// One bar per post: Topic → Research → Plan → Draft → AI review → You → Export → Published, as thin segments.
+// Done steps are ink, the step a run is on moves (lime stripes), "You" glows lime when the post waits for you, a
+// stopped step is red. Each step is done whichever run did it.
 import { Link } from 'react-router-dom'
-import { Check, Loader2, Minus, UserRound, X } from 'lucide-react'
 import type { JourneyStage, StageState } from '../api/journey'
 
-const DOT: Record<StageState, string> = {
-  done: 'bg-emerald-500 text-white border-emerald-500',
-  current: 'bg-sky-500 text-white border-sky-500',
-  waiting: 'bg-violet-600 text-white border-violet-600',
-  failed: 'bg-red-500 text-white border-red-500',
-  todo: 'bg-white text-slate-400 border-slate-300 dark:bg-slate-900 dark:border-slate-600',
-  off: 'bg-white text-slate-300 border-dashed border-slate-300 dark:bg-slate-900 dark:border-slate-700'
-}
-const LINE: Record<StageState, string> = {
-  done: 'bg-emerald-500', current: 'bg-sky-300 dark:bg-sky-700', waiting: 'bg-violet-300 dark:bg-violet-700',
-  failed: 'bg-red-300 dark:bg-red-800', todo: 'bg-slate-200 dark:bg-slate-700', off: 'bg-slate-200 dark:bg-slate-700'
+const SEG: Record<StageState, string> = {
+  done: 'bg-ink',
+  current: 'bg-lime-400 bar-live',
+  waiting: 'bg-hl animate-signal text-lime-500',
+  failed: 'bg-red-500',
+  todo: 'bg-ink/10',
+  off: 'bg-transparent border border-dashed border-ink/20'
 }
 export const STATE_WORD: Record<StageState, string> = { done: 'done', current: 'in progress', waiting: 'needs you', failed: 'stopped', todo: 'not yet', off: 'off' }
 
-function Icon({ state }: { state: StageState }) {
-  if (state === 'done') return <Check size={14} strokeWidth={3} />
-  if (state === 'current') return <Loader2 size={14} className="animate-spin" />
-  if (state === 'waiting') return <UserRound size={14} />
-  if (state === 'failed') return <X size={14} strokeWidth={3} />
-  if (state === 'off') return <Minus size={14} />
-  return null
-}
-
 export function JourneyBar({ stages, compact = false }: { stages: JourneyStage[]; compact?: boolean }) {
   return (
-    <ol className={`flex w-full items-start ${compact ? '' : 'overflow-x-auto pb-1'}`} aria-label="Post journey" data-testid="journey">
-      {stages.map((s, i) => {
-        const dot = (
-          <span className={`relative z-10 flex ${compact ? 'h-5 w-5' : 'h-7 w-7'} shrink-0 items-center justify-center rounded-full border-2 ${DOT[s.state]} ${s.state === 'current' ? 'ring-4 ring-sky-100 dark:ring-sky-400/20' : s.state === 'waiting' ? 'ring-4 ring-violet-100 dark:ring-violet-400/20' : ''}`}>
-            {!compact && <Icon state={s.state} />}
-          </span>
-        )
+    <ol className={`flex w-full ${compact ? 'gap-1' : 'gap-1.5 overflow-x-auto pb-1'}`} aria-label="Post journey" data-testid="journey">
+      {stages.map((s) => {
+        const seg = <span className={`block w-full rounded-full ${compact ? 'h-1.5' : 'h-1.5'} ${SEG[s.state]}`} />
+        const quiet = s.state === 'todo' || s.state === 'off'
         return (
-          <li key={s.id} className={`relative flex flex-1 flex-col items-center text-center ${compact ? 'min-w-0' : 'min-w-[4.75rem]'}`} data-testid={`stage-${s.id}`} data-state={s.state} title={`${s.label}: ${STATE_WORD[s.state]}${s.detail ? ` · ${s.detail}` : ''}`}>
-            {i > 0 && <span aria-hidden className={`absolute right-1/2 left-[-50%] h-0.5 ${compact ? 'top-2.5' : 'top-3.5'} ${LINE[s.state === 'todo' || s.state === 'off' ? s.state : 'done']}`} />}
-            {s.run_id && !compact ? <Link to={`/runs/${s.run_id}`} aria-label={`${s.label}: open its run`}>{dot}</Link> : dot}
+          <li key={s.id} className={`flex min-w-0 flex-1 flex-col ${compact ? '' : 'min-w-[5.5rem]'}`} data-testid={`stage-${s.id}`} data-state={s.state} title={`${s.label}: ${STATE_WORD[s.state]}${s.detail ? ` · ${s.detail}` : ''}`}>
+            {s.run_id && !compact ? <Link to={`/runs/${s.run_id}`} aria-label={`${s.label}: open its run`} className="block rounded-full py-1 transition-opacity hover:opacity-70">{seg}</Link> : <span className={compact ? '' : 'py-1'}>{seg}</span>}
             {!compact && (
               <>
-                <span className={`mt-1.5 text-xs font-medium ${s.state === 'todo' || s.state === 'off' ? 'text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'}`}>{s.label}</span>
+                <span className={`mt-2 text-xs font-medium ${quiet ? 'text-ink-3' : s.state === 'waiting' ? 'text-hl-ink' : s.state === 'failed' ? 'text-red-600 dark:text-red-300' : 'text-ink'}`}>{s.label}</span>
                 <span className="sr-only">{STATE_WORD[s.state]}</span>
-                {s.detail && <span className="mt-0.5 line-clamp-2 max-w-[9rem] px-1 text-[11px] leading-tight text-slate-500 dark:text-slate-400">{s.detail}</span>}
+                {s.detail && <span className="mt-0.5 line-clamp-2 pr-2 text-[11px] leading-snug text-ink-3">{s.detail}</span>}
               </>
             )}
           </li>

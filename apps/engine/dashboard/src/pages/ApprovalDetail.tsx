@@ -23,7 +23,7 @@ import { PickCard } from '../components/PickCard'
 import type { WeeklyPick } from '../api/weekly'
 import { ExportCard } from '../components/ExportCard'
 import { flagsOf } from '../config/flags'
-import { Card, EmptyState, PageHeader } from '../components/Page'
+import { Card, EmptyState, PageHeader, PageSkeleton } from '../components/Page'
 import type { Review } from '../components/VerdictPanel'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toasts'
@@ -112,7 +112,7 @@ export default function ApprovalDetail() {
       ...d.earlier.map((e) => ({ version: e.version, status: e.status, title: e.title, total: e.total ?? e.score, human_feedback: e.human_feedback, record_id: e.record_id, current: false }))]
   }, [d])
 
-  if (detail.isPending) return <p className="text-sm text-slate-500">Loading…</p>
+  if (detail.isPending) return <PageSkeleton />
   if (!d) {
     const notFound = isApiError(detail.error) && detail.error.status === 404
     if (notFound && journey.data) {
@@ -256,8 +256,8 @@ export default function ApprovalDetail() {
               ) : (
                 <>
                   {d.draft.tldr?.length ? (
-                    <div className="mx-auto mb-8 max-w-[70ch] rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 text-[15px] dark:border-slate-700 dark:bg-slate-800/60">
-                      <div className="mb-1 text-xs font-semibold tracking-wide text-indigo-700 uppercase dark:text-slate-300">TL;DR</div>
+                    <div className="mx-auto mb-8 max-w-[70ch] rounded-2xl border border-lime-300/60 bg-hl-tint p-5 text-[15px] dark:border-lime-300/20">
+                      <div className="mb-1 eyebrow text-hl-ink">TL;DR</div>
                       <ul className="list-disc space-y-1 pl-5">{d.draft.tldr.map((t, i) => <li key={i}>{t}</li>)}</ul>
                     </div>
                   ) : null}
@@ -268,7 +268,7 @@ export default function ApprovalDetail() {
             <details className="border-t border-slate-200 px-5 py-3 text-sm dark:border-slate-800">
               <summary className="cursor-pointer text-slate-600 dark:text-slate-300">Search result preview (SEO title, description, slug)</summary>
               <div className="mt-3 max-w-xl rounded-lg border border-slate-200 p-3 dark:border-slate-800" data-testid="seo">
-                <div className="truncate text-[17px] text-indigo-800 dark:text-sky-300">{d.draft.seo?.title_tag ?? '—'}</div>
+                <div className="truncate text-[17px] font-medium text-ink">{d.draft.seo?.title_tag ?? '—'}</div>
                 <div className="truncate font-mono text-xs text-emerald-700 dark:text-emerald-400">msg91.com/guide/{d.draft.seo?.slug_suggestion ?? '—'}</div>
                 <p className="mt-1 text-slate-600 dark:text-slate-400">{d.draft.seo?.meta_description ?? '—'}</p>
               </div>

@@ -9,7 +9,7 @@ import { api, errorMessage, isApiError } from '../api/client'
 import { useApprovals, useHealth, useRuns, useSettings } from '../api/queries'
 import type { RunSummary } from '../api/types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Card, EmptyState, PageHeader } from '../components/Page'
+import { Card, EmptyState, LoadingRows, PageHeader } from '../components/Page'
 import { RunButton } from '../components/RunButton'
 import { DOING } from '../components/RunProgress'
 import { JourneyBar, journeyLine } from '../components/JourneyBar'
@@ -60,15 +60,15 @@ function CurrentRun({ run }: { run: RunSummary }) {
     }
   }
   return (
-    <Card title="Current run" actions={<Link to={`/runs/${run.run_id}`} className="text-sm text-sky-700 hover:underline dark:text-sky-300">Watch live →</Link>}>
-      <p className="flex items-center gap-2 text-base font-semibold" data-testid="current-doing">
-        <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-sky-500" />
+    <Card title="Current run" actions={<Link to={`/runs/${run.run_id}`} className="text-sm link-quiet">Watch live →</Link>}>
+      <p className="flex items-center gap-2.5 font-display text-lg font-semibold tracking-[-0.01em]" data-testid="current-doing">
+        <span className="inline-block size-2.5 animate-signal rounded-full bg-signal text-signal" />
         {DOING[current] ?? (current === '—' ? 'Starting…' : `${current}…`)}
       </p>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1.5 text-xs text-ink-3">
         {modeLabel(run.mode)}{run.dry_run ? ' (dry run)' : ''} · <span data-testid="current-elapsed">{fmtDuration(run.started_at ? now - Date.parse(run.started_at) : null)}</span> · <span data-testid="current-calls">{current} · {aiCalls(run)}</span> AI calls so far
       </p>
-      <button type="button" className="btn-danger mt-3 py-1.5" onClick={() => setConfirm(true)}><Square size={14} /> Stop</button>
+      <button type="button" className="btn-secondary mt-4 py-1.5 text-red-700 dark:text-red-300" onClick={() => setConfirm(true)}><Square size={14} /> Stop</button>
       <ConfirmDialog open={confirm} title={`Stop run ${run.run_id}?`} expectedCalls="0 (calls already made are not refunded)" confirmLabel="Stop the run" danger busy={busy} onConfirm={stop} onCancel={() => setConfirm(false)}>
         <p>The current step is interrupted and recorded as cancelled.</p>
       </ConfirmDialog>
@@ -169,8 +169,8 @@ export default function Control() {
 
   return (
     <>
-      <PageHeader title="Control" subtitle="One click writes the next post. Every run asks you first and shows what it costs." />
-      <div className="space-y-4">
+      <PageHeader eyebrow={new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} title="Home" subtitle="One click writes the next post. Every run asks you first and shows what it costs." />
+      <div className="space-y-6">
         {outdated && (
           <div role="alert" data-testid="engine-outdated" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
@@ -190,30 +190,30 @@ export default function Control() {
         <RunButton variant="hero" title="Write the next post" description={`One click: the editor reads this week's questions, news and M91 changes and picks the most useful post (never a repeat of a live guide); then it is researched, planned, written and reviewed by the AI (weak parts are rewritten). ${autoApprove ? (flags.target === 'slack' ? 'Then it is approved and sent to Slack with a link to download the .md (if no version passes, the best one goes).' : flags.target === 'email' ? 'Then it is approved and emailed to you with the .md attached (if no version passes, the best one goes).' : 'Then it is approved and published.') : 'It waits for your review.'}`}
           models={[['Editor', models?.editor], ['Scout', models?.scout], ['Strategist', models?.strategist], ['Writer', models?.writer], ...(flags.experienceOn ? [['Designer', models?.designer] as ModelRow] : []), ['Reviewer', models?.reviewer]]} costKey={flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason}
           onRun={() => ask('full', 'Write the next post', flags.experienceOn ? 'full' : 'full_plain', {}, [['Topic', nextRunText(weekly.data?.next, weekly.data?.model)]])}>
-          <p className="text-[15px]" data-testid="control-next-up"><span className="font-semibold">Topic:</span> {weekly.isPending ? 'loading…' : nextRunText(weekly.data?.next, weekly.data?.model)}. <Link className="text-xs text-sky-700 underline dark:text-sky-300" to="/week">This week</Link></p>
+          <p className="text-[15px]" data-testid="control-next-up"><span className="font-semibold">Topic:</span> {weekly.isPending ? 'loading…' : nextRunText(weekly.data?.next, weekly.data?.model)}. <Link className="text-xs link" to="/week">This week</Link></p>
           {lastPick && <p className="text-sm text-slate-600 dark:text-slate-300" data-testid="control-last-pick"><span className="font-medium">Last pick:</span> {lastPick.pick.title} <span className="text-xs text-slate-500">({FORMAT_LABEL[lastPick.pick.format] ?? lastPick.pick.format}, {lastPick.date}): {lastPick.reason}</span></p>}
           {timelyOn && (timely.data?.open ?? 0) > 0 && <p className="text-sm" data-testid="control-timely"><Link to="/week#timely" className="pill pill-amber">{timely.data!.open} news item{timely.data!.open === 1 ? '' : 's'} this week</Link>{timely.data?.waiting ? <span className="ml-2 text-xs text-slate-500">“{timely.data.waiting.title}” waits: {timely.data.waiting.reason}</span> : null}</p>}
         </RunButton>
         <div className="grid items-start gap-4 lg:grid-cols-3">
           <Card title={<span className="flex items-center gap-1.5"><Inbox size={15} /> Waiting for you</span>}>
-            <p className="text-3xl font-semibold tabular-nums" data-testid="waiting-count">{waiting}</p>
-            <p className="text-sm text-slate-500">{waiting === 1 ? 'post waits' : 'posts wait'} for your review.</p>
+            <p className="font-display text-5xl font-semibold tracking-[-0.03em] tabular-nums" data-testid="waiting-count">{waiting}</p>
+            <p className="mt-1 text-sm text-ink-2">{waiting === 1 ? 'post waits' : 'posts wait'} for your review.</p>
             {firstWaiting ? (
               <>
-                <p className="mt-3 line-clamp-2 text-sm font-medium" data-testid="first-waiting">{firstWaiting.title || firstWaiting.brief_id}</p>
-                <Link to={`/approvals/${firstWaiting.brief_id}`} className="btn-primary mt-2 w-full">Review it now</Link>
+                <p className="mt-4 line-clamp-2 text-sm font-medium" data-testid="first-waiting">{firstWaiting.title || firstWaiting.brief_id}</p>
+                <Link to={`/approvals/${firstWaiting.brief_id}`} className="btn-primary mt-3 w-full">Review it now</Link>
               </>
             ) : (
-              <Link to="/approvals" className="btn-secondary mt-3">Open Approvals</Link>
+              <Link to="/approvals" className="btn-secondary mt-4">Open Approvals</Link>
             )}
           </Card>
           <div className={activeRun ? 'lg:col-span-2' : 'hidden'}>{activeRun && <CurrentRun run={activeRun} />}</div>
-          <details className={`group rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 ${activeRun ? 'lg:col-span-3' : 'lg:col-span-2'}`} data-testid="run-options">
-            <summary className="flex cursor-pointer list-none items-center gap-2 p-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Run options <span className="font-normal text-slate-500">· {dryRun ?? true ? 'dry run' : 'live'} · {lowCost ? PRESETS.lowcost.label : PRESETS.normal.label}</span>
+          <details className={`panel group ${activeRun ? 'lg:col-span-3' : 'lg:col-span-2'}`} data-testid="run-options">
+            <summary className="flex cursor-pointer list-none items-center gap-2 p-5 text-sm font-semibold text-ink">
+              Run options <span className="font-normal text-ink-3">· {dryRun ?? true ? 'dry run' : 'live'} · {lowCost ? PRESETS.lowcost.label : PRESETS.normal.label}</span>
               <ChevronDown size={14} className="ml-auto transition-transform group-open:rotate-180" />
             </summary>
-            <div className="border-t border-slate-200 p-4 dark:border-slate-800">
+            <div className="border-t border-line p-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="flex items-center gap-2 text-sm font-medium">
@@ -249,9 +249,9 @@ export default function Control() {
         </div>
 
         <details className="group" data-testid="run-one-agent">
-          <summary className="flex cursor-pointer list-none items-center gap-2 py-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          <summary className="flex cursor-pointer list-none items-center gap-2 py-1 text-sm font-semibold text-ink">
             <ChevronDown size={16} className="-rotate-90 transition-transform group-open:rotate-0" /> Run one agent, or another action
-            <span className="font-normal text-slate-500">(Scout, Strategist, Writer, Reviewer, export{flags.target !== 'none' ? ', publish' : ''})</span>
+            <span className="font-normal text-ink-3">(Scout, Strategist, Writer, Reviewer, export{flags.target !== 'none' ? ', publish' : ''})</span>
           </summary>
           <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <RunButton title="Run Scout" description="Research: M91 facts, questions people ask, stories and tutorials." models={[['Scout', models?.scout]]} costKey="scout" lowCost={lowCost} built={isBuilt('scout')} disabledReason={busyReason}
@@ -314,28 +314,28 @@ export default function Control() {
           </div>
         </details>
 
-        <Card title="Latest posts" actions={<Link to="/runs" className="text-sm text-sky-700 hover:underline dark:text-sky-300">All posts and runs →</Link>}>
+        <Card title="Latest posts" actions={<Link to="/runs" className="text-sm link-quiet">All posts and runs →</Link>}>
           {posts.data?.length ? (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800" data-testid="latest-posts">
+            <ul className="stagger divide-y divide-line" data-testid="latest-posts">
               {posts.data.map((p) => {
                 const line = journeyLine(p.stages)
                 return (
-                  <li key={p.brief_id} className="flex flex-col gap-2 py-3 md:flex-row md:items-center md:gap-4">
-                    <Link to={`/approvals/${p.brief_id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:underline">{p.title || 'A post in the making'}</Link>
+                  <li key={p.brief_id} className="flex flex-col gap-2 py-3.5 md:flex-row md:items-center md:gap-6">
+                    <Link to={`/approvals/${p.brief_id}`} className="min-w-0 flex-1 truncate text-sm font-medium underline-offset-[3px] hover:underline">{p.title || 'A post in the making'}</Link>
                     <div className="w-full md:w-72"><JourneyBar stages={p.stages} compact /></div>
-                    <span className={`pill ${line.tone === 'green' ? 'pill-green' : line.tone === 'red' ? 'pill-red' : line.tone === 'gray' ? 'pill-gray' : 'pill-blue'} md:w-48 md:justify-center`}>{line.text}</span>
+                    <span className={`pill ${line.tone === 'green' ? 'pill-green' : line.tone === 'red' ? 'pill-red' : line.tone === 'gray' ? 'pill-gray' : line.tone === 'violet' ? 'pill-blue font-semibold' : 'pill-blue'} md:w-48 md:justify-center`}>{line.text}</span>
                   </li>
                 )
               })}
             </ul>
           ) : null}
           {posts.data?.length ? null : !runs.data?.length ? (
-            <EmptyState>{runs.isPending && online ? 'Loading…' : 'No runs yet.'}</EmptyState>
+            runs.isPending && online ? <LoadingRows rows={3} label="Loading the latest posts" /> : <EmptyState>No runs yet.</EmptyState>
           ) : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            <ul className="stagger divide-y divide-line">
               {runs.data.map((r) => (
                 <li key={r.run_id}>
-                  <Link to={`/runs/${r.run_id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <Link to={`/runs/${r.run_id}`} className="-mx-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-2 py-2.5 text-sm transition-colors hover:bg-ink/[0.03]">
                     <StatusBadge status={r.status} />
                     <span className="font-mono text-xs">{r.run_id}</span>
                     <span>{modeLabel(r.mode)}{r.dry_run ? ' (dry)' : ''}</span>

@@ -50,10 +50,14 @@ export default function Login() {
   }
 
   return (
-    <div className="mx-auto mt-16 max-w-sm">
-      <form onSubmit={submit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h1 className="mb-1 text-lg font-semibold">Log in</h1>
-        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">{admin ? 'Log in with the admin ID and password.' : 'The engine asks for the dashboard password.'}</p>
+    <div className="flex min-h-full items-center justify-center bg-bg px-4 py-16">
+      <div aria-hidden className="pointer-events-none fixed top-[-12rem] left-1/2 size-[32rem] -translate-x-1/2 rounded-full bg-hl/25 blur-3xl dark:bg-hl/10" />
+      <form onSubmit={submit} className="panel relative w-full max-w-sm animate-pop p-7 shadow-(--shadow-float)">
+        <span className="relative mb-6 flex size-9 items-center justify-center rounded-xl bg-primary text-[11px] font-bold text-primary-fg">
+          M91<span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-signal ring-2 ring-surface" />
+        </span>
+        <h1 className="font-display text-2xl font-semibold tracking-[-0.02em]">Log in</h1>
+        <p className="mt-1 mb-6 text-sm text-ink-2">{admin ? 'Log in with the admin ID and password.' : 'The engine asks for the dashboard password.'}</p>
         {admin && (
           <>
             <label className="label" htmlFor="username">Admin ID</label>
@@ -62,8 +66,8 @@ export default function Login() {
         )}
         <label className="label" htmlFor="password">Password</label>
         <input id="password" type="password" autoComplete="current-password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} required />
-        {error && <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
-        <button type="submit" className="btn-primary mt-4 w-full" disabled={busy || health.isPending || !password || (admin && !username)}>{busy ? 'Logging in…' : 'Log in'}</button>
+        {error && <p role="alert" className="mt-2 animate-fade text-sm text-red-600 dark:text-red-300">{error}</p>}
+        <button type="submit" className="btn-primary mt-5 w-full py-2.5" disabled={busy || health.isPending || !password || (admin && !username)}>{busy ? 'Logging in…' : 'Log in'}</button>
       </form>
     </div>
   )

@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
 import { api, errorMessage } from '../api/client'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Card, EmptyState, PageHeader } from '../components/Page'
+import { Card, EmptyState, PageHeader, LoadingRows } from '../components/Page'
 import { toast } from '../components/Toasts'
 import type { TrimmedRecord } from './Content'
 
@@ -34,7 +34,7 @@ export default function Lessons() {
     <>
       <PageHeader title="Lessons" subtitle="The Strategist and Writer read the newest lessons on every run." />
       <Card>
-        {lessons.isPending ? <p className="text-sm text-slate-500">Loading…</p> : !list.length ? <EmptyState>No lessons yet. The Reviewer saves lessons as it reviews drafts.</EmptyState> : (
+        {lessons.isPending ? <LoadingRows /> : !list.length ? <EmptyState>No lessons yet. The Reviewer saves lessons as it reviews drafts.</EmptyState> : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800" aria-label="Lessons">
             {list.map((l) => (
               <li key={l.id} className="flex items-start gap-3 py-2.5 text-sm">

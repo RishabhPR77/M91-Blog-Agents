@@ -23,7 +23,7 @@ function EvidenceRow({ e }: { e: Evidence }) {
       <span className="mt-0.5 text-slate-400">{KIND_ICON[e.kind] ?? <Lightbulb size={13} />}</span>
       <span className="min-w-0">
         <span className="text-xs font-medium text-slate-500">{KIND_LABEL[e.kind] ?? e.kind}{e.where ? ` · ${e.where}` : ''}{e.demand ? ` · ${e.demand}` : ''}</span>
-        <span className="block">{e.url ? <a className="text-sky-700 underline underline-offset-2 dark:text-sky-300" href={e.url} target="_blank" rel="noopener noreferrer">{e.text}</a> : e.text}</span>
+        <span className="block">{e.url ? <a className="link" href={e.url} target="_blank" rel="noopener noreferrer">{e.text}</a> : e.text}</span>
       </span>
     </li>
   )

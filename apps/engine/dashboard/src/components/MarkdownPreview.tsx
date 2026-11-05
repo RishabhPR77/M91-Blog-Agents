@@ -5,7 +5,7 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 const components: Components = {
-  a: ({ node: _n, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-sky-700 underline underline-offset-2 dark:text-sky-300" />,
+  a: ({ node: _n, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" className="link" />,
   h1: ({ node: _n, ...props }) => <h1 {...props} className="mt-2 mb-4 text-2xl font-semibold tracking-tight" />,
   h2: ({ node: _n, ...props }) => <h2 {...props} className="mt-8 mb-3 text-xl font-semibold" />,
   h3: ({ node: _n, ...props }) => <h3 {...props} className="mt-6 mb-2 text-lg font-semibold" />,

@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
-import { Card, EmptyState, PageHeader } from '../components/Page'
+import { Card, EmptyState, PageHeader, LoadingRows } from '../components/Page'
 import { StatusBadge } from '../components/StatusBadge'
 
 export const CONTENT_TABS = [
@@ -85,7 +85,7 @@ export default function Content() {
           </select>
         </div>
         {loading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <LoadingRows />
         ) : !rows?.length ? (
           <EmptyState>{status || briefId ? 'Nothing matches these filters.' : 'Nothing of this kind yet. The agents create these when they run.'}</EmptyState>
         ) : (

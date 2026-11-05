@@ -29,7 +29,7 @@ export function PublisherSteps({ outputs, stepStatus }: { outputs: Output[]; ste
           const item = done.get(n)
           const failedHere = !item && n === last + 1 && stepStatus === 'failed'
           const runningHere = !item && n === last + 1 && stepStatus === 'running'
-          const icon = item ? <CheckCircle2 size={16} className="text-emerald-600" /> : failedHere ? <XCircle size={16} className="text-red-600" /> : runningHere ? <Loader2 size={16} className="animate-spin text-sky-600" /> : <Circle size={16} className="text-slate-300 dark:text-slate-600" />
+          const icon = item ? <CheckCircle2 size={16} className="text-emerald-600" /> : failedHere ? <XCircle size={16} className="text-red-600" /> : runningHere ? <Loader2 size={16} className="animate-spin text-lime-600" /> : <Circle size={16} className="text-slate-300 dark:text-slate-600" />
           return (
             <li key={name} className="flex items-start gap-2" data-testid={`publisher-substep-${n}`}>
               <span className="mt-0.5">{icon}</span>

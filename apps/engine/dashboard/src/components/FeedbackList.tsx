@@ -21,7 +21,7 @@ export function FeedbackList({ items, onShow }: { items: FeedbackItem[]; onShow?
             </blockquote>
           )}
           {f.quote && onShow && f.quote_found !== false && (
-            <button type="button" className="mb-1 inline-flex items-center gap-1 text-xs font-medium text-indigo-700 hover:underline dark:text-sky-300" onClick={() => onShow(f.quote!)}>
+            <button type="button" className="mb-1 inline-flex items-center gap-1 text-xs font-medium link-quiet" onClick={() => onShow(f.quote!)}>
               <Search size={12} /> Show in post
             </button>
           )}

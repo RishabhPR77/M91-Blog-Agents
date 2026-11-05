@@ -8,13 +8,14 @@ import { trackerSteps, type RunView, type StepState, type StepStatus } from '../
 const LABEL: Record<string, string> = { editor: 'Editor', scout: 'Scout', strategist: 'Strategist', writer: 'Writer', checks: 'Checks', reviewer: 'Reviewer', promo: 'Promo', designer: 'Experience Designer', export: 'Markdown export', publisher: 'Publisher' }
 
 const STYLE: Record<StepStatus, string> = {
-  waiting: 'border-slate-200 text-slate-400 dark:border-slate-800 dark:text-slate-500',
-  running: 'border-sky-400 bg-sky-50 text-sky-900 dark:border-sky-600 dark:bg-sky-950 dark:text-sky-100',
-  done: 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-100',
-  failed: 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/60 dark:text-red-100',
-  cancelled: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-100',
-  skipped: 'border-dashed border-slate-200 text-slate-400 dark:border-slate-800 dark:text-slate-500'
+  waiting: 'border-line text-ink-3',
+  running: 'border-lime-500/60 bg-hl-tint text-ink ring-4 ring-hl/25',
+  done: 'border-line bg-surface text-ink',
+  failed: 'border-red-300 bg-red-50 text-red-900 dark:border-red-400/30 dark:bg-red-500/10 dark:text-red-100',
+  cancelled: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-100',
+  skipped: 'border-dashed border-line text-ink-3'
 }
+const ICON_TONE: Record<StepStatus, string> = { waiting: 'text-ink-3', running: 'text-lime-700 dark:text-lime-300', done: 'text-emerald-600 dark:text-emerald-300', failed: 'text-red-600 dark:text-red-300', cancelled: 'text-amber-700 dark:text-amber-300', skipped: 'text-ink-3' }
 
 export function StatusIcon({ status, size = 14 }: { status: StepStatus; size?: number }) {
   switch (status) {
@@ -42,20 +43,20 @@ export function PipelineTracker({ view, hidePromo = false, hideDesigner = false 
   // the Experience Designer when EXPERIENCE_ENABLED=false, and the export step until a run has one.
   const steps = trackerSteps(view).filter((st) => !(hidePromo && st.name === 'promo' && !st.aiCalls) && !(hideDesigner && st.name === 'designer' && !st.aiCalls) && !((st.name === 'export' || st.name === 'editor') && (st.status === 'waiting' || st.status === 'skipped')))
   return (
-    <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8" aria-label="Pipeline">
+    <ol className="stagger grid grid-cols-2 gap-2.5 sm:grid-cols-4 xl:grid-cols-8" aria-label="Pipeline">
       {steps.map((st, i) => {
         const placeholder = st.placeholder || ((st.name === 'designer' || st.name === 'publisher') && st.status !== 'waiting' && st.status !== 'skipped' && /not built yet|Publishing is off|Interactive guides are off/.test(st.summary ?? ''))
         return (
-          <li key={st.name} data-testid={`step-${st.name}`} data-status={st.status} className={`relative rounded-lg border p-2.5 ${STYLE[st.status]}`}>
+          <li key={st.name} data-testid={`step-${st.name}`} data-status={st.status} className={`relative rounded-xl border p-3 transition-colors duration-300 ${STYLE[st.status]}`}>
             <div className="flex items-center gap-1.5 text-sm font-medium">
-              <StatusIcon status={st.status} />
+              <span className={ICON_TONE[st.status]}><StatusIcon status={st.status} /></span>
               <span>{LABEL[st.name] ?? st.name}</span>
-              {i < steps.length - 1 && <ChevronRight size={14} className="absolute -right-2.5 top-3 hidden text-slate-300 xl:block dark:text-slate-600" aria-hidden />}
+              {i < steps.length - 1 && <ChevronRight size={14} className="absolute top-3.5 -right-2.5 hidden text-ink-3/50 xl:block" aria-hidden />}
             </div>
-            <div className="mt-1 text-xs capitalize opacity-80">{placeholder ? 'not built yet' : st.status}</div>
+            <div className="mt-1 text-xs capitalize text-ink-2">{placeholder ? 'not built yet' : st.status}</div>
             <Stats st={st} />
             {st.models.length > 0 && <div className="mt-0.5 truncate text-xs opacity-70" title={st.models.join(', ')}>{st.models.join(', ')}</div>}
-            {st.error && <div className="mt-1 line-clamp-3 text-xs text-red-700 dark:text-red-300" title={st.error}>{st.error}</div>}
+            {st.error && <div className="mt-1 line-clamp-3 text-xs text-red-700 dark:text-red-200" title={st.error}>{st.error}</div>}
             {st.children.length > 0 && (
               <ul className="mt-2 space-y-1 border-t border-current/10 pt-2" aria-label={`${LABEL[st.name] ?? st.name} sub-steps`}>
                 {st.children.map((c) => {

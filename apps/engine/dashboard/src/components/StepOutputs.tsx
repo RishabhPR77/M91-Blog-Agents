@@ -29,7 +29,7 @@ export function StepOutputs({ outputs, records = [] }: { outputs: Output[]; reco
                 {ids.map((id) => {
                   const rec = byKey.get(id)
                   return rec ? (
-                    <Link key={id} to={`/records/${rec.id}`} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-sky-700 hover:underline dark:bg-slate-800 dark:text-sky-300" title={rec.title ?? rec.type}>
+                    <Link key={id} to={`/records/${rec.id}`} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-ink-2 hover:text-ink hover:underline dark:bg-slate-800" title={rec.title ?? rec.type}>
                       {rec.type}: {rec.key_id ?? rec.id.slice(0, 8)}
                     </Link>
                   ) : (

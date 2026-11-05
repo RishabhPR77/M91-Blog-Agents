@@ -39,7 +39,7 @@ function ByPost() {
                   <div className="mt-2 flex flex-wrap gap-x-3 text-xs text-slate-500">
                     <span>{p.runs} run{p.runs === 1 ? '' : 's'}</span>
                     {p.updated_at && <span>last run {fmtAgo(p.updated_at)}</span>}
-                    {p.active_run_id && <Link to={`/runs/${p.active_run_id}`} className="text-sky-700 underline dark:text-sky-300">watch the run</Link>}
+                    {p.active_run_id && <Link to={`/runs/${p.active_run_id}`} className="link">watch the run</Link>}
                     <span className="font-mono">{p.brief_id}</span>
                   </div>
                 </Card>

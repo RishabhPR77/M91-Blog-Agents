@@ -32,9 +32,9 @@ const APPROVAL_TEXT: Record<string, string> = {
 }
 
 function Banner({ a }: { a: ApprovalBanner }) {
-  const tone = a.kind === 'waiting' ? 'border-violet-300 bg-violet-50 dark:border-violet-800 dark:bg-violet-950/50' : a.kind === 'rejected' ? 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/50' : a.kind === 'approved' ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/50' : 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/50'
+  const tone = a.kind === 'waiting' ? 'border-lime-400/60 bg-hl-tint dark:border-lime-300/25' : a.kind === 'rejected' ? 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/50' : a.kind === 'approved' ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/50' : 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/50'
   return (
-    <div role="status" data-testid={`approval-${a.kind}`} className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 text-sm ${tone}`}>
+    <div role="status" data-testid={`approval-${a.kind}`} className={`flex animate-enter flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm ${tone}`}>
       <div className="flex-1">
         <div className="font-medium">{APPROVAL_TEXT[a.kind] ?? `approval.${a.kind}`}</div>
         <div className="text-slate-600 dark:text-slate-300">{a.message}{a.briefId ? ` · brief ${a.briefId}` : ''}</div>

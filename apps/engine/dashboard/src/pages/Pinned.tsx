@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, errorMessage } from '../api/client'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Card, EmptyState, PageHeader } from '../components/Page'
+import { Card, EmptyState, PageHeader, LoadingRows } from '../components/Page'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toasts'
 
@@ -77,7 +77,7 @@ export default function Pinned() {
       <PageHeader title="Pinned topics" subtitle="Topics the Strategist must pick by their date. High priority comes first." />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Pinned" className="lg:col-span-2">
-          {pins.isPending ? <p className="text-sm text-slate-500">Loading…</p> : !list.length ? <EmptyState>No pinned topics. Add one to make the Strategist cover it by a date.</EmptyState> : (
+          {pins.isPending ? <LoadingRows /> : !list.length ? <EmptyState>No pinned topics. Add one to make the Strategist cover it by a date.</EmptyState> : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm" aria-label="Pinned topics">
                 <thead className="text-xs text-slate-500"><tr className="border-b border-slate-200 dark:border-slate-800">{['Topic', 'By', 'Priority', 'Status', 'Used by', ''].map((h) => <th key={h} className="px-2 py-1.5 font-medium">{h}</th>)}</tr></thead>

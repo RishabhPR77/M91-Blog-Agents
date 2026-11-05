@@ -8,7 +8,7 @@ import { usePosts, useSettings } from '../api/queries'
 import type { PostItem } from '../api/types'
 import { usePublishRun, type PublishMode } from '../api/publishRun'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Card, EmptyState, PageHeader } from '../components/Page'
+import { Card, EmptyState, PageHeader, PageSkeleton } from '../components/Page'
 import { StatusBadge } from '../components/StatusBadge'
 import { fmtDateTime } from '../format'
 import { flagsOf } from '../config/flags'
@@ -19,7 +19,7 @@ type Pending = { mode: PublishMode; post: PostItem; params: Record<string, unkno
 /** The blog is used only with PUBLISH_TARGET=embarko; otherwise this page says so and loads nothing. */
 export default function Posts() {
   const settings = useSettings()
-  if (settings.isPending) return <p className="text-sm text-slate-500">Loading…</p>
+  if (settings.isPending) return <PageSkeleton />
   if (!flagsOf(settings.data).blogOn) {
     return (
       <>
@@ -60,7 +60,7 @@ function BlogPosts() {
     <>
       <PageHeader
         title="Posts"
-        subtitle={<>Posts on the blog{blog ? <> at <a className="text-sky-700 hover:underline dark:text-sky-300" href={blog.base_url} target="_blank" rel="noreferrer">{blog.base_url.replace(/^https:\/\//, '')}</a></> : ''}. Publishing uses no AI calls; the Experience Designer uses {COSTS.designer.normal}.</>}
+        subtitle={<>Posts on the blog{blog ? <> at <a className="link-quiet" href={blog.base_url} target="_blank" rel="noreferrer">{blog.base_url.replace(/^https:\/\//, '')}</a></> : ''}. Publishing uses no AI calls; the Experience Designer uses {COSTS.designer.normal}.</>}
         actions={
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={dryRun ?? true} onChange={(e) => setDryRun(e.target.checked)} />
@@ -90,7 +90,7 @@ function BlogPosts() {
                     <tr key={p.record_id} className="border-b border-slate-100 align-top dark:border-slate-800/60" data-testid={`post-${p.slug}`}>
                       <td className="px-2 py-2">
                         <div className="font-medium">{p.title}</div>
-                        <div className="font-mono text-xs text-slate-500">{p.slug}{p.version ? ` · v${p.version}` : ''}{p.brief_id ? <> · <Link className="text-sky-700 hover:underline dark:text-sky-300" to={`/approvals/${p.brief_id}`}>{p.brief_id}</Link></> : ''}</div>
+                        <div className="font-mono text-xs text-slate-500">{p.slug}{p.version ? ` · v${p.version}` : ''}{p.brief_id ? <> · <Link className="link-quiet" to={`/approvals/${p.brief_id}`}>{p.brief_id}</Link></> : ''}</div>
                         {p.blocks !== undefined && <div className="mt-0.5 text-xs text-slate-500" data-testid="post-blocks">{p.blocks ? `${p.blocks} interactive blocks` : 'plain Markdown'}</div>}
                         {p.last_error && <div className="mt-1 text-xs text-red-600 dark:text-red-400">Last error: {p.last_error}</div>}
                       </td>

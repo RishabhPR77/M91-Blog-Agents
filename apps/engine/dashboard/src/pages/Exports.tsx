@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api, errorMessage } from '../api/client'
 import { useSettings } from '../api/queries'
 import { flagsOf } from '../config/flags'
-import { Card, EmptyState, PageHeader } from '../components/Page'
+import { Card, EmptyState, PageHeader, LoadingRows } from '../components/Page'
 import { MarkdownExportView } from '../components/MarkdownExportView'
 import { fmtDateTime } from '../format'
 
@@ -61,7 +61,7 @@ export default function Exports() {
             </ul>
           </Card>
           <Card title={detail.data?.title ?? 'Export'} className="lg:col-span-3">
-            {detail.isPending && chosen ? <p className="text-sm text-slate-500">Loading…</p>
+            {detail.isPending && chosen ? <LoadingRows />
               : detail.error ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{errorMessage(detail.error)}</p>
               : detail.data ? (
                 <>

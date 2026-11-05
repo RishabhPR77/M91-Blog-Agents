@@ -8,7 +8,7 @@ import { api, errorMessage } from '../api/client'
 import { weeklyKey } from '../api/weekly'
 import { timelyKey, useTimely, OPEN, type TimelyAction, type TimelyCard } from '../api/timely'
 import { ConfirmDialog } from './ConfirmDialog'
-import { Card } from './Page'
+import { Card, LoadingRows } from './Page'
 import { StatusBadge } from './StatusBadge'
 import { toast } from './Toasts'
 import { COSTS } from '../config/costs'
@@ -74,7 +74,7 @@ export function TimelySection({ runBusy }: { runBusy: boolean }) {
         {error && <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
         {data?.waiting && <p role="status" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100" data-testid="timely-waiting">“{data.waiting.title}” waits: {data.waiting.reason}.</p>}
         {data?.next && <p className="mb-3 text-sm" data-testid="timely-next"><span className="font-medium">Written next:</span> {data.next.title}</p>}
-        {q.isPending ? <p className="text-sm text-slate-500">Loading…</p> : open.length === 0 ? (
+        {q.isPending ? <LoadingRows /> : open.length === 0 ? (
           <p className="text-sm text-slate-500" data-testid="timely-empty">No open opportunities. {data?.settings?.check_on_run ? 'Every full run checks the news first, or ' : ''}use Check news.</p>
         ) : (
           <ul className="space-y-3">
@@ -89,7 +89,7 @@ export function TimelySection({ runBusy }: { runBusy: boolean }) {
                 <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{c.what_happened}</p>
                 <p className="mt-1 text-sm"><span className="font-medium">Why M91:</span> {c.why_m91}</p>
                 <p className="mt-1 text-xs text-slate-500">Urgency: {c.urgency_reason}</p>
-                <a className="mt-1 inline-flex items-center gap-1 text-xs text-sky-700 underline dark:text-sky-300" href={c.source_url} target="_blank" rel="noopener noreferrer">Source: {c.outlet} <ExternalLink size={12} /></a>
+                <a className="mt-1 inline-flex items-center gap-1 text-xs link" href={c.source_url} target="_blank" rel="noopener noreferrer">Source: {c.outlet} <ExternalLink size={12} /></a>
                 {c.brief_id ? <p className="mt-2 text-xs text-slate-500">Being written (brief {c.brief_id}).</p> : (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {c.status === 'proposed' && <button type="button" className="btn-primary px-2 py-1 text-xs" disabled={disabled} onClick={() => void act(c, 'write_now')}><PenLine size={12} /> Write now</button>}

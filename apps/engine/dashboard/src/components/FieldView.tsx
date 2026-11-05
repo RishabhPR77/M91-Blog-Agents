@@ -10,7 +10,7 @@ export function Value({ v }: { v: unknown }): ReactNode {
   if (typeof v === 'boolean') return <span>{v ? 'yes' : 'no'}</span>
   if (typeof v === 'number') return <span className="tabular-nums">{v}</span>
   if (typeof v === 'string') {
-    return isUrl(v) ? <a href={v} target="_blank" rel="noopener noreferrer" className="break-all text-sky-700 underline dark:text-sky-300">{v}</a> : <span className="whitespace-pre-wrap">{v}</span>
+    return isUrl(v) ? <a href={v} target="_blank" rel="noopener noreferrer" className="break-all link">{v}</a> : <span className="whitespace-pre-wrap">{v}</span>
   }
   if (Array.isArray(v)) {
     if (!v.length) return <span className="text-slate-400">none</span>

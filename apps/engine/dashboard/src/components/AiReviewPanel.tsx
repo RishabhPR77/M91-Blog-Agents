@@ -74,7 +74,7 @@ export function AiReviewPanel({ review, checks, onShow, notReviewedText }: { rev
                     {review.sources_checked.map((s, i) => (
                       <li key={i}>
                         <span className={`pill ${s.verdict === 'supports' ? 'pill-green' : s.verdict === 'contradicts' ? 'pill-red' : 'pill-gray'}`}>{s.verdict ?? '?'}</span>{' '}
-                        <a href={s.url} target="_blank" rel="noopener noreferrer" className="break-all text-sky-700 underline dark:text-sky-300">{s.url}</a>
+                        <a href={s.url} target="_blank" rel="noopener noreferrer" className="break-all link">{s.url}</a>
                         {s.claim && <div className="text-xs text-slate-500">{s.claim}</div>}
                       </li>
                     ))}

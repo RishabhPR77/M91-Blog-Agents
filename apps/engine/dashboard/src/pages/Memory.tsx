@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Lock, Trash2 } from 'lucide-react'
 import { api, errorMessage } from '../api/client'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Card, EmptyState, PageHeader } from '../components/Page'
+import { Card, EmptyState, PageHeader, LoadingRows } from '../components/Page'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toasts'
 
@@ -158,7 +158,7 @@ export default function Memory() {
         </div>
 
         {list.isPending ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <LoadingRows />
         ) : list.isError ? (
           <p role="alert" className="text-sm text-red-600">{errorMessage(list.error)}</p>
         ) : !rows.length ? (

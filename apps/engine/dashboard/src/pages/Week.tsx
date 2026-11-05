@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 import { CalendarDays } from 'lucide-react'
 import { useRuns, useSettings } from '../api/queries'
 import { nextRunText, useWeekly } from '../api/weekly'
-import { Card, EmptyState, PageHeader } from '../components/Page'
+import { Card, EmptyState, PageHeader, LoadingRows } from '../components/Page'
 import { PickCard } from '../components/PickCard'
 import { TimelySection } from '../components/TimelySection'
 import { GuidesSection } from '../components/GuidesSection'
@@ -26,7 +26,7 @@ export default function Week() {
         <p className="mt-2 text-xs text-slate-500">Pinned topics that are due go first, then a news card you chose with Write now. <Link className="underline" to="/pinned">Pinned topics</Link></p>
       </Card>
       <Card className="mb-4" title="The editor's latest decisions">
-        {weekly.isPending ? <p className="text-sm text-slate-500">Loading…</p> : !picks.length ? (
+        {weekly.isPending ? <LoadingRows /> : !picks.length ? (
           <EmptyState>No decisions yet. The next full run makes the first one.</EmptyState>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800" data-testid="week-picks">

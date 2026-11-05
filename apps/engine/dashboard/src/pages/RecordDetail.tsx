@@ -9,7 +9,7 @@ import { ChecksTable, type CheckResult } from '../components/ChecksTable'
 import { FieldView, Value } from '../components/FieldView'
 import { copyText, JsonView } from '../components/JsonView'
 import { MarkdownPreview } from '../components/MarkdownPreview'
-import { Card, EmptyState, PageHeader } from '../components/Page'
+import { Card, EmptyState, PageHeader, PageSkeleton } from '../components/Page'
 import { StatusBadge } from '../components/StatusBadge'
 import { VerdictPanel, type Review } from '../components/VerdictPanel'
 
@@ -24,7 +24,7 @@ const Section = ({ title, children }: { title: string; children: ReactNode }) =>
   </section>
 )
 const List = ({ items }: { items?: ReactNode[] }) => (items?.length ? <ul className="list-disc space-y-1 pl-5">{items.map((x, i) => <li key={i}>{x}</li>)}</ul> : <span className="text-slate-400">none</span>)
-const Ext = ({ url, children }: { url?: string; children?: ReactNode }) => (url ? <a href={url} target="_blank" rel="noopener noreferrer" className="break-all text-sky-700 underline dark:text-sky-300">{children ?? url}</a> : null)
+const Ext = ({ url, children }: { url?: string; children?: ReactNode }) => (url ? <a href={url} target="_blank" rel="noopener noreferrer" className="break-all link">{children ?? url}</a> : null)
 
 function BriefView({ p }: { p: P }) {
   return (
@@ -62,7 +62,7 @@ function DraftView({ rec, p }: { rec: FullRecord; p: P }) {
     <>
       <p className="mb-4 text-sm">
         {p.word_count?.toLocaleString('en-US')} words · reading grade {p.reading?.post_grade ?? '—'} (intro {p.reading?.intro_grade ?? '—'}) · {p.model_used}{' '}
-        {rec.briefId && <>· <Link to={`/approvals/${rec.briefId}`} className="text-sky-700 underline dark:text-sky-300">approval screen</Link></>}
+        {rec.briefId && <>· <Link to={`/approvals/${rec.briefId}`} className="link">approval screen</Link></>}
       </p>
       <Card title="Post" className="mb-4"><MarkdownPreview markdown={p.post_markdown ?? ''} /></Card>
       <Card title="Checks" className="mb-4"><ChecksTable checks={checks} /></Card>
@@ -193,7 +193,7 @@ export default function RecordDetail() {
   const { memoryId = '' } = useParams()
   const [tab, setTab] = useState<'view' | 'json'>('view')
   const q = useQuery({ queryKey: ['record', memoryId, 'full'], queryFn: async () => (await api<{ record: FullRecord }>(`/api/records/${memoryId}`)).record, retry: false })
-  if (q.isPending) return <p className="text-sm text-slate-500">Loading…</p>
+  if (q.isPending) return <PageSkeleton />
   if (!q.data) {
     return (
       <>

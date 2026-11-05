@@ -3,7 +3,7 @@
 import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
-import { NotYet } from './components/Page'
+import { NotYet, PageSkeleton } from './components/Page'
 import Login from './pages/Login'
 
 const Control = lazy(() => import('./pages/Control'))
@@ -29,7 +29,7 @@ export function AppRoutes() {
         path="*"
         element={
           <Layout>
-            <Suspense fallback={<p className="text-sm text-slate-500">Loading…</p>}>
+            <Suspense fallback={<PageSkeleton />}>
               <Routes>
                 <Route path="/" element={<Control />} />
                 <Route path="/runs" element={<Runs />} />

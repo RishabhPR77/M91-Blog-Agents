@@ -1,7 +1,7 @@
 // /approvals — drafts waiting for the human's decision.
 import { Link } from 'react-router-dom'
 import { useApprovals } from '../api/queries'
-import { Card, EmptyState, PageHeader } from '../components/Page'
+import { Card, EmptyState, PageHeader, LoadingRows } from '../components/Page'
 import { StatusBadge } from '../components/StatusBadge'
 import { fmtAgo, fmtDateTime } from '../format'
 
@@ -12,7 +12,7 @@ export default function Approvals() {
     <>
       <PageHeader title="Approvals" subtitle="Drafts the Reviewer passed (or you revised) wait here for your decision." />
       {approvals.isPending ? (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <LoadingRows />
       ) : items.length === 0 ? (
         <EmptyState>No drafts waiting. Run the pipeline from <Link to="/" className="underline">Control</Link>.</EmptyState>
       ) : (

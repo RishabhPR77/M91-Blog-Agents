@@ -70,7 +70,7 @@ export function InteractiveCard({ briefId, status, version, info }: { briefId: s
               {doc.coverage_passed !== null && <span className={`pill ${doc.coverage_passed ? 'pill-green' : 'pill-red'}`}>coverage {doc.coverage_passed ? 'passed' : 'failed'}</span>}
             </div>
             <p className="mt-1">{doc.summary || `${doc.chapters} chapters · ${doc.components} components`}</p>
-            <p className="mt-1 text-xs text-slate-500">{doc.created_at ? `${fmtDateTime(doc.created_at)} · ` : ''}<Link className="text-sky-700 underline dark:text-sky-300" to={`/records/${doc.record_id}`}>the guide, what was dropped and the checks</Link></p>
+            <p className="mt-1 text-xs text-slate-500">{doc.created_at ? `${fmtDateTime(doc.created_at)} · ` : ''}<Link className="link" to={`/records/${doc.record_id}`}>the guide, what was dropped and the checks</Link></p>
           </>
         ) : (
           <p className="text-slate-500">{info.on ? 'No guide for this version yet: the Experience Designer runs after each draft, before the Reviewer.' : 'No guide for this version.'}</p>

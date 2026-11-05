@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, RefreshCw } from 'lucide-react'
 import { api, errorMessage } from '../api/client'
 import { useGuides } from '../api/weekly'
-import { Card } from './Page'
+import { Card, LoadingRows } from './Page'
 import { ConfirmDialog } from './ConfirmDialog'
 import { toast } from './Toasts'
 import { COSTS } from '../config/costs'
@@ -47,11 +47,11 @@ export function GuidesSection({ runBusy }: { runBusy: boolean }) {
       <div data-testid="guides-section">
         <p className="mb-2 text-xs text-slate-500">The M91 guides already live on msg91.com/guide. The agents link them and never re-explain them, and the weekly editor never writes them again. They are read before each full run.</p>
         {error && <p role="alert" className="mb-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
-        {q.isPending ? <p className="text-sm text-slate-500">Loading…</p> : guides.length === 0 ? <p className="text-sm text-slate-500">No guides known yet. Sync them, or start a full run (it reads them first).</p> : (
+        {q.isPending ? <LoadingRows /> : guides.length === 0 ? <p className="text-sm text-slate-500">No guides known yet. Sync them, or start a full run (it reads them first).</p> : (
           <ul className="space-y-1.5 text-sm">
             {guides.map((g) => (
               <li key={g.url} className="flex flex-wrap items-center gap-2" data-testid="guide-row">
-                <a className="inline-flex items-center gap-1 text-sky-700 underline dark:text-sky-300" href={g.url} target="_blank" rel="noreferrer">{g.title} <ExternalLink size={11} /></a>
+                <a className="inline-flex items-center gap-1 link" href={g.url} target="_blank" rel="noreferrer">{g.title} <ExternalLink size={11} /></a>
                 {g.published_at && <span className="text-xs text-slate-500">{fmtDateTime(g.published_at)}</span>}
                 {g.words ? <span className="text-xs text-slate-500">{g.words.toLocaleString('en-US')} words</span> : null}
               </li>
