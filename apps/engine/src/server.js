@@ -27,7 +27,7 @@ import { pickTarget } from './weekly/pick.js'
 import { pickOfBrief } from './weekly/editor.js'
 import { listGuides } from './guides/sync.js'
 import { buildJourney } from './journey.js'
-import { checkFilePath } from './util/filelink.js'
+import { checkFilePath, fileLinkSecret } from './util/filelink.js'
 import { listOpportunities, nextTimely, applyAction, isExpired, OPEN_STATUSES, TimelyError } from './timely/model.js'
 import { istDate } from './util/time.js'
 import { previewExport, latestExport, ExportError } from './export/index.js'
@@ -840,6 +840,12 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
   const server = http.createServer((req, res) => {
     const started = now()
     const { counts, result } = withMem0Count(() => handle(req, res))
+    // A throw that escapes handle() must not become an unhandled rejection: that would stop the whole engine.
+    Promise.resolve(result).catch((error) => {
+      log.error('request crashed', { error })
+      if (!res.headersSent) send(res, 500, { error: 'internal error' })
+      else res.end()
+    })
     res.on('finish', () => {
       if (!req.url?.startsWith('/api/')) return
       const requests = mem0Requests(counts)
@@ -879,7 +885,13 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
   }
 
   async function handle(req, res) {
-    const url = new URL(req.url, 'http://localhost')
+    // A request target that is not a valid path ("//", "/\", "http://") gets a 400 instead of a throw.
+    let url
+    try {
+      url = new URL(req.url, 'http://localhost')
+    } catch {
+      return send(res, 400, { error: 'bad request' })
+    }
     try {
       if (hosted) res.setHeader('strict-transport-security', 'max-age=31536000; includeSubDomains')
       if (url.pathname.startsWith('/api/')) return await api(req, res, url)
@@ -902,7 +914,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       if (url.pathname.startsWith('/preview/') && (await servePreview(req, res, url))) return
       // A signed link to a post's Markdown file (the email attachment): no login, valid until it expires.
       if (url.pathname.startsWith('/files/exports/') && (req.method === 'GET' || req.method === 'HEAD')) {
-        const link = checkFilePath(url.pathname, { secret: config?.notify?.sharedKey, now })
+        const link = checkFilePath(url.pathname, { secret: fileLinkSecret(config), now })
         if (!link.ok) return send(res, link.why === 'expired' ? 410 : 404, { error: link.why === 'expired' ? 'this link has expired' : 'not found' })
         const rec = store ? await latestExport(store, link.briefId) : null
         if (!rec || rec.payload?.filename !== link.filename) return send(res, 404, { error: 'not found' })

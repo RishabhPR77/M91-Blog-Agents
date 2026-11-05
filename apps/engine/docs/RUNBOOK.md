@@ -101,8 +101,10 @@ Approve:
   fails as before.
 - The attachment is a **signed link** Gmail fetches while sending: `/files/exports/<brief>/<expiry>/<signature>/<file>.md`
   on the engine (`ENGINE_PUBLIC_URL`; on Embarko https://m91-engine.embarko.app). It needs no login, works for that
-  one post only, and expires after `FILE_LINK_DAYS` (default 7). It is signed with `WEBHOOK_SHARED_KEY`; changing that
-  key ends every link. The other links in the email ask for the dashboard login.
+  one post only, and expires after `FILE_LINK_DAYS` (default 7, at most 30). It is signed with `PIPELINE_TRIGGER_KEY`
+  (it never leaves the engine; changing it ends every link). The other links in the email ask for the dashboard login.
+- A run on your own computer cannot attach the file (Gmail cannot reach localhost): the email goes without it and the
+  run says so. Approved posts are attached when the hosted engine sends them.
 - Keys: `MAIL_TO` (comma-separated addresses; empty = nothing is mailed, the run says so) and
   `MAIL_POST_WEBHOOK_URL` (the flow's URL, a secret). Set both in `.env` and on Embarko.
 

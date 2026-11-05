@@ -1,7 +1,10 @@
 // PUBLISH_TARGET=email: an approved post is mailed to MAIL_TO through the blog-mail-post flow (Gmail): its title, score
 // and size, why it was written this week, links to the post page and the dashboard download, and its Markdown file
 // attached. The attachment is a signed link (src/util/filelink.js) that Gmail fetches while sending.
-import { signedFilePath } from '../util/filelink.js'
+import { signedFilePath, fileLinkSecret } from '../util/filelink.js'
+
+// Gmail fetches the attachment from viaSocket's servers: a link to this computer can never be fetched.
+const LOCAL_URL_RE = /^https?:\/\/(localhost|127(\.\d+){3}|\[::1\]|0\.0\.0\.0)(:\d+)?(\/|$)/i
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
@@ -30,10 +33,14 @@ export async function publishByEmail({ notifier, config, exportRecord, briefId, 
   const to = config.notify.mailTo ?? []
   if (!to.length) return { status: 'skipped', summary: 'Not emailed: MAIL_TO is empty', warnings: ['MAIL_TO is empty: set the address(es) to mail approved posts to'] }
   const p = exportRecord.payload
-  const path = signedFilePath({ briefId, filename: p.filename, secret: config.notify.sharedKey, days: config.notify.fileLinkDays ?? 7, now })
-  const warnings = path ? [] : ['no attachment: WEBHOOK_SHARED_KEY is not set, so the file link cannot be signed']
-  const { subject, html } = postEmail({ ...meta, title: meta.title ?? p.title, briefId, publicUrl: config.runtime.publicUrl, filename: p.filename, attached: Boolean(path) })
-  const out = await notifier.mail({ to, subject, html, attachment_url: path ? `${config.runtime.publicUrl}${path}` : null, filename: p.filename })
+  const publicUrl = config.runtime.publicUrl
+  const reachable = !LOCAL_URL_RE.test(publicUrl ?? '')
+  const path = reachable ? signedFilePath({ briefId, filename: p.filename, secret: fileLinkSecret(config), days: config.notify.fileLinkDays ?? 7, now }) : null
+  const warnings = path ? [] : [reachable
+    ? 'no attachment: no key to sign the file link (PIPELINE_TRIGGER_KEY or WEBHOOK_SHARED_KEY)'
+    : `no attachment: the file link would point to ${publicUrl}, which Gmail cannot reach; send it from the hosted engine or set ENGINE_PUBLIC_URL`]
+  const { subject, html } = postEmail({ ...meta, title: meta.title ?? p.title, briefId, publicUrl, filename: p.filename, attached: Boolean(path) })
+  const out = await notifier.mail({ to, subject, html, attachment_url: path ? `${publicUrl}${path}` : null, filename: p.filename })
   if (out?.skipped === 'pending_flows') return { status: 'skipped', summary: 'Not emailed: MAIL_POST_WEBHOOK_URL is empty', warnings: ['the mail flow URL (MAIL_POST_WEBHOOK_URL) is not set'] }
   if (out?.dryRun) return { status: 'dry_run', summary: `DRY_RUN: the email for ${p.filename} was not sent`, warnings }
   if (store) await store.updateRecord(exportRecord.id, { ...p, email_sent_at: new Date(now()).toISOString() }, {}, { known: exportRecord })

@@ -82,7 +82,8 @@ The JavaScript fallback works the same way as in Flow 1: check `body.key`, then 
    - Message Body (HTML): `body.html`
    - Attachments: `body.attachment_url` (Gmail downloads the file from this URL while sending; it is a signed engine
      link, valid `FILE_LINK_DAYS` days, so it must be reachable from the internet: the hosted engine's URL, not
-     localhost). `attachment_url` is `null` when the engine has no `WEBHOOK_SHARED_KEY`; the email then has no file.
+     localhost). `attachment_url` is `null` when the engine cannot make a reachable link (no key, or a localhost
+     address); the email then has no file and the run says why.
 4. **Save.** Set `MAIL_TO` to the address(es) that get the posts.
 
 ## After building both

@@ -581,8 +581,12 @@ One post a week (the cron), so each run decides what is most useful now instead 
   Send Email). The export record keeps `email_sent_at`; the journey's Published step says "Emailed". The "publish"
   mode sends it again. `src/publisher/send.js` picks email or Slack for both the approve and the publish step.
 - The .md is a real attachment: Gmail fetches it from a signed link, `GET /files/exports/<brief>/<exp>/<sig>/<file>.md`
-  (`src/util/filelink.js`: HMAC-SHA256 of brief and expiry, keyed from `WEBHOOK_SHARED_KEY`, 32 hex characters,
-  `FILE_LINK_DAYS` default 7). No login; 410 when expired, 404 for a bad signature or a file that is not the brief's
-  latest export.
+  (`src/util/filelink.js`: HMAC-SHA256 of brief and expiry, keyed from `PIPELINE_TRIGGER_KEY`, which never leaves the
+  engine (`WEBHOOK_SHARED_KEY`, sent to every flow, is only the fallback); 32 hex characters; `FILE_LINK_DAYS` default 7,
+  capped at 30 when signing and when checking). No login; 410 when expired, 404 for a bad signature or a file that is
+  not the brief's latest export. With `ENGINE_PUBLIC_URL` on localhost the email goes without the attachment, with a
+  warning.
+- The server answers a malformed request target (`//`, `/\`, `http://`) with 400; before, `new URL` threw outside the
+  handler's try and the unhandled rejection stopped the engine. A throw escaping a request is now logged as a 500.
 - No `MAIL_TO`: nothing is mailed, the publisher step and a warning say why. No flow URL: skipped as a pending flow.
 - Dashboard: "Send by email", the email texts on Control, the post page, Exports and Settings.

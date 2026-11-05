@@ -8,7 +8,7 @@ import { createServer } from '../src/server.js'
 import { createRunManager } from '../src/runs.js'
 import { stubAgents } from '../src/agents/stubs.js'
 import { createNotifier } from '../src/notify.js'
-import { signedFilePath, checkFilePath } from '../src/util/filelink.js'
+import { signedFilePath, checkFilePath, fileLinkSecret } from '../src/util/filelink.js'
 import { postEmail } from '../src/publisher/email.js'
 import { buildJourney } from '../src/journey.js'
 import { fakeConfig, fakeFetch } from './helpers.js'
@@ -18,7 +18,8 @@ import { fullRun } from './fixtures/autorun.js'
 beforeEach(() => resetEvents())
 const quiet = () => setSink(() => {})
 const NOW = Date.parse('2026-10-31T06:00:00Z')
-const cfg = (env = {}) => config({ AUTO_APPROVE: 'true', APPROVE_BEST_ON_FAIL: 'true', PUBLISH_TARGET: 'email', MAIL_TO: 'me@example.com', DRY_RUN: 'false', EXPERIENCE_ENABLED: 'false', ...env })
+const PUBLIC = 'https://m91-engine.embarko.app'
+const cfg = (env = {}) => config({ AUTO_APPROVE: 'true', APPROVE_BEST_ON_FAIL: 'true', PUBLISH_TARGET: 'email', MAIL_TO: 'me@example.com', DRY_RUN: 'false', EXPERIENCE_ENABLED: 'false', ENGINE_PUBLIC_URL: PUBLIC, ...env })
 const byType = (store, type) => [...store.records.values()].filter((r) => r.type === type)
 
 test('signed file links: valid until they expire, for that brief and file only', () => {
@@ -30,6 +31,16 @@ test('signed file links: valid until they expire, for that brief and file only',
   assert.equal(checkFilePath(path.replace('261031-1000-ABCD', '261031-1000-WXYZ'), { secret, now: () => NOW }).why, 'bad_signature')
   assert.equal(checkFilePath(path, { secret: 'another-key', now: () => NOW }).why, 'bad_signature')
   assert.equal(signedFilePath({ briefId: 'x', filename: 'x.md', secret: '' }), null, 'no secret, no link')
+  // A far expiry (more than MAX_LINK_DAYS ahead) was never made here, even with a valid signature for it.
+  const far = signedFilePath({ briefId: '261031-1000-ABCD', filename: 'post.md', secret, days: 30, now: () => NOW + 400 * 86400000 })
+  assert.equal(checkFilePath(far, { secret, now: () => NOW }).why, 'bad_signature')
+  assert.equal(checkFilePath(signedFilePath({ briefId: 'b', filename: 'b.md', secret, days: 365, now: () => NOW }), { secret, now: () => NOW + 31 * 86400000 }).why, 'expired', 'days is capped at 30')
+})
+
+test('file links are signed with the trigger key, which never leaves the engine; the webhook key is the fallback', () => {
+  assert.equal(fileLinkSecret({ runtime: { triggerKey: 'trigger-key-0123456789' }, notify: { sharedKey: 'shared-key-0123456789' } }), 'trigger-key-0123456789')
+  assert.equal(fileLinkSecret({ runtime: {}, notify: { sharedKey: 'shared-key-0123456789' } }), 'shared-key-0123456789')
+  assert.equal(fileLinkSecret({}), null)
 })
 
 test('the email: subject, facts, why, the best-version warning, links; HTML is escaped', () => {
@@ -55,11 +66,46 @@ test('an approved post is emailed once, with the .md attached by a signed link; 
   assert.deepEqual(m.to, ['me@example.com'])
   assert.equal(m.subject, 'New M91 post: How agent approval works with a phone call')
   assert.equal(m.filename, 'how-agent-approval-works.md')
-  assert.match(m.attachment_url, new RegExp(`^http://localhost:8080/files/exports/${r.run.brief_id}/\\d{10}/[a-f0-9]{32}/how-agent-approval-works\\.md$`))
+  assert.match(m.attachment_url, new RegExp(`^https://m91-engine\\.embarko\\.app/files/exports/${r.run.brief_id}/\\d{10}/[a-f0-9]{32}/how-agent-approval-works\\.md$`))
   const [exp] = byType(store, 'markdown_export')
   assert.ok(exp.payload.email_sent_at)
   const j = buildJourney({ briefs: byType(store, 'brief'), drafts: byType(store, 'draft'), reviews: byType(store, 'review'), exportRec: exp, runs: byType(store, 'run'), target: 'email' })
   assert.deepEqual(j.stages.find((s) => s.id === 'published').detail, 'Emailed')
+})
+
+test('an engine on this computer sends the email without the attachment (Gmail cannot fetch a localhost link) and says so', async () => {
+  const restore = quiet()
+  const { notifier, r } = await fullRun(cfg({ ENGINE_PUBLIC_URL: '' }), { reviews: [{ pass: true, total: 88 }] })
+  restore()
+  assert.equal(notifier.sent.mail.length, 1)
+  assert.equal(notifier.sent.mail[0].attachment_url, null)
+  assert.match(notifier.sent.mail[0].html, /could not be attached/)
+  const step = r.run.steps.find((s) => s.name === 'publisher')
+  assert.equal(step.summary, 'Emailed to 1 address with how-agent-approval-works.md')
+  assert.ok(r.run.warnings.some((w) => /http:\/\/localhost:8080, which Gmail cannot reach/.test(w)), JSON.stringify(r.run.warnings))
+})
+
+test('a malformed request target gets a 400 and the engine keeps running', async () => {
+  const { createConnection } = await import('node:net')
+  const store = (await fullRun(cfg(), { reviews: [{ pass: true, total: 88 }] })).store
+  const conf = cfg()
+  const manager = createRunManager({ config: conf, storeFactory: () => store, agentsFactory: () => stubAgents })
+  const server = createServer({ triggerKey: 'fake-trigger-key-0123456789', manager, store, config: conf })
+  await new Promise((ok) => server.listen(0, '127.0.0.1', ok))
+  const { port } = server.address()
+  const raw = (target) => new Promise((ok, no) => {
+    const s = createConnection(port, '127.0.0.1', () => s.write(`GET ${target} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`))
+    let out = ''
+    s.on('data', (d) => { out += d })
+    s.on('end', () => ok(out.split('\r\n')[0]))
+    s.on('error', no)
+  })
+  try {
+    for (const target of ['//', '/' + String.fromCharCode(92), 'http://']) assert.match(await raw(target), /^HTTP\/1\.1 400/, target)
+    assert.equal((await fetch(`http://127.0.0.1:${port}/health`)).status, 200)
+  } finally {
+    await new Promise((ok) => server.close(ok))
+  }
 })
 
 test('no MAIL_TO: the post stays approved and the run says why; the signed link serves the file without the login', async () => {
