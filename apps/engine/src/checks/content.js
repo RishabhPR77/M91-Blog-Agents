@@ -4,7 +4,7 @@
 
 import { BANNED_PHRASES, FIRST_PERSON_PHRASES, HARD_CLAIM_PATTERNS, SOFT_CLAIM_WORDS, LEGAL_FRAMING_PHRASES, findPhrases, phraseRegex } from './phrases.js'
 import { needsStartHere, START_HERE_RE } from '../timely/starthere.js'
-import { fleschKincaidGrade, sentences, words, sentenceStats } from './readability.js'
+import { fleschKincaidGrade, sentences, words, sentenceStats, hardestParts } from './readability.js'
 import { normaliseCode } from '../writer/snippets.js'
 import { docsLinksIn, M91_SITE_URL } from '../util/m91links.js'
 
@@ -30,19 +30,24 @@ export function ctaVariantKey(u) {
   }
 }
 
+/** Inline code spans become one short word ("it"): code is not prose, but it still fills a place in the sentence. */
+export const neutralCode = (text) => String(text).replace(/`[^`\n]+`/g, 'it')
+
 const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'are', 'not', 'does', 'how', 'what', 'your', 'you', 'its', 'into', 'about', 'docs', 'explain', 'there', 'their', 'which'])
 
 // ---------- Markdown parsing ----------
 
 /**
- * Splits Markdown into the parts the checks need. Prose excludes code blocks, URLs and headings.
+ * Splits Markdown into the parts the checks need. Prose excludes code blocks, URLs and headings; "readable" also
+ * leaves out table rows and inline code (for the reading grade and sentence lengths).
  * @returns {{ h1: string[], h2: {text, index}[], h3: string[], sections: {heading, lines}[], code: {lang, code}[],
- *   links: {text, url}[], tldr: string[]|null, firstParagraph: string, cta: {lines}|null, prose: string, rawText: string, tables: number, numberedLists: number, lines: string[] }}
+ *   links: {text, url}[], tldr: string[]|null, firstParagraph: string, cta: {lines}|null, prose: string, readable: string, rawText: string, tables: number, numberedLists: number, lines: string[] }}
  */
 export function parseMarkdown(md) {
   const lines = String(md ?? '').replace(/\r\n/g, '\n').split('\n')
   const out = { h1: [], h2: [], h3: [], sections: [], code: [], links: [], tldr: null, firstParagraph: '', cta: null, prose: '', rawText: '', tables: 0, numberedLists: 0, lines }
   const textLines = [] // non-code, non-heading lines (prose candidates)
+  const tableLines = new Set() // indexes into textLines of table rows (cells, not sentences)
   let inCode = null
   let section = { heading: null, lines: [] }
   let afterH1 = false
@@ -106,6 +111,7 @@ export function parseMarkdown(md) {
     if (/^\s*\|.*\|\s*$/.test(line)) {
       if (/^\s*\|?\s*:?-{3,}/.test(line)) out.tables++
       textLines.push(line.replace(/\|/g, ' ').replace(/:?-{3,}:?/g, ' '))
+      tableLines.add(textLines.length - 1)
       continue
     }
     const numbered = /^\s*\d+[.)]\s+/.test(line)
@@ -125,11 +131,16 @@ export function parseMarkdown(md) {
   const withoutMdLinks = raw.replace(/\[([^\]]*)\]\((\S+?)(?:\s+"[^"]*")?\)/g, '$1')
   for (const m of withoutMdLinks.matchAll(/<?(https?:\/\/[^\s)<>]+)>?/g)) out.links.push({ text: '', url: m[1].replace(/[.,;:]+$/, '') })
   out.rawText = withoutMdLinks
-  out.prose = withoutMdLinks
+  const proseOf = (text) => text
     .replace(/<?https?:\/\/[^\s)<>]+>?/g, ' ')
     .replace(/^\s*[-*+]\s+/gm, '')
     .replace(/^\s*\d+[.)]\s+/gm, '')
     .replace(/[*_`>#]/g, '')
+  out.prose = proseOf(withoutMdLinks)
+  // What a reader reads as sentences, for the reading grade and sentence lengths: no table rows (cells, not
+  // sentences), and inline code (`idempotency_key`, `requestApproval()`) counted as one short word, not as prose.
+  const readLines = textLines.filter((_, i) => !tableLines.has(i)).join('\n').replace(/\[([^\]]*)\]\((\S+?)(?:\s+"[^"]*")?\)/g, '$1')
+  out.readable = proseOf(neutralCode(readLines))
   out.firstParagraph = firstParaLines.join(' ').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
   const ctaSection = out.sections.find((s) => /what to do next/i.test(s.heading))
   out.cta = ctaSection ? { lines: ctaSection.lines } : null
@@ -207,9 +218,17 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
   const hardMax = Math.ceil(c.targetWordsMax * (1 + pct))
   R('words_hard', wordCount >= hardMin && wordCount <= hardMax, 'hard', wordCount, `hard range ${hardMin}–${hardMax}`)
   R('words_target', wordCount >= c.targetWordsMin && wordCount <= c.targetWordsMax, 'soft', wordCount, `target ${c.targetWordsMin}–${c.targetWordsMax}`)
-  const postGrade = fleschKincaidGrade(p.prose)
-  const introText = [...(p.tldr ?? []), p.firstParagraph].join('. ')
+  // Graded on what readers read as sentences (p.readable: no table rows, inline code as one short word).
+  const readable = p.readable ?? p.prose
+  const postGrade = fleschKincaidGrade(readable)
+  const introText = neutralCode([...(p.tldr ?? []), p.firstParagraph].join('. ')).replace(/[*_`]/g, '')
   const introGrade = fleschKincaidGrade(introText)
+  // For the Writer's repair: name what makes the text hard, so it can rewrite those sentences and words.
+  const hardNote = (text) => {
+    const h = hardestParts(text)
+    return [h.sentences.length ? ` · rewrite these hardest sentences in short, plain words: ${h.sentences.map((s) => `"${s}"`).join(' | ')}` : '',
+      h.longWords.length ? ` · long words used most (use shorter ones where you can): ${h.longWords.join(', ')}` : ''].join('')
+  }
   // The targets (READING_GRADE_POST_MAX 7, READING_GRADE_INTRO_MAX 6) are soft: the Reviewer sees them and scores
   // simplicity by them. The hard limits are the targets plus READING_GRADE_HARD_MARGIN (1): post 8, intro 7. A sentence
   // over SENTENCE_HARD_MAX_WORDS and a paragraph over PARAGRAPH_MAX_SENTENCES are hard too (the Writer's repair call
@@ -217,17 +236,21 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
   const margin = c.readingGradeHardMargin ?? 1
   const hardGrade = c.readingGradePostMax + margin
   const hardIntro = c.readingGradeIntroMax + margin
-  R('reading_post_hard', postGrade !== null && postGrade <= hardGrade, 'hard', postGrade, `hard limit grade ${hardGrade}`)
-  R('reading_post', postGrade !== null && postGrade <= c.readingGradePostMax, 'soft', postGrade, `target grade ${c.readingGradePostMax}`)
-  R('reading_intro', introGrade !== null && introGrade <= hardIntro, c.strictIntro === false ? 'soft' : 'hard', introGrade, `TL;DR + first paragraph, hard limit grade ${hardIntro}`)
+  const postHardOk = postGrade !== null && postGrade <= hardGrade
+  const postOk = postGrade !== null && postGrade <= c.readingGradePostMax
+  const introHardOk = introGrade !== null && introGrade <= hardIntro
+  R('reading_post_hard', postHardOk, 'hard', postGrade, `hard limit grade ${hardGrade}${postHardOk ? '' : hardNote(readable)}`)
+  R('reading_post', postOk, 'soft', postGrade, `target grade ${c.readingGradePostMax}${postOk || !postHardOk ? '' : hardNote(readable)}`)
+  R('reading_intro', introHardOk, c.strictIntro === false ? 'soft' : 'hard', introGrade, `TL;DR + first paragraph, hard limit grade ${hardIntro}${introHardOk ? '' : hardNote(introText)}`)
   R('reading_intro_target', introGrade !== null && introGrade <= c.readingGradeIntroMax, 'soft', introGrade, `TL;DR + first paragraph, target grade ${c.readingGradeIntroMax}`)
   const softMax = c.sentenceMaxWords ?? 20
   const sentenceHard = c.sentenceHardMaxWords ?? 25
-  const lens = sentences(p.prose).map((x) => ({ text: x, n: words(x).length }))
+  const lens = sentences(readable).map((x) => ({ text: x, n: words(x).length }))
   const tooLong = lens.filter((x) => x.n > sentenceHard)
   const longish = lens.filter((x) => x.n > softMax && x.n <= sentenceHard)
   const quote = (x) => `"${x.text.split(/\s+/).slice(0, 8).join(' ')}…" (${x.n} words)`
-  R('sentence_hard', tooLong.length === 0, 'hard', tooLong.length, tooLong.length ? `${tooLong.length} sentence(s) over ${sentenceHard} words: ${tooLong.slice(0, 3).map(quote).join(' | ')}` : `no sentence over ${sentenceHard} words`)
+  // Every over-long sentence (up to 10), so one repair can fix them all.
+  R('sentence_hard', tooLong.length === 0, 'hard', tooLong.length, tooLong.length ? `${tooLong.length} sentence(s) over ${sentenceHard} words: ${tooLong.slice(0, 10).map(quote).join(' | ')}` : `no sentence over ${sentenceHard} words`)
   R('sentence_length', longish.length === 0, 'soft', longish.length, longish.length ? `${longish.length} sentence(s) of ${softMax + 1}–${sentenceHard} words: ${longish.slice(0, 3).map(quote).join(' | ')}` : `every sentence at most ${softMax} words`)
   const allParas = p.sections.flatMap((s) => paragraphsOf(s.lines))
   const paraMax = c.paragraphMaxSentences ?? 3

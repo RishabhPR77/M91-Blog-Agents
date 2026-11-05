@@ -15,12 +15,43 @@ export function words(text) {
   return String(text).match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) ?? []
 }
 
-/** Sentences: split on . ! ? followed by space or end. Empty pieces dropped. */
+/**
+ * Sentences: split on . ! ? (and any closing quotes or brackets right after them: `approved.” Then`, `(see below.)
+ * Next`) followed by space, and on line breaks. Empty pieces dropped.
+ */
 export function sentences(text) {
   return String(text)
-    .split(/(?<=[.!?])\s+|\n+/)
+    .split(/(?<=[.!?][)\]"'”’»]*)\s+|\n+/)
     .map((s) => s.trim())
     .filter((s) => words(s).length > 0)
+}
+
+/** How hard one sentence is to read: the Flesch–Kincaid terms for that sentence alone. */
+export function sentenceDifficulty(sentence) {
+  const w = words(sentence)
+  if (!w.length) return 0
+  return 0.39 * w.length + 11.8 * (w.reduce((n, x) => n + countSyllables(x), 0) / w.length) - 15.59
+}
+
+/**
+ * What makes a text hard, for the Writer's repair: its hardest sentences (at least 8 words) and the long words
+ * (4+ syllables) it uses most.
+ */
+export function hardestParts(text, { sentencesTop = 5, wordsTop = 8 } = {}) {
+  const hard = sentences(text)
+    .filter((s) => words(s).length >= 8)
+    .map((s) => ({ s, d: sentenceDifficulty(s) }))
+    .sort((a, b) => b.d - a.d)
+    .slice(0, sentencesTop)
+    .map((x) => x.s)
+  const counts = new Map()
+  for (const w of words(text)) {
+    if (countSyllables(w) < 4 || /\d/.test(w)) continue
+    const k = w.toLowerCase()
+    counts.set(k, (counts.get(k) ?? 0) + 1)
+  }
+  const long = [...counts].sort((a, b) => b[1] - a[1]).slice(0, wordsTop).map(([k, n]) => `${k} (${n}×)`)
+  return { sentences: hard, longWords: long }
 }
 
 /** Flesch–Kincaid grade, one decimal place; null when there is no prose. */

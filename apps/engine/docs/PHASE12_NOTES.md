@@ -602,3 +602,20 @@ One post a week (the cron), so each run decides what is most useful now instead 
   its text first and the call to action last.
 - Longer posts by default: `TARGET_WORDS_MIN=1800`, `TARGET_WORDS_MAX=2500` (were 1200 and 2000). A value in `.env`
   wins over the default.
+
+## Readability measured as readers read (no target changed)
+
+Every draft of run R-261106-0113-2DAY failed the reading-grade and sentence hard checks (grade 9.0 / 9.1 / 8.8,
+2–3 hard failures), so even the best version could not be sent. Part of it was the measurement:
+
+- `sentences()` only split after `.`, `!`, `?` directly followed by a space, so `…approved.” Then…` or
+  `…(see below.) Next…` became one long sentence. It now also splits after closing quotes and brackets.
+- The reading grade and sentence lengths ran on table rows (cells, not sentences) and on inline code
+  (`idempotency_key` scored as a five-syllable word). They now use `parseMarkdown().readable`: no table rows, inline
+  code counted as one short word. The word count still uses all the prose.
+- On the 29 Oct post this moves the grade from 7.2 to 6.8 and the "over 25 words" count from 3 to 1 (the one left is
+  a real long sentence).
+- The Writer's repair is now told what to fix: the hardest sentences and the long words used most
+  (`hardestParts()`), and every over-long sentence (up to 10, was 3).
+
+PASS_SCORE_MIN, PASS_AREA_MIN, READING_GRADE_* and SENTENCE_* are unchanged.
