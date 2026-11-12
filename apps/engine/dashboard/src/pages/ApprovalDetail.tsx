@@ -4,6 +4,7 @@
 // ask for a review, request changes, reject the topic. Approving stays on this page (the journey shows each step);
 // the other actions open the live run.
 import { useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, BookOpenText, CheckCircle2, GitCompare, MessageSquareQuote, Send, ShieldQuestion, Sparkles, Trash2, X } from 'lucide-react'
@@ -401,10 +402,10 @@ export default function ApprovalDetail() {
       </Card>
 
       {/* Approve: the Reviewer-pass rule (REREVIEW_AFTER_HUMAN) — review first, or approve without review with a tick. */}
-      {approveOpen && (needsReview ? (
+      {approveOpen && (needsReview ? createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => !busy && setApproveOpen(false)} />
-          <div role="dialog" aria-modal="true" aria-labelledby="approve-title" className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+          <div className="absolute inset-0 animate-fade bg-[#0b0e12]/40 backdrop-blur-[2px]" onClick={() => !busy && setApproveOpen(false)} />
+          <div role="dialog" aria-modal="true" aria-labelledby="approve-title" className="relative w-full max-w-md animate-pop rounded-2xl border border-line bg-surface p-6 shadow-(--shadow-float)">
             <h2 id="approve-title" className="text-base font-semibold">This version was not checked by the Reviewer</h2>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Review it first (recommended), or approve it without a review.</p>
             <button type="button" className="btn-primary mt-4 w-full" disabled={busy} onClick={() => void run(reviewAction)}>Review it first · expected AI calls {COSTS.approval_review.normal}</button>
@@ -414,7 +415,8 @@ export default function ApprovalDetail() {
             </div>
             <div className="mt-4 flex justify-end"><button type="button" className="btn-secondary" disabled={busy} onClick={() => setApproveOpen(false)}>Cancel</button></div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : (
         <ConfirmDialog open title={`${approvePublish ? 'Approve and publish' : 'Approve'} v${d.draft.version}?`} expectedCalls={approveCalls} expectedMem0={approveCost.mem0} confirmLabel={approvePublish ? 'Approve and publish' : 'Approve'} busy={busy} onConfirm={() => run(approveAction)} onCancel={() => setApproveOpen(false)}>
           <p>{promoOn ? 'The promo pack is created, then the' : 'No AI call. One run:'} approval, the Markdown export{approvePublish ? `, then ${flags.target === 'docstar' ? 'the post goes to Docstar' : flags.target === 'slack' ? 'a Slack message with its .md download link' : flags.target === 'email' ? 'an email with its .md attached' : 'the post is published to the blog'}` : publishOn ? ' (publish it later with Publish)' : ''}. You see each step on this page.{!reviewed ? ' This version has no Reviewer pass (re-review is off).' : ''}</p>

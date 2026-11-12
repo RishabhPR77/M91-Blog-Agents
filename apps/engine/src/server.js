@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { pathToFileURL } from 'node:url'
 import { getConfig, ConfigError } from './config.js'
 import { log, mask, registerSecrets, setLevel } from './util/log.js'
-import { createRunManager, RunError, RUN_ID_RE, BUILT_MODES, PUBLISH_MODES, DECISION_MODES } from './runs.js'
+import { createRunManager, RunError, RUN_ID_RE, BUILT_MODES, PUBLISH_MODES, DECISION_MODES, closeInterruptedRuns } from './runs.js'
 import { getStore, RECORD_TYPES } from './store.js'
 import { replay, subscribe, TERMINAL_TYPES } from './events.js'
 import { listPins, addPin, cancelPin, PinError } from './pins.js'
@@ -529,7 +529,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       if (method === 'GET' && seg.length === 3) {
         const runRec = await findRun(runId)
         if (!runRec) return fail(res, 404, 'not_found', `no run ${runId}`)
-        return send(res, 200, { run: { record_id: runRec.id, ...runRec.payload, status: runRec.payload?.status ?? runRec.status }, records: await producedRecords(runRec) })
+        return send(res, 200, { run: { record_id: runRec.id, ...runRec.payload, status: runRec.payload?.status ?? runRec.status }, records: await producedRecords(runRec), active: manager ? manager.activeRunId() === runId : null })
       }
     }
     if (path === '/api/events' && method === 'GET') {
@@ -1002,6 +1002,13 @@ async function main() {
     store.pruneWork?.()
   } catch (error) {
     log.warn('local work not pruned', { error })
+  }
+  // A run left "running" by a restart (a deploy mid-run) would block the dashboard forever: close it.
+  try {
+    const closed = await closeInterruptedRuns(store)
+    if (closed.length) log.warn('closed runs interrupted by a restart', { runs: closed })
+  } catch (error) {
+    log.warn('interrupted runs not checked', { error })
   }
   // Load the dashboard's lists once at start (one read per type); later writes keep them current.
   try {

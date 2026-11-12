@@ -60,6 +60,26 @@ export class RunError extends Error {
 
 /** run_id: R-YYMMDD-HHMM-XXXX (IST, brief-id alphabet). */
 export const newRunId = (date = new Date()) => `R-${newBriefId(date)}`
+
+export const INTERRUPTED_SUMMARY = 'Stopped: the engine restarted while this run was running (for example a deploy), so it never finished. Start a new run.'
+
+/**
+ * At start-up nothing can be running yet: a run record still "running" is from before a restart (a deploy, a crash)
+ * and would never finish. Mark it failed, with its open step, so the dashboard stops showing a run in progress.
+ * Returns the run ids it closed.
+ */
+export async function closeInterruptedRuns(store, { now = Date.now } = {}) {
+  const closed = []
+  for (const r of await store.getRecords({ type: 'run' })) {
+    const p = r.payload ?? {}
+    if ((p.status ?? r.status) !== 'running' || r.metadata?.summary) continue
+    const finished = new Date(now()).toISOString()
+    const steps = (p.steps ?? []).map((s) => (s.status === 'running' ? { ...s, status: 'failed', finished_at: finished, error: s.error ?? 'interrupted by an engine restart' } : s))
+    await store.updateRecord(r.id, { ...p, status: 'failed', finished_at: p.finished_at ?? finished, result_summary: INTERRUPTED_SUMMARY, steps }, { type: 'run', status: 'failed' }, { known: r })
+    closed.push(p.run_id ?? r.briefId)
+  }
+  return closed
+}
 export const RUN_ID_RE = /^R-\d{6}-\d{4}-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}$/
 
 // Run params that may change settings for one run only (e.g. the low-cost smoke settings).

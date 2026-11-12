@@ -32,18 +32,19 @@ export function RunButton({ title, description, costKey, lowCost, built, comingI
     </p>
   )
   if (variant === 'hero') {
+    // Inside Home's "Next post" tile: what comes next (the children), what it does, one big button, the cost.
     return (
-      <section className="animate-enter [animation-delay:120ms]" data-testid={`run-card-${title}`}>
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <button type="button" className="btn-primary h-14 px-7 text-[16px]" disabled={Boolean(blocked)} onClick={onRun} title={blocked ?? undefined}>
-            <Play size={16} className="fill-current" /> {buttonLabel ?? title}
-            <ArrowRight size={17} />
+      <section data-testid={`run-card-${title}`}>
+        {children && <div className="space-y-3">{children}</div>}
+        <p className="mt-4 max-w-2xl text-[14.5px] leading-relaxed text-ink-2">{description}</p>
+        <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
+          <button type="button" className="btn-primary h-12 px-6 text-[15px]" disabled={Boolean(blocked)} onClick={onRun} title={blocked ?? undefined}>
+            <Play size={15} className="fill-current" /> {buttonLabel ?? title}
+            <ArrowRight size={16} />
           </button>
-          {blocked ? <span className="text-sm text-ink-3">{blocked}</span> : <span className="text-sm text-ink-3">Asks you first and shows the cost.</span>}
+          <span className="text-sm text-ink-3">{blocked ?? 'Asks you first and shows the cost.'}</span>
         </div>
-        <p className="mt-6 max-w-2xl text-[15.5px] leading-relaxed text-ink-2">{description}</p>
-        {children && <div className="mt-3 max-w-2xl space-y-2 text-[15px] text-ink-2">{children}</div>}
-        <div className="mt-5 max-w-3xl space-y-1">
+        <div className="mt-6 space-y-1 border-t border-line pt-4">
           {modelLine}
           {cost && (
             <p className="text-xs text-ink-3" data-testid="cost">

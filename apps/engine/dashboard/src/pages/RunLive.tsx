@@ -9,6 +9,7 @@ import { api, errorMessage, isApiError } from '../api/client'
 import { useSettings } from '../api/queries'
 import { modeLabel, usePostJourney } from '../api/journey'
 import { JourneyBar } from '../components/JourneyBar'
+import { ActivityFeed, WhyStopped } from '../components/RunActivity'
 import { RunProgress } from '../components/RunProgress'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EventLog } from '../components/EventLog'
@@ -114,6 +115,7 @@ export default function RunLive() {
         </div>
 
         <aside className="space-y-8 lg:sticky lg:top-24 animate-enter [animation-delay:200ms]" aria-label="About this run">
+          <WhyStopped view={view} warnings={warnings} />
           {view.approvals.map((a) => <Banner key={a.seq} a={a} />)}
           {briefId && journey.data?.stages?.length ? (
             <div>
@@ -122,6 +124,7 @@ export default function RunLive() {
               <div className="mt-4"><JourneyBar stages={journey.data.stages} compact /></div>
             </div>
           ) : null}
+          <ActivityFeed view={view} />
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-6 text-sm">
             {header.map(([k, v]) => (
               <div key={k} className={k === 'Mem0 calls' ? 'col-span-2' : ''}>
@@ -131,7 +134,7 @@ export default function RunLive() {
             ))}
           </dl>
           {detail?.run?.approved_unreviewed && <p className="text-sm text-amber-700">Approved without a Reviewer pass (force_unreviewed).</p>}
-          {warnings.length > 0 && (
+          {warnings.length > 0 && view.status !== 'failed' && view.status !== 'cancelled' && (
             <ul className="list-disc space-y-1 pl-5 text-xs text-amber-800">
               {warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>

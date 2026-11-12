@@ -38,3 +38,17 @@ test('deleting runs removes their run and run_log records, nothing else', async 
     restore()
   }
 })
+
+test('at start-up, a run left "running" by a restart is closed as failed, with its open step', async () => {
+  const { closeInterruptedRuns, INTERRUPTED_SUMMARY } = await import('../src/runs.js')
+  const store = memoryStore()
+  const A = 'R-261112-1000-WXYZ'
+  await store.createRecord({ type: 'run', briefId: A, payload: { run_id: A, status: 'running', steps: [{ name: 'scout', status: 'succeeded' }, { name: 'writer', status: 'running' }] }, status: 'running' })
+  await store.createRecord({ type: 'run', briefId: 'R-261112-0900-ABCD', payload: { run_id: 'R-261112-0900-ABCD', status: 'succeeded', steps: [] }, status: 'succeeded' })
+  assert.deepEqual(await closeInterruptedRuns(store, { now: () => Date.parse('2026-11-12T10:00:00Z') }), [A])
+  const r = (await store.getRecords({ type: 'run' })).find((x) => x.payload.run_id === A)
+  assert.equal(r.payload.status, 'failed')
+  assert.equal(r.payload.result_summary, INTERRUPTED_SUMMARY)
+  assert.deepEqual(r.payload.steps.map((s) => s.status), ['succeeded', 'failed'])
+  assert.deepEqual(await closeInterruptedRuns(store), [], 'nothing left to close')
+})

@@ -12,7 +12,9 @@ import { openEventStream } from '../api/sse'
 import { initialRunView, runReducer, type RunRecord, type RunView } from './runEvents'
 
 export type TrimmedRecord = { id: string; type: string; status: string | null; brief_id: string | null; version: number | null; key_id: string | null; title: string | null }
-export type RunDetail = { run: RunRecord & { record_id?: string; warnings?: string[]; approved_unreviewed?: boolean }; records: TrimmedRecord[] }
+export type RunDetail = { run: RunRecord & { record_id?: string; warnings?: string[]; approved_unreviewed?: boolean }; records: TrimmedRecord[]; active?: boolean | null }
+
+export const STALE_TEXT = 'This run stopped without finishing: the engine restarted while it was running, so its last step never ended. Start a new run.'
 export type StreamState = 'connecting' | 'live' | 'reconnecting' | 'waiting' | 'ended'
 
 const TERMINAL = new Set(['run.finished', 'run.failed', 'run.cancelled'])
@@ -123,6 +125,13 @@ export function useRunView(runId: string): { view: RunView; detail: RunDetail | 
   }, [data, stream])
   useEffect(() => {
     if (!data?.run) return
+    // The record says "running" but the engine is not running it (it restarted mid-run, e.g. a deploy): the run will
+    // never finish. Show where it stopped instead of "Starting…" and a stream that waits forever.
+    if (data.run.status === 'running' && data.active === false && !terminalSeen.current) {
+      dispatch({ type: 'rebuild', record: { ...data.run, status: 'failed', result_summary: STALE_TEXT } })
+      setStream('ended')
+      return
+    }
     dispatch(emptyEnd ? { type: 'rebuild', record: data.run } : { type: 'record', record: data.run })
   }, [data, emptyEnd])
 

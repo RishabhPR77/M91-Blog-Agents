@@ -9,7 +9,7 @@ import { api, errorMessage, isApiError } from '../api/client'
 import { useApprovals, useHealth, useRuns, useSettings } from '../api/queries'
 import type { RunSummary } from '../api/types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Card, EmptyState, LoadingRows, PageHeader } from '../components/Page'
+import { EmptyState, LoadingRows } from '../components/Page'
 import { RunButton } from '../components/RunButton'
 import { DOING } from '../components/RunProgress'
 import { JourneyBar, journeyLine } from '../components/JourneyBar'
@@ -19,12 +19,10 @@ import { toast } from '../components/Toasts'
 import { expectedCalls, expectedMem0, PRESETS, type CostKey, type Preset } from '../config/costs'
 import { flagsOf } from '../config/flags'
 import { FORMAT_LABEL, nextRunText, useWeekly } from '../api/weekly'
-import { PickCard } from '../components/PickCard'
 import { TimelySection } from '../components/TimelySection'
-import { GuidesSection } from '../components/GuidesSection'
 import { useTimely } from '../api/timely'
 import { buildRunRequest, leastUsedGroup, TOPIC_GROUPS } from '../config/runOptions'
-import { fmtDateTime, fmtDuration } from '../format'
+import { fmtAgo, fmtDateTime, fmtDuration } from '../format'
 import { useNow } from '../state/useRunView'
 
 type ModelRow = [string, { service?: string; model?: string } | undefined]
@@ -100,7 +98,8 @@ function CurrentRun({ run }: { run: RunSummary }) {
     }
   }
   return (
-    <Card title="Current run" actions={<Link to={`/runs/${run.run_id}`} className="text-sm link-quiet">Watch live →</Link>}>
+    <div>
+      <div className="mb-5 flex items-center justify-between gap-3"><p className="eyebrow">Current run</p><Link to={`/runs/${run.run_id}`} className="text-sm link-quiet">Watch live →</Link></div>
       <RunStrip run={run} />
       <p className="mt-6 flex items-center gap-2.5 font-serif text-[22px] font-semibold tracking-[-0.01em]" data-testid="current-doing">
         <span className="relative flex size-2.5"><span className="absolute inset-0 animate-ping rounded-full bg-lime-400 opacity-70" /><span className="relative size-2.5 rounded-full bg-lime-500" /></span>
@@ -113,7 +112,7 @@ function CurrentRun({ run }: { run: RunSummary }) {
       <ConfirmDialog open={confirm} title={`Stop run ${run.run_id}?`} expectedCalls="0 (calls already made are not refunded)" confirmLabel="Stop the run" danger busy={busy} onConfirm={stop} onCancel={() => setConfirm(false)}>
         <p>The current step is interrupted and recorded as cancelled.</p>
       </ConfirmDialog>
-    </Card>
+    </div>
   )
 }
 
@@ -208,13 +207,23 @@ export default function Control() {
   const firstWaiting = approvals.data?.[0]
   const posts = usePostJourneys(5)
 
+  const lastRun = runs.data?.[0]
+  const doneCount = (posts.data ?? []).filter((p) => journeyLine(p.stages).tone === 'green').length
+
   return (
     <>
-      <PageHeader eyebrow={new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} title={greeting()}
-        subtitle={waiting > 0
-          ? <><span className="marker font-medium text-ink">{waiting} post{waiting === 1 ? '' : 's'} waiting</span> for your review.{activeRun ? ' A run is writing right now.' : ' Write the next one whenever you like.'}</>
-          : activeRun ? <>A run is <span className="marker font-medium text-ink">writing right now</span>. Nothing else needs you.</> : 'Nothing needs you right now. Write the next post whenever you like.'} />
-      <div className="space-y-14">
+      <header className="mb-10 flex flex-wrap items-end justify-between gap-6">
+        <div className="animate-rise">
+          <p className="eyebrow mb-3">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+          <h1 className="font-serif text-[40px] leading-[1.05] font-semibold tracking-[-0.025em] sm:text-[48px]">{greeting()}</h1>
+          <p className="mt-3 max-w-2xl text-[15.5px] text-ink-2">
+            {waiting > 0
+              ? <><span className="marker font-medium text-ink">{waiting} post{waiting === 1 ? '' : 's'} waiting</span> for your review.{activeRun ? ' A run is writing right now.' : ' Write the next one whenever you like.'}</>
+              : activeRun ? <>A run is <span className="marker font-medium text-ink">writing right now</span>. Nothing else needs you.</> : 'Nothing needs you right now. Write the next post whenever you like.'}
+          </p>
+        </div>
+      </header>
+      <div className="space-y-6">
         {outdated && (
           <div role="alert" data-testid="engine-outdated" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
@@ -231,42 +240,85 @@ export default function Control() {
           </div>
         )}
 
-        <RunButton variant="hero" title="Write the next post" description={`The editor picks this week's most useful topic from real questions, news and M91 changes; the AI researches, writes and reviews it. ${autoApprove ? (flags.target === 'slack' ? 'Then it is approved and sent to Slack with a link to download the .md (if no version passes, the best one goes).' : flags.target === 'email' ? 'Then it is approved and emailed to you with the .md attached (if no version passes, the best one goes).' : 'Then it is approved and published.') : 'It waits for your review.'}`}
-          models={[['Editor', models?.editor], ['Scout', models?.scout], ['Strategist', models?.strategist], ['Writer', models?.writer], ...(flags.experienceOn ? [['Designer', models?.designer] as ModelRow] : []), ['Reviewer', models?.reviewer]]} costKey={flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason}
-          onRun={() => ask('full', 'Write the next post', flags.experienceOn ? 'full' : 'full_plain', {}, [['Topic', nextRunText(weekly.data?.next, weekly.data?.model)]])}>
-          <p className="text-[15px]" data-testid="control-next-up"><span className="font-semibold">Topic:</span> {weekly.isPending ? 'loading…' : nextRunText(weekly.data?.next, weekly.data?.model)}. <Link className="text-xs link" to="/week">This week</Link></p>
-          {lastPick && <p className="text-sm text-slate-600 dark:text-slate-300" data-testid="control-last-pick"><span className="font-medium">Last pick:</span> {lastPick.pick.title} <span className="text-xs text-slate-500">({FORMAT_LABEL[lastPick.pick.format] ?? lastPick.pick.format}, {lastPick.date}): {lastPick.reason}</span></p>}
-          {timelyOn && (timely.data?.open ?? 0) > 0 && <p className="text-sm" data-testid="control-timely"><Link to="/week#timely" className="pill pill-amber">{timely.data!.open} news item{timely.data!.open === 1 ? '' : 's'} this week</Link>{timely.data?.waiting ? <span className="ml-2 text-xs text-slate-500">“{timely.data.waiting.title}” waits: {timely.data.waiting.reason}</span> : null}</p>}
-        </RunButton>
-        <div className={`grid gap-x-16 gap-y-12 pt-6 ${activeRun ? 'lg:grid-cols-2' : ''}`}>
-          <Card title="Waiting for you">
-            <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
-              <p className="font-serif text-[64px] leading-none font-semibold tracking-[-0.03em] tabular-nums" data-testid="waiting-count">{waiting}</p>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-ink-3">{waiting === 1 ? 'post waits' : 'posts wait'} for your review.</p>
-                {firstWaiting && <p className="mt-1 line-clamp-2 font-serif text-[22px] leading-snug font-semibold tracking-[-0.01em]" data-testid="first-waiting">{firstWaiting.title || firstWaiting.brief_id}</p>}
-              </div>
-              {firstWaiting
-                ? <Link to={`/approvals/${firstWaiting.brief_id}`} className="btn-secondary">Review it now <ArrowRight size={16} /></Link>
-                : <Link to="/approvals" className="btn-secondary">Open Approvals</Link>}
+        <div className="stagger grid gap-6 lg:grid-cols-3">
+          <section className="tile lg:col-span-2 lg:row-span-2" aria-label="Next post">
+            {activeRun && <div className="mb-8 border-b border-line pb-8"><CurrentRun run={activeRun} /></div>}
+            <p className="eyebrow mb-3">{activeRun ? 'After this run' : 'Next post'}</p>
+            <RunButton variant="hero" title="Write the next post" description={`The AI researches, plans, writes and reviews it. ${autoApprove ? (flags.target === 'slack' ? 'Then it is approved and sent to Slack with a link to download the .md (if no version passes, the best one goes).' : flags.target === 'email' ? 'Then it is approved and emailed to you with the .md attached (if no version passes, the best one goes).' : 'Then it is approved and published.') : 'It waits for your review.'}`}
+              models={[['Editor', models?.editor], ['Scout', models?.scout], ['Strategist', models?.strategist], ['Writer', models?.writer], ...(flags.experienceOn ? [['Designer', models?.designer] as ModelRow] : []), ['Reviewer', models?.reviewer]]} costKey={flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason}
+              onRun={() => ask('full', 'Write the next post', flags.experienceOn ? 'full' : 'full_plain', {}, [['Topic', nextRunText(weekly.data?.next, weekly.data?.model)]])}>
+              <p className="font-serif text-[26px] leading-snug font-semibold tracking-[-0.015em] sm:text-[30px]" data-testid="control-next-up"><span className="sr-only">Topic: </span>{weekly.isPending ? 'Reading this week’s signals…' : nextRunText(weekly.data?.next, weekly.data?.model)}</p>
+              {lastPick && <p className="text-sm text-ink-2" data-testid="control-last-pick"><span className="font-medium">Last pick:</span> {lastPick.pick.title} <span className="text-xs text-slate-500">({FORMAT_LABEL[lastPick.pick.format] ?? lastPick.pick.format}, {lastPick.date}): {lastPick.reason}</span></p>}
+              {timelyOn && (timely.data?.open ?? 0) > 0 && <p className="text-sm" data-testid="control-timely"><Link to="/week#timely" className="pill pill-amber">{timely.data!.open} news item{timely.data!.open === 1 ? '' : 's'} this week</Link>{timely.data?.waiting ? <span className="ml-2 text-xs text-slate-500">“{timely.data.waiting.title}” waits: {timely.data.waiting.reason}</span> : null}</p>}
+            </RunButton>
+          </section>
+
+          <section className="tile flex flex-col" aria-label="Needs you">
+            <p className="eyebrow">Needs you</p>
+            <div className="mt-4 flex items-baseline gap-3">
+              <p className="font-serif text-[56px] leading-none font-semibold tracking-[-0.03em] tabular-nums" data-testid="waiting-count">{waiting}</p>
+              <p className="text-sm text-ink-3">{waiting === 1 ? 'post waits' : 'posts wait'} for your review</p>
             </div>
-          </Card>
-          {activeRun && <CurrentRun run={activeRun} />}
+            {firstWaiting && <p className="mt-4 line-clamp-2 font-serif text-[19px] leading-snug font-semibold tracking-[-0.01em]" data-testid="first-waiting">{firstWaiting.title || firstWaiting.brief_id}</p>}
+            <div className="mt-auto pt-5">
+              {firstWaiting
+                ? <Link to={`/approvals/${firstWaiting.brief_id}`} className="btn-primary w-full">Review it now <ArrowRight size={16} /></Link>
+                : <Link to="/approvals" className="btn-secondary w-full">Open Approvals</Link>}
+            </div>
+          </section>
+
+          <section className="tile" aria-label="At a glance">
+            <p className="eyebrow mb-4">At a glance</p>
+            <dl className="space-y-4 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-ink-3">Last run</dt>
+                <dd className="flex min-w-0 items-center gap-2">{lastRun ? <><StatusBadge status={lastRun.status} /><Link to={`/runs/${lastRun.run_id}`} className="link-quiet truncate">{fmtAgo(lastRun.started_at)}</Link></> : <span className="text-ink-3">none yet</span>}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-ink-3">Recent posts</dt>
+                <dd className="font-medium tabular-nums">{posts.data?.length ?? 0} <span className="font-normal text-ink-3">· {doneCount} done</span></dd>
+              </div>
+              {timelyOn && (
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-ink-3">News this week</dt>
+                  <dd className="font-medium tabular-nums">{timely.data?.open ?? 0}</dd>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-ink-3">Runs by default</dt>
+                <dd className="font-medium">{settings.data ? (settings.data.runtime.dry_run ? 'dry run' : 'live') : '…'}</dd>
+              </div>
+            </dl>
+          </section>
         </div>
-        <section className="border-t border-line pt-6" data-testid="home-week">
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-3">
-            <h2 className="font-serif text-[21px] font-semibold tracking-[-0.01em]">This week</h2>
+
+        <section className="tile" data-testid="home-week" aria-label="This week">
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
+            <p className="eyebrow">This week · the editor’s decisions</p>
             <Link to="/week" className="text-sm link-quiet">Full page →</Link>
           </div>
-          <p className="mb-6 max-w-2xl text-[15px] text-ink-2">One post a week: each run picks what is most useful now from real questions, this week’s news and what M91 can newly do. Never a repeat of a live guide.</p>
+          <p className="mb-6 max-w-2xl text-sm text-ink-2">Each run picks what is most useful now from real questions, this week’s news and what M91 can newly do. Never a repeat of a live guide.</p>
           {weekly.isPending ? <LoadingRows /> : weekly.data?.picks?.length ? (
-            <ul className="stagger space-y-8" aria-label="The editor's latest decisions">
-              {weekly.data.picks.slice(0, 2).map((pk) => <li key={pk.pick_id}><PickCard pick={pk} showPost /></li>)}
+            <ul className="stagger grid gap-4 md:grid-cols-2" aria-label="The editor's latest decisions">
+              {weekly.data.picks.slice(0, 4).map((pk) => (
+                <li key={pk.pick_id} className="flex flex-col rounded-2xl bg-surface-2 p-5">
+                  <div className="flex items-center gap-2 text-xs text-ink-3"><span className="pill pill-blue">{FORMAT_LABEL[pk.pick.format] ?? pk.pick.format}</span><span>{pk.date}</span></div>
+                  <h3 className="mt-3 font-serif text-[19px] leading-snug font-semibold tracking-[-0.01em]">{pk.pick.title}</h3>
+                  <p className="mt-2 line-clamp-3 text-sm text-ink-2">{pk.reason}</p>
+                  {pk.brief_id && <Link to={`/approvals/${pk.brief_id}`} className="mt-auto pt-4 text-sm link-quiet">Open the post →</Link>}
+                </li>
+              ))}
             </ul>
           ) : <EmptyState>No decisions yet. The next full run makes the first one.</EmptyState>}
         </section>
-        {timelyOn && <TimelySection runBusy={Boolean(activeRun)} />}
-        <Card title="Latest posts" actions={<Link to="/runs" className="text-sm link-quiet">All posts and runs →</Link>}>
+
+        {timelyOn && (timely.data?.open ?? 0) > 0 && <div className="tile [&>section]:border-t-0 [&>section]:pt-0"><TimelySection runBusy={Boolean(activeRun)} /></div>}
+
+        <section className="tile" aria-label="Recent posts">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
+            <p className="eyebrow">Recent posts</p>
+            <Link to="/runs" className="text-sm link-quiet">All posts and runs →</Link>
+          </div>
           {posts.data?.length ? (
             <ul className="stagger divide-y divide-line" data-testid="latest-posts">
               {posts.data.map((p) => {
@@ -298,11 +350,11 @@ export default function Control() {
               ))}
             </ul>
           )}
-        </Card>
-        <GuidesSection runBusy={Boolean(activeRun)} />
-        <section className="border-t border-line pt-6">
-          <h2 className="mb-5 font-serif text-[21px] font-semibold tracking-[-0.01em]">More</h2>
-          <div className="space-y-5">
+        </section>
+
+        <section className="pt-4" aria-label="Run settings">
+          <p className="eyebrow mb-4">Run settings and single agents</p>
+          <div className="space-y-4">
             <details className="panel group" data-testid="run-options">
               <summary className="flex cursor-pointer list-none items-center gap-2 p-5 text-sm font-semibold text-ink">
                 Run options <span className="font-normal text-ink-3">· {dryRun ?? true ? 'dry run' : 'live'} · {lowCost ? PRESETS.lowcost.label : PRESETS.normal.label}</span>

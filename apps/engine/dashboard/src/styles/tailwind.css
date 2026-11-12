@@ -84,14 +84,16 @@
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --animate-enter: enter 520ms var(--ease-out) both;
-  --animate-fade: fade 300ms var(--ease-out) both;
-  --animate-pop: pop 240ms var(--ease-out) both;
-  --animate-slide-in: slide-in 360ms var(--ease-out) both;
+  /* "backwards": the start state holds during a delay, and nothing is kept once the animation ends (a kept
+     transform would make the element a containing block and trap fixed pop-ups inside it). */
+  --animate-enter: enter 520ms var(--ease-out) backwards;
+  --animate-fade: fade 300ms var(--ease-out) backwards;
+  --animate-pop: pop 240ms var(--ease-out) backwards;
+  --animate-slide-in: slide-in 360ms var(--ease-out) backwards;
   --animate-signal: signal 1.6s ease-out infinite;
   --animate-stripes: stripes 900ms linear infinite;
-  --animate-grow: grow-x 700ms var(--ease-out) both;
-  --animate-rise: rise 700ms var(--ease-out) both;
+  --animate-grow: grow-x 700ms var(--ease-out) backwards;
+  --animate-rise: rise 700ms var(--ease-out) backwards;
 }
 
 /* Motion: soft and short; all of it stops for people who ask for reduced motion (end of this file). */
@@ -194,6 +196,8 @@ p { text-wrap: pretty; }
 }
 @utility label { @apply mb-1.5 block text-xs font-medium text-ink-2; }
 @utility panel { @apply rounded-[20px] border border-line bg-surface shadow-(--shadow-panel); }
+/* A Home tile: a soft white card; one that is a link lifts a little on hover. */
+@utility tile { @apply rounded-3xl border border-line bg-surface p-6 shadow-(--shadow-panel) sm:p-7; }
 @utility eyebrow { @apply text-[11.5px] font-semibold tracking-[0.12em] text-ink-3 uppercase; }
 @utility link { @apply text-ink underline decoration-lime-400 decoration-2 underline-offset-[4px] transition-colors hover:bg-hl-tint; }
 @utility link-quiet { @apply text-ink-2 underline-offset-[4px] transition-colors hover:text-ink hover:underline; }
@@ -222,7 +226,7 @@ p { text-wrap: pretty; }
 }
 
 /* Lists and sections that come in one after another. */
-.stagger > * { animation: enter 560ms var(--ease-out) both; }
+.stagger > * { animation: enter 560ms var(--ease-out) backwards; }
 .stagger > *:nth-child(2) { animation-delay: 60ms; }
 .stagger > *:nth-child(3) { animation-delay: 120ms; }
 .stagger > *:nth-child(4) { animation-delay: 180ms; }

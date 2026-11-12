@@ -1,6 +1,7 @@
 // A modal that confirms an action that starts a run or changes state. It always shows the expected AI calls
 // (pass "0" for actions without AI) and can require a tick box before Confirm is enabled.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 type Props = {
   open: boolean
@@ -34,7 +35,8 @@ export function ConfirmDialog({ open, title, children, expectedCalls, expectedMe
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
   if (!open) return null
-  return (
+  // Rendered on <body>, so no page layer (an animation, a transform) can clip it or keep it under the top bar.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 animate-fade bg-[#0b0e12]/40 backdrop-blur-[2px]" onClick={() => !busy && onCancel()} />
       <div role="dialog" aria-modal="true" aria-labelledby="confirm-title" className="relative w-full max-w-md animate-pop rounded-2xl border border-line bg-surface p-6 shadow-(--shadow-float)">
@@ -57,6 +59,7 @@ export function ConfirmDialog({ open, title, children, expectedCalls, expectedMe
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

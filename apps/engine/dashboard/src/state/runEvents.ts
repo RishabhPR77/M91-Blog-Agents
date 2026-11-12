@@ -293,7 +293,9 @@ export function rebuildFromRecord(runId: string, r: RunRecord): RunView {
   }
   const aiCalls = (r.steps ?? []).reduce((n, st) => n + (st.ai_calls ?? 0), 0)
   const retries = (r.steps ?? []).reduce((n, st) => n + (st.retries ?? 0), 0)
-  return { ...applyRecord({ ...s, totals: { aiCalls, retries } }, r), source: 'record' }
+  const out: RunView = { ...applyRecord({ ...s, totals: { aiCalls, retries } }, r), source: 'record' }
+  // A finished run whose record still has a step "running" (it stopped mid-step): that step ended with the run.
+  return out.status !== 'running' && out.status !== 'unknown' ? finishStepsOnEnd(out, out.status, r.finished_at ?? new Date().toISOString()) : out
 }
 
 export function runReducer(state: RunView, action: Action): RunView {

@@ -59,12 +59,14 @@ export function PipelineTracker({ view, hidePromo = false, hideDesigner = false 
   // The promo pack is off: its step is hidden unless this run really made one (AI calls). Phase 11: the same for
   // the Experience Designer when EXPERIENCE_ENABLED=false, and the export step until a run has one.
   const steps = trackerSteps(view).filter((st) => !(hidePromo && st.name === 'promo' && !st.aiCalls) && !(hideDesigner && st.name === 'designer' && !st.aiCalls) && !((st.name === 'export' || st.name === 'editor') && (st.status === 'waiting' || st.status === 'skipped')))
+  // A single-agent run (scout, writer, …) shows only its own steps while it runs, not the whole pipeline as "waiting".
+  const own = view.status === 'running' && view.mode !== 'full' ? steps.filter((st) => st.status !== 'waiting') : steps
   const rounds = view.routes.filter((r) => r.total != null)
   return (
     <ol className="relative" aria-label="Pipeline">
-      {steps.map((st, i) => {
+      {own.map((st, i) => {
         const placeholder = st.placeholder || ((st.name === 'designer' || st.name === 'publisher') && st.status !== 'waiting' && st.status !== 'skipped' && /not built yet|Publishing is off|Interactive guides are off/.test(st.summary ?? ''))
-        const last = i === steps.length - 1
+        const last = i === own.length - 1
         const filled = st.status === 'done' || st.status === 'skipped' || st.status === 'failed' || st.status === 'cancelled'
         const running = st.status === 'running'
         const quiet = st.status === 'waiting' || st.status === 'skipped'
