@@ -8,7 +8,7 @@ import { ChevronDown, Info, Square } from 'lucide-react'
 import { api, errorMessage, isApiError } from '../api/client'
 import { useSettings } from '../api/queries'
 import { modeLabel, usePostJourney } from '../api/journey'
-import { JourneyCard } from '../components/JourneyCard'
+import { JourneyBar } from '../components/JourneyBar'
 import { RunProgress } from '../components/RunProgress'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EventLog } from '../components/EventLog'
@@ -99,62 +99,71 @@ export default function RunLive() {
         actions={
           <>
             <StatusBadge status={view.status === 'unknown' ? (detail?.run?.status ?? 'unknown') : view.status} />
-            {running && <button type="button" className="btn-danger" onClick={() => setConfirmStop(true)}><Square size={14} /> Stop</button>}
+            {running && <button type="button" className="btn-danger" onClick={() => setConfirmStop(true)}><Square size={13} className="fill-current" /> Stop</button>}
           </>
         }
       />
-      <div className="space-y-4">
-        <Card><RunProgress view={view} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} /></Card>
-        {briefId && journey.data && (
-          <JourneyCard journey={journey.data} title={<Link to={`/approvals/${briefId}`} className="font-semibold text-slate-800 hover:underline dark:text-slate-100">{journey.data.title || 'This post'}</Link>} />
-        )}
-        {view.approvals.map((a) => <Banner key={a.seq} a={a} />)}
-        <Card title="Steps of this run"><PipelineTracker view={view} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} /></Card>
-        {publisherProgress(view.outputs).size > 0 && <Card title="Publisher"><PublisherSteps outputs={view.outputs} stepStatus={view.steps.publisher?.status ?? null} /></Card>}
-        <details className="group rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" data-testid="run-details">
-          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-            Details: AI calls, memory calls, outputs and the event log <ChevronDown size={14} className="ml-auto transition-transform group-open:rotate-180" />
-          </summary>
-          <div className="space-y-4 border-t border-slate-200 p-4 dark:border-slate-800">
-        <Card>
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1fr)_320px] xl:gap-16">
+        <div className="min-w-0 space-y-12">
+          <RunProgress view={view} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} />
+          <section aria-label="Steps of this run" className="animate-enter [animation-delay:120ms]">
+            <p className="eyebrow mb-6">Steps of this run</p>
+            <PipelineTracker view={view} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} />
+          </section>
+          {publisherProgress(view.outputs).size > 0 && <Card title="Publisher"><PublisherSteps outputs={view.outputs} stepStatus={view.steps.publisher?.status ?? null} /></Card>}
+        </div>
+
+        <aside className="space-y-8 lg:sticky lg:top-24 animate-enter [animation-delay:200ms]" aria-label="About this run">
+          {view.approvals.map((a) => <Banner key={a.seq} a={a} />)}
+          {briefId && journey.data?.stages?.length ? (
+            <div>
+              <p className="eyebrow mb-2">The post</p>
+              <Link to={`/approvals/${briefId}`} className="font-serif text-[20px] leading-snug font-semibold tracking-[-0.01em] hover:underline">{journey.data.title || 'This post'}</Link>
+              <div className="mt-4"><JourneyBar stages={journey.data.stages} compact /></div>
+            </div>
+          ) : null}
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-6 text-sm">
             {header.map(([k, v]) => (
-              <div key={k}>
-                <dt className="text-xs text-slate-500">{k}</dt>
-                <dd className="font-medium" data-testid={`run-${k.toLowerCase().replace(/\s+/g, '-')}`}>{v}</dd>
+              <div key={k} className={k === 'Mem0 calls' ? 'col-span-2' : ''}>
+                <dt className="text-xs text-ink-3">{k === 'Mem0 calls' ? 'Memory calls' : k}</dt>
+                <dd className="mt-0.5 font-medium tabular-nums" data-testid={`run-${k.toLowerCase().replace(/\s+/g, '-')}`}>{v}</dd>
               </div>
             ))}
           </dl>
-          {detail?.run?.approved_unreviewed && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">Approved without a Reviewer pass (force_unreviewed).</p>}
+          {detail?.run?.approved_unreviewed && <p className="text-sm text-amber-700">Approved without a Reviewer pass (force_unreviewed).</p>}
           {warnings.length > 0 && (
-            <ul className="mt-3 list-disc space-y-0.5 pl-5 text-xs text-amber-700 dark:text-amber-300">
+            <ul className="list-disc space-y-1 pl-5 text-xs text-amber-800">
               {warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
           )}
-        </Card>
-
-        {view.source !== 'live' && view.source !== 'none' && (
-          <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300" data-testid="source-note">
-            <Info size={16} className="mt-0.5 shrink-0" />
-            <div>
-              Info-level log lines are kept only while the engine runs.
-              {view.source === 'timeline'
-                ? ' This view is rebuilt from the run’s saved timeline.'
-                : ' This run has no saved timeline (it ran before the dashboard was added), so only its steps and summaries are shown; there is no event log or loop timeline.'}
-              {view.timelineDropped > 0 && ` The oldest ${view.timelineDropped} timeline entries were not kept.`}
-            </div>
-          </div>
-        )}
-        {stream === 'reconnecting' && <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">Connection lost: reconnecting…</div>}
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="Loop timeline"><LoopTimeline routes={view.routes} /></Card>
-          <Card title="Outputs"><StepOutputs outputs={view.outputs} records={detail?.records} /></Card>
-        </div>
-        <Card title="Event log"><EventLog lines={view.log} dropped={view.logDropped} /></Card>
-          </div>
-        </details>
+        </aside>
       </div>
+
+      <details className="group mt-16 border-t border-line pt-6" data-testid="run-details">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-ink-2 hover:text-ink">
+          Technical details: the loop, outputs and the event log <ChevronDown size={14} className="transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="mt-6 space-y-8">
+          {view.source !== 'live' && view.source !== 'none' && (
+            <div className="flex items-start gap-2 rounded-xl bg-surface-2 px-4 py-3 text-sm text-ink-2" data-testid="source-note">
+              <Info size={16} className="mt-0.5 shrink-0" />
+              <div>
+                Info-level log lines are kept only while the engine runs.
+                {view.source === 'timeline'
+                  ? ' This view is rebuilt from the run’s saved timeline.'
+                  : ' This run has no saved timeline (it ran before the dashboard was added), so only its steps and summaries are shown; there is no event log or loop timeline.'}
+                {view.timelineDropped > 0 && ` The oldest ${view.timelineDropped} timeline entries were not kept.`}
+              </div>
+            </div>
+          )}
+          {stream === 'reconnecting' && <div className="rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-900">Connection lost: reconnecting…</div>}
+          <div className="grid gap-10 lg:grid-cols-2">
+            <Card title="Loop timeline"><LoopTimeline routes={view.routes} /></Card>
+            <Card title="Outputs"><StepOutputs outputs={view.outputs} records={detail?.records} /></Card>
+          </div>
+          <Card title="Event log"><EventLog lines={view.log} dropped={view.logDropped} /></Card>
+        </div>
+      </details>
 
       <ConfirmDialog open={confirmStop} title={`Stop run ${runId}?`} expectedCalls="0 (calls already made are not refunded)" confirmLabel="Stop the run" danger busy={stopping} onConfirm={stop} onCancel={() => setConfirmStop(false)}>
         <p>The current step is interrupted and recorded as cancelled. Nothing after it runs.</p>

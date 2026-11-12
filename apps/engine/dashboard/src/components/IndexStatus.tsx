@@ -17,7 +17,7 @@ function useRefresh() {
     try {
       await api('/api/index/refresh', { method: 'POST' })
       await qc.invalidateQueries()
-      toast('success', 'Reloaded from Mem0')
+      toast('success', 'Reloaded from the memory')
     } catch (e) {
       toast('error', errorMessage(e))
     } finally {
@@ -44,9 +44,9 @@ export function IndexBanner({ index, running }: { index?: Status; running: boole
   if (!index?.out_of_date) return null
   return (
     <div role="alert" data-testid="index-out-of-date" className="flex flex-wrap items-center gap-3 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
-      <span>Data may be out of date: a command outside the dashboard changed Mem0.</span>
-      <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={() => void refresh()} disabled={busy || running} title={running ? 'Wait for the run to finish' : 'One Mem0 read per record type'}>
-        <RefreshCw size={12} className={busy ? 'animate-spin' : ''} /> {busy ? 'Refreshing…' : 'Refresh from Mem0'}
+      <span>Data may be out of date: a command outside the dashboard changed the memory.</span>
+      <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={() => void refresh()} disabled={busy || running} title={running ? 'Wait for the run to finish' : 'One memory read per record type'}>
+        <RefreshCw size={12} className={busy ? 'animate-spin' : ''} /> {busy ? 'Refreshing…' : 'Refresh from memory'}
       </button>
     </div>
   )

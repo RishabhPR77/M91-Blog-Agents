@@ -1,5 +1,5 @@
-// /memory — everything the engine keeps in Mem0, with counts per type, filters, why a record may no longer be
-// useful, and delete (one or a selection). Lists come from the engine's index (0 Mem0 requests); each delete is 1.
+// /memory — everything the engine keeps in its viaSocket memory, with counts per type, filters, why a record may no longer be
+// useful, and delete (one or a selection). Lists come from the engine's index (0 memory requests); each delete is 1.
 import { useDeferredValue, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -73,7 +73,7 @@ export default function Memory() {
       const res = await api<{ deleted: string[]; failed: { id: string; error: string }[]; mem0_requests: number }>('/api/records', {
         method: 'DELETE', body: { ids: items.map((r) => r.id), confirm_protected: items.some((r) => r.protection === 'confirm') }
       })
-      toast(res.failed.length ? 'error' : 'success', `Deleted ${res.deleted.length} record${res.deleted.length === 1 ? '' : 's'}${res.failed.length ? `, ${res.failed.length} failed` : ''} · ${res.mem0_requests} Mem0 request${res.mem0_requests === 1 ? '' : 's'}`)
+      toast(res.failed.length ? 'error' : 'success', `Deleted ${res.deleted.length} record${res.deleted.length === 1 ? '' : 's'}${res.failed.length ? `, ${res.failed.length} failed` : ''} · ${res.mem0_requests} memory request${res.mem0_requests === 1 ? '' : 's'}`)
       setSelected((s) => new Set([...s].filter((id) => !res.deleted.includes(id))))
       void qc.invalidateQueries({ queryKey: ['memory'] })
       void qc.invalidateQueries({ queryKey: ['records'] })
@@ -89,7 +89,7 @@ export default function Memory() {
     setBusy(true)
     try {
       const res = await api<{ mem0_requests: number }>('/api/memory/load-all', { method: 'POST' })
-      toast('success', `Every type loaded · ${res.mem0_requests} Mem0 request${res.mem0_requests === 1 ? '' : 's'}`)
+      toast('success', `Every type loaded · ${res.mem0_requests} memory request${res.mem0_requests === 1 ? '' : 's'}`)
       void qc.invalidateQueries({ queryKey: ['memory'] })
       void qc.invalidateQueries({ queryKey: ['health'] })
     } catch (err) {
@@ -104,9 +104,9 @@ export default function Memory() {
 
   return (
     <>
-      <PageHeader title="Memory" subtitle="What the engine keeps in Mem0, why a record may no longer be useful, and clean-up." />
+      <PageHeader title="Memory" subtitle="Everything the engine keeps in its viaSocket memory: runs, logs, briefs, drafts, lessons and more. See why a record may no longer be useful, and delete what you do not need." />
       <p className="mb-3 text-xs text-slate-500" data-testid="memory-cost">
-        This list: 0 Mem0 requests (served from the engine's index). Each delete: 1 Mem0 request.
+        This list: 0 memory requests (served from the engine's index). Each delete: 1 memory request.
       </p>
       {data?.not_loaded.length ? (
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/40" data-testid="not-loaded">
@@ -114,7 +114,7 @@ export default function Memory() {
           <button type="button" className="btn-secondary py-1" onClick={() => setLoadAllOpen(true)}>Load all types</button>
         </div>
       ) : null}
-      {data?.dry_run && <p className="mb-3 text-sm text-amber-700 dark:text-amber-300">DRY_RUN is on: deletes are refused (Mem0 writes are skipped).</p>}
+      {data?.dry_run && <p className="mb-3 text-sm text-amber-700 dark:text-amber-300">DRY_RUN is on: deletes are refused (memory writes are skipped).</p>}
 
       <div className="mb-4 flex flex-wrap gap-1" aria-label="Record types">
         <button type="button" aria-pressed={!type} onClick={() => pickType('')} className={`rounded-lg px-3 py-1.5 text-sm ${!type ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}>
@@ -209,7 +209,7 @@ export default function Memory() {
 
       <ConfirmDialog
         open={Boolean(toDelete)}
-        title={`Delete ${toDelete?.length ?? 0} record${toDelete?.length === 1 ? '' : 's'} from Mem0?`}
+        title={`Delete ${toDelete?.length ?? 0} record${toDelete?.length === 1 ? '' : 's'} from the memory?`}
         expectedCalls="0"
         expectedMem0={`${toDelete?.length ?? 0} (1 delete each; no reads)`}
         confirmLabel="Delete"
@@ -233,7 +233,7 @@ export default function Memory() {
 
       <ConfirmDialog
         open={loadAllOpen}
-        title="Load every record type from Mem0?"
+        title="Load every record type from the memory?"
         expectedCalls="0"
         expectedMem0="about 1 per 100 records (one paged list of the whole agent)"
         confirmLabel="Load all"

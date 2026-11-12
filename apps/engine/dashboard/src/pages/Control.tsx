@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, ChevronDown, Square } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Check, ChevronDown, Square } from 'lucide-react'
 import { api, errorMessage, isApiError } from '../api/client'
 import { useApprovals, useHealth, useRuns, useSettings } from '../api/queries'
 import type { RunSummary } from '../api/types'
@@ -19,6 +19,9 @@ import { toast } from '../components/Toasts'
 import { expectedCalls, expectedMem0, PRESETS, type CostKey, type Preset } from '../config/costs'
 import { flagsOf } from '../config/flags'
 import { FORMAT_LABEL, nextRunText, useWeekly } from '../api/weekly'
+import { PickCard } from '../components/PickCard'
+import { TimelySection } from '../components/TimelySection'
+import { GuidesSection } from '../components/GuidesSection'
 import { useTimely } from '../api/timely'
 import { buildRunRequest, leastUsedGroup, TOPIC_GROUPS } from '../config/runOptions'
 import { fmtDateTime, fmtDuration } from '../format'
@@ -46,6 +49,37 @@ function aiCalls(r: RunSummary) {
   return (r.steps ?? []).reduce((n, s) => n + (s.ai_calls ?? 0), 0)
 }
 
+const STRIP_NAME: Record<string, string> = { editor: 'Editor', scout: 'Scout', strategist: 'Strategist', writer: 'Writer', checks: 'Checks', designer: 'Designer', reviewer: 'Reviewer', promo: 'Promo', export: 'Export', publisher: 'Send' }
+// The steps a full run still has ahead of it, so the strip shows the whole way from the start.
+const FULL_STEPS = ['editor', 'scout', 'strategist', 'writer', 'checks', 'reviewer']
+
+/** The run as a row of nodes on a line: done ones ink, the running one pulsing lime, the rest still to come. */
+function RunStrip({ run }: { run: RunSummary }) {
+  const seen = new Map<string, string>()
+  for (const st of run.steps ?? []) if (!st.name.includes('.')) seen.set(st.name, st.status)
+  const names = [...new Set([...(run.mode === 'full' ? FULL_STEPS : []), ...seen.keys()])].filter((n) => n !== 'promo' || seen.has(n))
+  const order = run.mode === 'full' ? [...names].sort((a, b) => (FULL_STEPS.indexOf(a) + 1 || 99) - (FULL_STEPS.indexOf(b) + 1 || 99)) : names
+  return (
+    <ol className="flex items-start" aria-label="Run steps">
+      {order.map((name, i) => {
+        const status = seen.get(name) ?? 'waiting'
+        const done = status === 'done' || status === 'succeeded'
+        const running = status === 'running'
+        const failed = status === 'failed'
+        return (
+          <li key={name} className="relative flex min-w-0 flex-1 flex-col items-center text-center">
+            {i > 0 && <span aria-hidden className="absolute top-[11px] right-1/2 -left-1/2 h-0.5 overflow-hidden rounded-full bg-line"><span className={`block h-full origin-left bg-ink transition-transform duration-700 ease-out ${done || running || failed ? 'scale-x-100' : 'scale-x-0'}`} /></span>}
+            <span className={`relative z-10 flex size-6 items-center justify-center rounded-full border-2 transition-colors duration-300 ${done ? 'animate-pop border-transparent bg-ink text-white' : running ? 'animate-signal border-transparent bg-hl text-lime-600' : failed ? 'border-transparent bg-red-600 text-white' : 'border-line-strong bg-surface'}`}>
+              {done ? <Check size={12} strokeWidth={3} /> : running ? <span className="size-2 rounded-full bg-ink" /> : failed ? <span className="text-[10px] font-bold">!</span> : null}
+            </span>
+            <span className={`mt-2 truncate px-1 text-[11px] ${running ? 'font-semibold text-ink' : done ? 'text-ink-2' : 'text-ink-3'}`}>{STRIP_NAME[name] ?? name}</span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
 function CurrentRun({ run }: { run: RunSummary }) {
   const now = useNow(true)
   const qc = useQueryClient()
@@ -67,9 +101,10 @@ function CurrentRun({ run }: { run: RunSummary }) {
   }
   return (
     <Card title="Current run" actions={<Link to={`/runs/${run.run_id}`} className="text-sm link-quiet">Watch live →</Link>}>
-      <p className="flex items-center gap-2.5 font-display text-lg font-semibold tracking-[-0.01em]" data-testid="current-doing">
-        <span className="inline-block size-2.5 animate-signal rounded-full bg-signal text-signal" />
-        {DOING[current] ?? (current === '—' ? 'Starting…' : `${current}…`)}
+      <RunStrip run={run} />
+      <p className="mt-6 flex items-center gap-2.5 font-serif text-[22px] font-semibold tracking-[-0.01em]" data-testid="current-doing">
+        <span className="relative flex size-2.5"><span className="absolute inset-0 animate-ping rounded-full bg-lime-400 opacity-70" /><span className="relative size-2.5 rounded-full bg-lime-500" /></span>
+        <span key={current} className="animate-enter">{DOING[current] ?? (current === '—' ? 'Starting…' : `${current}…`)}</span>
       </p>
       <p className="mt-1.5 text-xs text-ink-3">
         {modeLabel(run.mode)}{run.dry_run ? ' (dry run)' : ''} · <span data-testid="current-elapsed">{fmtDuration(run.started_at ? now - Date.parse(run.started_at) : null)}</span> · <span data-testid="current-calls">{current} · {aiCalls(run)}</span> AI calls so far
@@ -218,6 +253,19 @@ export default function Control() {
           </Card>
           {activeRun && <CurrentRun run={activeRun} />}
         </div>
+        <section className="border-t border-line pt-6" data-testid="home-week">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="font-serif text-[21px] font-semibold tracking-[-0.01em]">This week</h2>
+            <Link to="/week" className="text-sm link-quiet">Full page →</Link>
+          </div>
+          <p className="mb-6 max-w-2xl text-[15px] text-ink-2">One post a week: each run picks what is most useful now from real questions, this week’s news and what M91 can newly do. Never a repeat of a live guide.</p>
+          {weekly.isPending ? <LoadingRows /> : weekly.data?.picks?.length ? (
+            <ul className="stagger space-y-8" aria-label="The editor's latest decisions">
+              {weekly.data.picks.slice(0, 2).map((pk) => <li key={pk.pick_id}><PickCard pick={pk} showPost /></li>)}
+            </ul>
+          ) : <EmptyState>No decisions yet. The next full run makes the first one.</EmptyState>}
+        </section>
+        {timelyOn && <TimelySection runBusy={Boolean(activeRun)} />}
         <Card title="Latest posts" actions={<Link to="/runs" className="text-sm link-quiet">All posts and runs →</Link>}>
           {posts.data?.length ? (
             <ul className="stagger divide-y divide-line" data-testid="latest-posts">
@@ -251,6 +299,7 @@ export default function Control() {
             </ul>
           )}
         </Card>
+        <GuidesSection runBusy={Boolean(activeRun)} />
         <section className="border-t border-line pt-6">
           <h2 className="mb-5 font-serif text-[21px] font-semibold tracking-[-0.01em]">More</h2>
           <div className="space-y-5">
@@ -336,7 +385,7 @@ export default function Control() {
                   {approvedOptions.map((d) => <option key={d.id} value={d.brief_id!}>{d.brief_id} v{d.version} · {(d.title ?? '').slice(0, 50)}</option>)}
                 </select>
               </RunButton>}
-              <RunButton title="Export Markdown" description="Save the final Markdown export of an approved post again (Mem0 and apps/engine/exports). Approving already does this." costKey="export_save" lowCost={lowCost} built={isBuilt('export')}
+              <RunButton title="Export Markdown" description="Save the final Markdown export of an approved post again (the memory and apps/engine/exports). Approving already does this." costKey="export_save" lowCost={lowCost} built={isBuilt('export')}
                 disabledReason={busyReason ?? (exportBrief ? null : 'Pick an approved draft')}
                 onRun={() => ask('export', 'Export Markdown', 'export_save', { brief_id: exportBrief, save: true }, [['Approved draft of', exportBrief]])}>
                 <select aria-label="Approved draft to export" className="input py-1.5" value={exportBrief} onChange={(e) => setExportBrief(e.target.value)}>

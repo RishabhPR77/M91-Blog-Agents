@@ -27,20 +27,20 @@ describe('engine index status', () => {
     expect(screen.queryByTestId('index-out-of-date')).not.toBeInTheDocument()
   })
 
-  it('out of date → banner; Refresh from Mem0 posts /api/index/refresh', async () => {
+  it('out of date → banner; Refresh from memory posts /api/index/refresh', async () => {
     const calls = mockFetch(routes({ ok: true, version: '0.2.0', run_in_progress: false, index: index({ out_of_date: true }) }, {
       'POST /api/index/refresh': { body: { index: index() } }
     }))
     renderApp(<Layout><p>page</p></Layout>)
     expect(await screen.findByTestId('index-out-of-date')).toHaveTextContent('Data may be out of date')
-    await userEvent.click(screen.getByRole('button', { name: /Refresh from Mem0/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Refresh from memory/ }))
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/index/refresh')).toBe(true))
   })
 
   it('Refresh waits while a run is in progress', async () => {
     mockFetch(routes({ ok: true, version: '0.2.0', run_in_progress: true, index: index({ out_of_date: true }) }))
     renderApp(<Layout><p>page</p></Layout>)
-    expect(await screen.findByRole('button', { name: /Refresh from Mem0/ })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: /Refresh from memory/ })).toBeDisabled()
   })
 })
 

@@ -2,8 +2,10 @@
 // progress bar over the steps this run has. When it ends: done (and what to do next), waiting for you, or where it
 // stopped and why.
 import { Link } from 'react-router-dom'
-import { CheckCircle2, Loader2, OctagonX, UserRound } from 'lucide-react'
+import { CheckCircle2, OctagonX, UserRound } from 'lucide-react'
+import { fmtDuration } from '../format'
 import { trackerSteps, type RunView, type StepState } from '../state/runEvents'
+import { useNow } from '../state/useRunView'
 
 export const DOING: Record<string, string> = {
   editor: 'Choosing this week\u2019s post…', guides: 'Reading the published guides…', scout: 'Researching what people ask…',
@@ -31,24 +33,31 @@ export function RunProgress({ view, hidePromo, hideDesigner }: { view: RunView; 
   const running = steps.find((s) => s.status === 'running')
   const failed = steps.find((s) => s.status === 'failed' || s.status === 'cancelled')
   const waiting = view.approvals.findLast((a) => a.kind === 'waiting')
+  const live = view.status === 'running'
+  const now = useNow(live)
+  const elapsed = live && view.startedAt ? now - Date.parse(view.startedAt) : view.ms
   const pct = view.status === 'succeeded' ? 100 : steps.length ? Math.round(((done + (running ? 0.5 : 0)) / steps.length) * 100) : 0
 
-  let icon = <Loader2 size={22} className="animate-spin text-lime-600 dark:text-lime-300" />
+  let icon = <span className="relative flex size-3"><span className="absolute inset-0 animate-ping rounded-full bg-lime-400 opacity-70" /><span className="relative size-3 rounded-full bg-lime-500" /></span>
+  let eyebrow = 'Running now'
   let headline = running ? (DOING[running.name] ?? `${running.name}…`) : 'Starting…'
   let sub = running ? `Step ${Math.min(done + 1, steps.length)} of ${steps.length}` : ''
   let bar = 'bg-lime-400 bar-live'
   if (view.status === 'failed' || view.status === 'cancelled') {
-    icon = <OctagonX size={22} className="text-red-600 dark:text-red-300" />
+    icon = <OctagonX size={18} className="text-red-600" />
+    eyebrow = view.status === 'cancelled' ? 'Stopped' : 'Stopped with a problem'
     headline = view.status === 'cancelled' ? `Stopped by you${failed ? ` at ${NAME[failed.name] ?? failed.name}` : ''}` : `Stopped${failed ? ` at ${NAME[failed.name] ?? failed.name}` : ''}`
     sub = failed?.error ?? view.resultSummary ?? ''
     bar = 'bg-red-500'
   } else if (view.status === 'succeeded' && waiting) {
-    icon = <UserRound size={22} className="text-lime-700 dark:text-lime-300" />
+    icon = <UserRound size={18} className="text-lime-700" />
+    eyebrow = 'Your turn'
     headline = 'Done: the draft waits for your review'
     sub = view.resultSummary ?? ''
     bar = 'bg-hl'
   } else if (view.status === 'succeeded') {
-    icon = <CheckCircle2 size={22} className="text-emerald-600 dark:text-emerald-300" />
+    icon = <CheckCircle2 size={18} className="text-emerald-600" />
+    eyebrow = 'Finished'
     headline = 'Done'
     sub = view.resultSummary ?? ''
     bar = 'bg-ink'
@@ -56,26 +65,18 @@ export function RunProgress({ view, hidePromo, hideDesigner }: { view: RunView; 
 
   return (
     <div data-testid="run-progress">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5">{icon}</span>
+      <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
-          <div className="font-display text-xl font-semibold tracking-[-0.02em]" data-testid="run-now">{headline}</div>
-          {sub && <div className="mt-1 text-sm text-ink-2">{sub}</div>}
+          <p className="eyebrow flex items-center gap-2.5">{icon} {eyebrow}{elapsed != null && <span className="font-medium tracking-normal normal-case tabular-nums">· {fmtDuration(elapsed)}</span>}</p>
+          <div key={headline} className="mt-3 animate-enter font-serif text-[30px] leading-tight font-semibold tracking-[-0.02em] sm:text-[36px]" data-testid="run-now">{headline}</div>
+          {sub && <div className="mt-2 max-w-2xl text-[15px] text-ink-2">{sub}</div>}
         </div>
         {waiting?.briefId && <Link to={`/approvals/${waiting.briefId}`} className="btn-primary shrink-0">Review the post</Link>}
       </div>
-      <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-ink/[0.07]" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Run progress">
-        <div className={`h-full rounded-full transition-[width] duration-700 ease-out ${bar}`} style={{ width: `${pct}%` }} />
+      <div className="mt-6 h-1.5 overflow-hidden rounded-full bg-ink/[0.07]" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Run progress">
+        <div className={`h-full rounded-full transition-[width] duration-700 ease-out ${bar}`} style={{ width: `${Math.max(pct, live ? 4 : 0)}%` }} />
       </div>
-      {steps.length > 0 && (
-        <ol className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs" aria-label="Steps">
-          {steps.map((s) => (
-            <li key={s.name} className={`animate-fade ${s.status === 'done' ? 'text-ink' : s.status === 'running' ? 'font-semibold text-hl-ink' : s.status === 'failed' || s.status === 'cancelled' ? 'text-red-600 dark:text-red-300' : 'text-ink-3'}`}>
-              {s.status === 'done' ? '✓ ' : s.status === 'running' ? '● ' : s.status === 'failed' ? '✕ ' : '○ '}{NAME[s.name] ?? s.name}
-            </li>
-          ))}
-        </ol>
-      )}
+      {steps.length > 0 && <p className="mt-2 text-xs text-ink-3 tabular-nums">{done} of {steps.length} steps done</p>}
     </div>
   )
 }

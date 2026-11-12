@@ -1,6 +1,6 @@
 // Every page: a slim top bar (the main places, a "More" menu, the live run, one engine status button with the
 // details behind it, the theme and settings), the warning banners, and the page itself, which fades in.
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, LogOut, Menu, Settings as SettingsIcon, X } from 'lucide-react'
@@ -112,16 +112,42 @@ function StatusMenu({ online, pending, version, live, dryRun, index, usage }: { 
 
 function NavTab({ item }: { item: NavItem }) {
   return (
-    <NavLink to={item.to} end={item.end}
-      className={({ isActive }) => `group relative flex items-center gap-2 px-3 py-2 text-[14.5px] transition-colors ${isActive ? 'font-medium text-ink' : 'text-ink-2 hover:text-ink'}`}>
-      {({ isActive }) => (<>
-      <span className="relative">
-        <span aria-hidden className={`absolute inset-x-[-3px] bottom-[1px] h-[7px] origin-left rounded-sm bg-hl transition-transform duration-300 ease-[var(--ease-out)] ${isActive ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100 group-hover:opacity-50'}`} />
-        <span className="relative">{item.label}</span>
-      </span>
-      {item.badge ? <span className="min-w-5 rounded-full bg-ink px-1.5 text-center text-[11px] leading-5 font-semibold text-white tabular-nums" aria-label={`${item.badge} waiting`}>{item.badge}</span> : null}
-      </>)}
+    <NavLink to={item.to} end={item.end} data-tab
+      className={({ isActive }) => `relative z-10 flex items-center gap-2 rounded-full px-4 py-1.5 text-sm transition-colors duration-300 ${isActive ? 'font-medium text-white' : 'text-ink-2 hover:text-ink'}`}>
+      {item.label}
+      {item.badge ? <span className="min-w-5 rounded-full bg-hl px-1.5 text-center text-[11px] leading-5 font-semibold text-[#0b0e12] tabular-nums" aria-label={`${item.badge} waiting`}>{item.badge}</span> : null}
     </NavLink>
+  )
+}
+
+/** The main places in one pill; a dark pill slides to the active one. */
+function PillNav({ items, more }: { items: NavItem[]; more: NavItem[] }) {
+  const ref = useRef<HTMLElement>(null)
+  const location = useLocation()
+  const [pill, setPill] = useState<{ left: number; width: number } | null>(null)
+  useLayoutEffect(() => {
+    const place = () => {
+      const el = ref.current?.querySelector<HTMLElement>('[data-tab][aria-current="page"]')
+      setPill(el ? { left: el.offsetLeft, width: el.offsetWidth } : null)
+    }
+    place()
+    window.addEventListener('resize', place)
+    void document.fonts?.ready.then(place).catch(() => {})
+    // A badge appearing (the Review count) or a font loading moves the tabs: follow the bar's size too.
+    const ro = typeof ResizeObserver !== 'undefined' && ref.current ? new ResizeObserver(place) : null
+    if (ro && ref.current) ro.observe(ref.current)
+    return () => {
+      window.removeEventListener('resize', place)
+      ro?.disconnect()
+    }
+  }, [location.pathname, items.length])
+  return (
+    <nav ref={ref} className="relative hidden items-center rounded-full border border-line bg-surface/90 p-1 shadow-[0_1px_2px_rgb(11_14_18/0.04)] md:flex" aria-label="Main">
+      <span aria-hidden className="absolute top-1 bottom-1 left-0 rounded-full bg-ink shadow-[0_6px_16px_-8px_rgb(11_14_18/0.6)] transition-[transform,width,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+        style={pill ? { transform: `translateX(${pill.left}px)`, width: pill.width, opacity: 1 } : { width: 0, opacity: 0 }} />
+      {items.map((item) => <NavTab key={item.to} item={item} />)}
+      <MoreMenu items={more} />
+    </nav>
   )
 }
 
@@ -134,12 +160,12 @@ function MoreMenu({ items }: { items: NavItem[] }) {
   const active = items.some((i) => location.pathname.startsWith(i.to))
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="more-menu"
-        className={`flex items-center gap-1 px-3 py-2 text-[14.5px] transition-colors ${active ? 'font-medium text-ink' : 'text-ink-2 hover:text-ink'}`}>
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="more-menu" data-tab aria-current={active ? 'page' : undefined}
+        className={`relative z-10 flex items-center gap-1 rounded-full px-4 py-1.5 text-sm transition-colors duration-300 ${active ? 'font-medium text-white' : 'text-ink-2 hover:text-ink'}`}>
         More <ChevronDown size={14} className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
       {/* Always in the page (hidden with CSS while closed), so it can animate both ways and its links stay findable. */}
-      <div id="more-menu" className={`absolute left-0 z-40 mt-2 w-72 origin-top-left rounded-2xl border border-line bg-surface p-1.5 shadow-(--shadow-float) transition-[opacity,transform,visibility] duration-200 ease-out ${open ? 'visible translate-y-0 scale-100 opacity-100' : 'invisible -translate-y-1 scale-[0.98] opacity-0'}`}>
+      <div id="more-menu" className={`absolute right-0 z-40 mt-3 w-72 origin-top-left rounded-2xl border border-line bg-surface p-1.5 shadow-(--shadow-float) transition-[opacity,transform,visibility] duration-200 ease-out ${open ? 'visible translate-y-0 scale-100 opacity-100' : 'invisible -translate-y-1 scale-[0.98] opacity-0'}`}>
         {items.map((item) => (
           <NavLink key={item.to} to={item.to} tabIndex={open ? 0 : -1} className={({ isActive }) => `block rounded-lg px-3 py-2 transition-colors ${isActive ? 'bg-ink/[0.06]' : 'hover:bg-ink/[0.04]'}`}>
             <span className="block text-sm font-medium text-ink">{item.label}</span>
@@ -168,10 +194,11 @@ export function Layout({ children }: { children: ReactNode }) {
   const primary: NavItem[] = [
     { to: '/', label: 'Home', end: true },
     { to: '/approvals', label: 'Review', badge: waiting },
-    // The weekly editor: what the next run writes, its decisions, this week's news and the live guides.
-    { to: '/week', label: 'This week' },
-    { to: '/runs', label: 'Posts & runs', end: true }
+    { to: '/runs', label: 'Posts & runs', end: true },
+    // The viaSocket memory: every record the engine keeps, why one may not be useful, and deleting what you do not need.
+    { to: '/memory', label: 'Memory' }
   ]
+  // This week (the editor's decisions, the news, the live guides) is on Home; its own page stays at /week.
   const more: NavItem[] = [
     { to: '/content', label: 'Content', hint: 'Guides, drafts and briefs' },
     // Phase 11: the final Markdown exports; the blog's own page only while the blog is the publish target.
@@ -179,8 +206,7 @@ export function Layout({ children }: { children: ReactNode }) {
     ...(flagsOf(settings.data).blogOn ? [{ to: '/posts', label: 'Blog', hint: 'Posts on the blog' }] : []),
     { to: '/pinned', label: 'Pinned topics', hint: 'What the editor writes next' },
     { to: '/lessons', label: 'Lessons', hint: 'What the agents learned' },
-    // What the memory holds, why a record may not be useful, and clean-up.
-    { to: '/memory', label: 'Memory', hint: 'What the engine remembers' }
+    { to: '/week', label: 'This week', hint: 'The editor’s decisions, in full' }
   ]
 
   async function logout() {
@@ -208,10 +234,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <Logo />
             <span className="hidden font-serif text-[17px] font-semibold tracking-[-0.01em] sm:inline">Blog Engine</span>
           </NavLink>
-          <nav className="hidden items-center md:flex" aria-label="Main">
-            {primary.map((item) => <NavTab key={item.to} item={item} />)}
-            <MoreMenu items={more} />
-          </nav>
+          <PillNav items={primary} more={more} />
           <div className="ml-auto flex items-center gap-1.5">
             {activeRun && (
               <NavLink to={`/runs/${activeRun.run_id}`} className="flex items-center gap-2 rounded-full py-1.5 pr-3 pl-2.5 text-[13px] font-semibold text-red-700 transition-colors hover:bg-red-500/10">

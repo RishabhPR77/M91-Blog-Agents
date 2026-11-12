@@ -792,6 +792,23 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       return send(res, failed.length && !deleted.length ? 502 : 200, { deleted, failed, mem0_requests: mem0Requests(currentMem0Counts()) - before })
     }
 
+    // Delete runs: each run's record(s) and its per-call logs (run_log records are stored under the run id). A run in
+    // progress cannot be deleted; nothing else about the post (brief, drafts, reviews, export) is touched.
+    if (path === '/api/runs' && method === 'DELETE') {
+      const body = await readJson(req)
+      const runIds = body.run_ids
+      if (!Array.isArray(runIds) || !runIds.length || runIds.length > 50 || !runIds.every((x) => typeof x === 'string' && RUN_ID_RE.test(x))) throw new ApiError(400, 'bad_params', 'run_ids must be a list of 1 to 50 run ids')
+      if (manager?.activeRunId?.() && runIds.includes(manager.activeRunId())) throw new ApiError(409, 'run_in_progress', 'that run is still running: stop it or wait for it to finish')
+      if (store.dryRun) throw new ApiError(409, 'dry_run', 'DRY_RUN is on: memory deletes are skipped, so nothing would be deleted')
+      const wanted = new Set(runIds)
+      const all = [...(await store.getRecords({ type: 'run' })), ...(await store.getRecords({ type: 'run_log' }))]
+      const ids = all.filter((r) => (r.type === 'run' || r.type === 'run_log') && (wanted.has(r.briefId) || wanted.has(r.payload?.run_id))).map((r) => r.id)
+      const before = mem0Requests(currentMem0Counts())
+      const { deleted, failed } = ids.length ? await deleteIds(store, ids) : { deleted: [], failed: [] }
+      log.info('runs delete', { runs: runIds.length, deleted: deleted.length, failed: failed.length })
+      return send(res, failed.length && !deleted.length ? 502 : 200, { runs: runIds.length, deleted, failed, mem0_requests: mem0Requests(currentMem0Counts()) - before })
+    }
+
     // Refresh from Mem0 (Phase 9 A4): reload every type the index holds (one read per type).
     if (path === '/api/index/refresh' && method === 'POST') {
       if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: refresh when it has finished')
