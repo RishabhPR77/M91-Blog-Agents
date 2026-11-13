@@ -792,6 +792,35 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       return send(res, failed.length && !deleted.length ? 502 : 200, { deleted, failed, mem0_requests: mem0Requests(currentMem0Counts()) - before })
     }
 
+    // Delete a post that is not live (it failed, stopped or was never finished): everything it stored, i.e. its brief,
+    // every draft version, the reviews, research packs, guide, the editor's pick, its runs and their per-call logs.
+    // An approved or published post is refused (its export and knowledge are what later posts build on).
+    if (seg[1] === 'briefs' && seg[2] && seg.length === 3 && method === 'DELETE') {
+      const briefId = seg[2]
+      if (!BRIEF_ID_RE.test(briefId)) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')
+      if (store.dryRun) throw new ApiError(409, 'dry_run', 'DRY_RUN is on: memory deletes are skipped, so nothing would be deleted')
+      const activeId = manager?.activeRunId?.()
+      if (activeId && (await findRun(activeId))?.payload?.brief_id === briefId) throw new ApiError(409, 'run_in_progress', 'a run is still working on this post: stop it or wait for it to finish')
+      const TYPES = ['brief', 'draft', 'review', 'source_pack', 'guide_doc', 'block_doc', 'promo_pack', 'weekly_pick', 'markdown_export', 'run', 'run_log']
+      const all = []
+      for (const type of TYPES) all.push(...(await store.getRecords({ type })))
+      const ofPost = (r) => r.briefId === briefId || r.payload?.brief_id === briefId
+      const mine = all.filter((r) => r.type !== 'run' && r.type !== 'run_log' && ofPost(r))
+      const LIVE = new Set(['approved', 'published'])
+      if (mine.some((r) => r.type === 'markdown_export' || ((r.type === 'draft' || r.type === 'brief') && (LIVE.has(r.status) || LIVE.has(r.payload?.status))))) {
+        throw new ApiError(409, 'live_post', 'this post was approved or published: it is kept (delete its runs from All runs instead)')
+      }
+      const runs = all.filter((r) => r.type === 'run' && r.payload?.brief_id === briefId)
+      const runIds = new Set(runs.map((r) => r.payload?.run_id ?? r.briefId))
+      const logs = all.filter((r) => r.type === 'run_log' && runIds.has(r.briefId))
+      const ids = [...new Set([...mine, ...runs, ...logs].map((r) => r.id))]
+      if (!ids.length) return fail(res, 404, 'not_found', `nothing stored for ${briefId}`)
+      const before = mem0Requests(currentMem0Counts())
+      const { deleted, failed } = await deleteIds(store, ids)
+      log.info('post delete', { brief: briefId, deleted: deleted.length, failed: failed.length })
+      return send(res, failed.length && !deleted.length ? 502 : 200, { brief_id: briefId, deleted, failed, runs: runIds.size, mem0_requests: mem0Requests(currentMem0Counts()) - before })
+    }
+
     // Delete runs: each run's record(s) and its per-call logs (run_log records are stored under the run id). A run in
     // progress cannot be deleted; nothing else about the post (brief, drafts, reviews, export) is touched.
     if (path === '/api/runs' && method === 'DELETE') {

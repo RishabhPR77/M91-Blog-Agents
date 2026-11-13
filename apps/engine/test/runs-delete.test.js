@@ -52,3 +52,39 @@ test('at start-up, a run left "running" by a restart is closed as failed, with i
   assert.deepEqual(r.payload.steps.map((s) => s.status), ['succeeded', 'failed'])
   assert.deepEqual(await closeInterruptedRuns(store), [], 'nothing left to close')
 })
+
+test('deleting a failed post removes everything it stored; an approved post is refused', async () => {
+  const restore = setSink(() => {})
+  const store = memoryStore()
+  const F = '261106-0113-36P7'
+  const L = '261029-1515-RATA'
+  const R = 'R-261106-0113-2DAY'
+  await store.createRecord({ type: 'brief', briefId: F, payload: { brief_id: F }, status: 'failed_review' })
+  for (const v of [1, 2, 3]) await store.createRecord({ type: 'draft', briefId: F, payload: { brief_id: F, version: v, post_markdown: '# x' }, status: 'failed_review', version: v })
+  await store.createRecord({ type: 'review', briefId: F, payload: { brief_id: F, total: 78 }, status: 'fail' })
+  await store.createRecord({ type: 'weekly_pick', briefId: F, payload: { brief_id: F }, status: 'written' })
+  await store.createRecord({ type: 'run', briefId: R, payload: { run_id: R, brief_id: F, status: 'failed' }, status: 'failed' })
+  await store.createRecord({ type: 'run_log', briefId: R, payload: { step: 'writer', error: 'x' }, status: 'error' })
+  await store.createRecord({ type: 'brief', briefId: L, payload: { brief_id: L }, status: 'approved' })
+  await store.createRecord({ type: 'draft', briefId: L, payload: { brief_id: L, version: 3 }, status: 'approved', version: 3 })
+  const config = fakeConfig()
+  const manager = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => stubAgents })
+  const server = createServer({ triggerKey: 'fake-trigger-key-0123456789', manager, store, config })
+  await new Promise((ok) => server.listen(0, '127.0.0.1', ok))
+  const base = `http://127.0.0.1:${server.address().port}`
+  try {
+    const res = await fetch(`${base}/api/briefs/${F}`, { method: 'DELETE' })
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    assert.equal(body.deleted.length, 8, 'brief, 3 drafts, review, pick, run, run log')
+    const left = async (type) => (await store.getRecords({ type })).map((r) => r.briefId)
+    assert.deepEqual(await left('brief'), [L])
+    assert.deepEqual(await left('draft'), [L])
+    assert.deepEqual(await left('run'), [])
+    assert.equal((await fetch(`${base}/api/briefs/${L}`, { method: 'DELETE' })).status, 409, 'an approved post is kept')
+    assert.equal((await fetch(`${base}/api/briefs/not-a-brief`, { method: 'DELETE' })).status, 400)
+  } finally {
+    await new Promise((ok) => server.close(ok))
+    restore()
+  }
+})

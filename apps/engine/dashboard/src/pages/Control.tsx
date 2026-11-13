@@ -52,7 +52,7 @@ const STRIP_NAME: Record<string, string> = { editor: 'Editor', scout: 'Scout', s
 const FULL_STEPS = ['editor', 'scout', 'strategist', 'writer', 'checks', 'reviewer']
 
 /** The run as a row of nodes on a line: done ones ink, the running one pulsing lime, the rest still to come. */
-function RunStrip({ run }: { run: RunSummary }) {
+function RunStrip({ run, models }: { run: RunSummary; models?: Record<string, { service?: string; model?: string } | undefined> }) {
   const seen = new Map<string, string>()
   for (const st of run.steps ?? []) if (!st.name.includes('.')) seen.set(st.name, st.status)
   const names = [...new Set([...(run.mode === 'full' ? FULL_STEPS : []), ...seen.keys()])].filter((n) => n !== 'promo' || seen.has(n))
@@ -71,6 +71,7 @@ function RunStrip({ run }: { run: RunSummary }) {
               {done ? <Check size={12} strokeWidth={3} /> : running ? <span className="size-2 rounded-full bg-ink" /> : failed ? <span className="text-[10px] font-bold">!</span> : null}
             </span>
             <span className={`mt-2 truncate px-1 text-[11px] ${running ? 'font-semibold text-ink' : done ? 'text-ink-2' : 'text-ink-3'}`}>{STRIP_NAME[name] ?? name}</span>
+            {models?.[name]?.model && <span className="max-w-full truncate px-1 font-mono text-[10px] text-ink-3" title={`${models[name]?.service ?? ''} ${models[name]?.model ?? ''}`.trim()}>{models[name]?.model}</span>}
           </li>
         )
       })}
@@ -78,7 +79,7 @@ function RunStrip({ run }: { run: RunSummary }) {
   )
 }
 
-function CurrentRun({ run }: { run: RunSummary }) {
+function CurrentRun({ run, models }: { run: RunSummary; models?: Record<string, { service?: string; model?: string } | undefined> }) {
   const now = useNow(true)
   const qc = useQueryClient()
   const [confirm, setConfirm] = useState(false)
@@ -100,7 +101,7 @@ function CurrentRun({ run }: { run: RunSummary }) {
   return (
     <div>
       <div className="mb-5 flex items-center justify-between gap-3"><p className="eyebrow">Current run</p><Link to={`/runs/${run.run_id}`} className="text-sm link-quiet">Watch live →</Link></div>
-      <RunStrip run={run} />
+      <RunStrip run={run} models={models} />
       <p className="mt-6 flex items-center gap-2.5 font-serif text-[22px] font-semibold tracking-[-0.01em]" data-testid="current-doing">
         <span className="relative flex size-2.5"><span className="absolute inset-0 animate-ping rounded-full bg-lime-400 opacity-70" /><span className="relative size-2.5 rounded-full bg-lime-500" /></span>
         <span key={current} className="animate-enter">{DOING[current] ?? (current === '—' ? 'Starting…' : `${current}…`)}</span>
@@ -242,7 +243,7 @@ export default function Control() {
 
         <div className="stagger grid gap-6 lg:grid-cols-3">
           <section className="tile lg:col-span-2 lg:row-span-2" aria-label="Next post">
-            {activeRun && <div className="mb-8 border-b border-line pb-8"><CurrentRun run={activeRun} /></div>}
+            {activeRun && <div className="mb-8 border-b border-line pb-8"><CurrentRun run={activeRun} models={models} /></div>}
             <p className="eyebrow mb-3">{activeRun ? 'After this run' : 'Next post'}</p>
             <RunButton variant="hero" title="Write the next post" description={`The AI researches, plans, writes and reviews it. ${autoApprove ? (flags.target === 'slack' ? 'Then it is approved and sent to Slack with a link to download the .md (if no version passes, the best one goes).' : flags.target === 'email' ? 'Then it is approved and emailed to you with the .md attached (if no version passes, the best one goes).' : 'Then it is approved and published.') : 'It waits for your review.'}`}
               models={[['Editor', models?.editor], ['Scout', models?.scout], ['Strategist', models?.strategist], ['Writer', models?.writer], ...(flags.experienceOn ? [['Designer', models?.designer] as ModelRow] : []), ['Reviewer', models?.reviewer]]} costKey={flags.experienceOn ? 'full' : 'full_plain'} lowCost={lowCost} built={isBuilt('full')} disabledReason={busyReason}

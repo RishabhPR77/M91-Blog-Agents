@@ -189,3 +189,36 @@ describe('PipelineTracker (Phase 10)', () => {
     expect(screen.getByTestId('step-designer')).toHaveTextContent('Experience Designer')
   })
 })
+
+describe('the model of each agent on the timeline', () => {
+  it('shows the model a step used, else the one set for that agent; steps without AI say so', () => {
+    const view = play(fixture.full_run as EngineEvent[])
+    render(<PipelineTracker view={{ ...view, steps: { ...view.steps, writer: { ...view.steps.writer, models: [] } } }} models={{ writer: { service: 'anthropic', model: 'claude-sonnet-5-5' }, reviewer: { service: 'openai', model: 'gpt-6.1-sol' } }} />)
+    expect(screen.getByTestId('model-writer')).toHaveTextContent('claude-sonnet-5-5 · anthropic')
+    expect(screen.getByTestId('step-checks')).toHaveTextContent('no AI')
+    const used = view.steps.scout?.models ?? []
+    if (used.length) expect(screen.getByTestId('model-scout')).toHaveTextContent(used[0])
+  })
+})
+
+describe('Deleting a stopped post', () => {
+  it('a stopped post has Delete (and "Delete all stopped posts"); a published one does not; confirming sends DELETE /api/briefs/:id', async () => {
+    const stage = (id: string, label: string, state: string) => ({ id, label, state, detail: '', run_id: null, at: null })
+    const FAILED = '261106-0113-36P7'
+    const calls = mockFetch({
+      'GET /api/journeys?limit=30': { body: { posts: [
+        { brief_id: FAILED, title: 'Prevent Double-Spend', status: 'failed_review', runs: 1, active_run_id: null, updated_at: null, stages: [stage('topic', 'Topic', 'done'), stage('research', 'Research', 'done'), stage('plan', 'Plan', 'failed'), stage('draft', 'Draft', 'todo'), stage('export', 'Export', 'todo'), stage('published', 'Published', 'todo')] },
+        { brief_id: '261029-1515-RATA', title: 'Shared Alert Responsibility', status: 'approved', runs: 4, active_run_id: null, updated_at: null, stages: [stage('topic', 'Topic', 'done'), stage('export', 'Export', 'done'), stage('published', 'Published', 'done')] }
+      ] } },
+      'GET /api/runs?limit=20': { body: { runs: [] } },
+      [`DELETE /api/briefs/${FAILED}`]: { body: { brief_id: FAILED, deleted: ['a', 'b', 'c'], failed: [], runs: 1 } }
+    })
+    renderApp(<Runs />)
+    const failed = await screen.findByTestId(`post-${FAILED}`)
+    expect(within(screen.getByTestId('post-261029-1515-RATA')).queryByRole('button', { name: /Delete/ })).toBeNull()
+    expect(screen.getByRole('button', { name: /Delete all stopped posts/ })).toBeInTheDocument()
+    await userEvent.click(within(failed).getByRole('button', { name: 'Delete Prevent Double-Spend' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === `/api/briefs/${FAILED}`)).toBe(true))
+  })
+})

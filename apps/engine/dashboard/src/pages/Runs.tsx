@@ -21,15 +21,50 @@ export const aiCallsOf = (r: RunSummary) => (r.steps ?? []).reduce((n, s) => n +
 
 const TONE = { green: 'pill-green', blue: 'pill-blue', violet: 'pill-blue', red: 'pill-red', gray: 'pill-gray' } as const
 
+/** A post that was approved or published is kept; a run still working on it blocks the delete. */
+const deletable = (p: { stages: { id: string; state: string }[]; active_run_id?: string | null }) =>
+  !p.active_run_id && !p.stages.some((s) => (s.id === 'export' || s.id === 'published') && s.state === 'done')
+
 function ByPost() {
   const posts = usePostJourneys(30)
   const runs = useRuns(20)
+  const qc = useQueryClient()
+  const [confirm, setConfirm] = useState<{ ids: string[]; title: string } | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const other = (runs.data ?? []).filter((r) => !r.brief_id).slice(0, 8)
+  const stopped = (posts.data ?? []).filter((p) => deletable(p) && journeyLine(p.stages).tone === 'red')
+
+  async function remove(ids: string[]) {
+    setDeleting(true)
+    let records = 0
+    const problems: string[] = []
+    for (const id of ids) {
+      try {
+        const out = await api<{ deleted: string[] }>(`/api/briefs/${id}`, { method: 'DELETE' })
+        records += out.deleted.length
+      } catch (e) {
+        problems.push(`${id}: ${errorMessage(e)}`)
+      }
+    }
+    toast(problems.length ? 'error' : 'success', problems.length ? `Deleted ${ids.length - problems.length} of ${ids.length}. ${problems[0]}` : `Deleted ${ids.length} post${ids.length === 1 ? '' : 's'} (${records} records)`)
+    void qc.invalidateQueries({ queryKey: ['post-journeys'] })
+    void qc.invalidateQueries({ queryKey: ['runs'] })
+    void qc.invalidateQueries({ queryKey: ['weekly'] })
+    setDeleting(false)
+    setConfirm(null)
+  }
+
   if (posts.isPending) return <LoadingRows rows={4} label="Loading posts" />
   return (
     <div className="space-y-4">
+      {stopped.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-red-50/70 px-5 py-3 text-sm text-red-900">
+          <span>{stopped.length} post{stopped.length === 1 ? '' : 's'} stopped without finishing. They keep their drafts, reviews and logs until you delete them.</span>
+          <button type="button" className="btn-danger py-1.5" onClick={() => setConfirm({ ids: stopped.map((p) => p.brief_id), title: `Delete ${stopped.length} stopped post${stopped.length === 1 ? '' : 's'}?` })}><Trash2 size={14} /> Delete all stopped posts</button>
+        </div>
+      )}
       {!posts.data?.length ? (
-        <EmptyState>No posts yet. Click “Write the next post” on Control.</EmptyState>
+        <EmptyState>No posts yet. Click “Write the next post” on Home.</EmptyState>
       ) : (
         <ul className="space-y-3" aria-label="Posts">
           {posts.data.map((p) => {
@@ -38,15 +73,21 @@ function ByPost() {
               <li key={p.brief_id} data-testid={`post-${p.brief_id}`}>
                 <Card className="transition-shadow hover:shadow-md">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <Link to={`/approvals/${p.brief_id}`} className="min-w-0 flex-1 truncate font-semibold text-slate-900 hover:underline dark:text-slate-100">{p.title || 'A post in the making'}</Link>
+                    <Link to={`/approvals/${p.brief_id}`} className="min-w-0 flex-1 truncate font-semibold text-ink hover:underline">{p.title || 'A post in the making'}</Link>
                     <span className={`pill ${TONE[line.tone]}`}>{line.text}</span>
                   </div>
                   <JourneyBar stages={p.stages} />
-                  <div className="mt-2 flex flex-wrap gap-x-3 text-xs text-slate-500">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 text-xs text-ink-3">
                     <span>{p.runs} run{p.runs === 1 ? '' : 's'}</span>
                     {p.updated_at && <span>last run {fmtAgo(p.updated_at)}</span>}
                     {p.active_run_id && <Link to={`/runs/${p.active_run_id}`} className="link">watch the run</Link>}
                     <span className="font-mono">{p.brief_id}</span>
+                    {deletable(p) && (
+                      <button type="button" className="ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs text-red-700 transition-colors hover:bg-red-50" aria-label={`Delete ${p.title || p.brief_id}`}
+                        onClick={() => setConfirm({ ids: [p.brief_id], title: `Delete “${p.title || p.brief_id}”?` })}>
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    )}
                   </div>
                 </Card>
               </li>
@@ -56,18 +97,22 @@ function ByPost() {
       )}
       {other.length > 0 && (
         <Card title="Other runs (not about one post)">
-          <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+          <ul className="divide-y divide-line text-sm">
             {other.map((r) => (
               <li key={r.run_id} className="flex flex-wrap items-center gap-2 py-2">
                 <Link to={`/runs/${r.run_id}`} className="font-medium hover:underline">{modeLabel(r.mode)}</Link>
                 <StatusBadge status={r.status} />
-                <span className="text-xs text-slate-500">{fmtDateTime(r.started_at)}</span>
-                <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-300">{r.result_summary}</span>
+                <span className="text-xs text-ink-3">{fmtDateTime(r.started_at)}</span>
+                <span className="min-w-0 flex-1 truncate text-ink-2">{r.result_summary}</span>
               </li>
             ))}
           </ul>
+          <p className="mt-3 text-xs text-ink-3">To delete these, open “All runs”, tick them and press Delete.</p>
         </Card>
       )}
+      <ConfirmDialog open={Boolean(confirm)} title={confirm?.title ?? ''} expectedCalls="0" expectedMem0={`about ${(confirm?.ids.length ?? 0) * 12} (reads, then one per deleted record)`} confirmLabel="Delete" danger busy={deleting} onConfirm={() => (confirm ? remove(confirm.ids) : undefined)} onCancel={() => setConfirm(null)}>
+        <p>Everything these posts stored is deleted from the memory: the brief, every draft version, the reviews, the research, the editor’s pick, the runs and their logs. Approved or published posts are never deleted here. This cannot be undone.</p>
+      </ConfirmDialog>
     </div>
   )
 }

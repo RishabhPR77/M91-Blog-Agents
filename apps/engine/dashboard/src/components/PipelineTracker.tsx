@@ -5,6 +5,7 @@
 // step. Promo and the Experience Designer are hidden while they are off, unless a run used them.
 import { Ban, Check, Minus, X } from 'lucide-react'
 import { fmtDuration } from '../format'
+import type { AgentModel } from '../api/types'
 import { trackerSteps, type RunView, type StepState, type StepStatus } from '../state/runEvents'
 import { useNow } from '../state/useRunView'
 import { DOING } from './RunProgress'
@@ -55,7 +56,23 @@ function Elapsed({ since }: { since: string | null }) {
   return <span className="font-medium text-hl-ink tabular-nums">{fmtDuration(now - Date.parse(since))}</span>
 }
 
-export function PipelineTracker({ view, hidePromo = false, hideDesigner = false }: { view: RunView; hidePromo?: boolean; hideDesigner?: boolean }) {
+// Steps with no AI of their own.
+const NO_AI = new Set(['checks', 'export', 'publisher'])
+
+/** The model a step used (from its AI calls), else the one the engine has set for that agent ("planned"). */
+function ModelTag({ st, planned }: { st: StepState; planned?: AgentModel }) {
+  if (NO_AI.has(st.name)) return <span className="rounded-md bg-ink/[0.04] px-1.5 py-0.5 text-[11px] text-ink-3">no AI</span>
+  const used = st.models.join(', ')
+  const name = used || planned?.model
+  if (!name) return null
+  return (
+    <span className="rounded-md bg-ink/[0.05] px-1.5 py-0.5 font-mono text-[11px] text-ink-2" title={used ? `Model used: ${used}` : `Model set for this agent: ${planned?.service ?? ''} ${planned?.model ?? ''}`.trim()} data-testid={`model-${st.name}`}>
+      {name}{!used && planned?.service ? <span className="text-ink-3"> · {planned.service}</span> : null}
+    </span>
+  )
+}
+
+export function PipelineTracker({ view, hidePromo = false, hideDesigner = false, models }: { view: RunView; hidePromo?: boolean; hideDesigner?: boolean; models?: Record<string, AgentModel> }) {
   // The promo pack is off: its step is hidden unless this run really made one (AI calls). Phase 11: the same for
   // the Experience Designer when EXPERIENCE_ENABLED=false, and the export step until a run has one.
   const steps = trackerSteps(view).filter((st) => !(hidePromo && st.name === 'promo' && !st.aiCalls) && !(hideDesigner && st.name === 'designer' && !st.aiCalls) && !((st.name === 'export' || st.name === 'editor') && (st.status === 'waiting' || st.status === 'skipped')))
@@ -84,6 +101,7 @@ export function PipelineTracker({ view, hidePromo = false, hideDesigner = false 
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
                 <span className="text-[15px] font-semibold tracking-[-0.01em]">{LABEL[st.name] ?? st.name}</span>
                 <span className={`text-xs ${running ? 'text-hl-ink' : st.status === 'failed' ? 'text-red-700' : 'text-ink-3'}`}>{placeholder ? 'not built yet' : WORD[st.status]}</span>
+                <ModelTag st={st} planned={models?.[st.name]} />
                 <span className="ml-auto text-xs text-ink-3">{running ? <Elapsed since={st.startedAt} /> : <Stats st={st} />}</span>
               </div>
               <p className="mt-0.5 text-sm text-ink-2">
@@ -95,7 +113,6 @@ export function PipelineTracker({ view, hidePromo = false, hideDesigner = false 
                 </div>
               )}
               {running && (st.aiCalls > 0 || st.retries > 0) && <p className="mt-1.5 text-xs text-ink-3"><Stats st={st} /></p>}
-              {st.models.length > 0 && !quiet && <p className="mt-1 truncate text-xs text-ink-3" title={st.models.join(', ')}>{st.models.join(', ')}</p>}
               {st.error && <p className="mt-1.5 line-clamp-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800" title={st.error}>{st.error}</p>}
               {st.name === 'reviewer' && rounds.length > 0 && (
                 <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Review rounds">

@@ -109,7 +109,7 @@ export default function RunLive() {
           <RunProgress view={view} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} />
           <section aria-label="Steps of this run" className="animate-enter [animation-delay:120ms]">
             <p className="eyebrow mb-6">Steps of this run</p>
-            <PipelineTracker view={view} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} />
+            <PipelineTracker view={view} models={settings.data?.models} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} />
           </section>
           {publisherProgress(view.outputs).size > 0 && <Card title="Publisher"><PublisherSteps outputs={view.outputs} stepStatus={view.steps.publisher?.status ?? null} /></Card>}
         </div>
