@@ -12,7 +12,7 @@ import { latestLessons } from '../lessons.js'
 import { DEFAULT_CTA_TEXT } from '../strategist/prompts.js'
 import { writer_draft, draftSchemaErrors } from './schemas.js'
 import { buildWriterPrompt, repairTail, truncatedProblem } from './prompts.js'
-import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, citedDocsSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage } from './inputs.js'
+import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, citedDocsSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage, loadFacts, factSheet } from './inputs.js'
 import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets, SNIPPET_LIST_MAX_LINES } from './snippets.js'
 import { needsStartHere, starterPost, withStartHere } from '../timely/starthere.js'
 import { stripDocsLinks, isDocsFix } from '../util/m91links.js'
@@ -215,6 +215,8 @@ export async function runWriter(params = {}, deps = {}) {
   const { snippets, text: tokenisedSource } = extractSnippets(snippetSource)
   const allowed = allowedUrlSet(brief, { sourcePack: params.sourcePack, ctaUrl: config.m91.ctaUrl, snippets, config })
   const tone = await toneSection(store, brief, config)
+  // The fact sheet the Reviewer checks every M91 claim against: the Writer sees the same one (with its "cannot" list).
+  const facts = params.facts ?? (await loadFacts(store))
   const lessons = await latestLessons(store, config.strategist.lessonsLimit)
   const drafts = await draftsOf(store, params.briefId)
   // The newest draft written before this one (an older brief version counts as earlier).
@@ -223,6 +225,7 @@ export async function runWriter(params = {}, deps = {}) {
     (inMemoryPrev ? { version: inMemoryPrev.version, metadata: { brief_version: inMemoryPrev.brief_version ?? 1 }, payload: inMemoryPrev } : null)
 
   const sections = {
+    m91Facts: facts ? factSheet(facts) : null,
     tone: tone.text,
     lessons: lessons.length ? lessons.map((l) => `- ${l}`).join('\n') : null,
     allowedUrls: allowed.list.map((u) => `- ${u}`).join('\n'),

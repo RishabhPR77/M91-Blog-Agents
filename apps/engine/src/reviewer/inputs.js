@@ -2,7 +2,7 @@
 
 import { urlKey } from '../checks/content.js'
 import { MESSAGE_MAX } from '../scout/prompts.js'
-import { allowedUrlSet, supportedSources, toneSection } from '../writer/inputs.js'
+import { allowedUrlSet, supportedSources, toneSection, factSheet } from '../writer/inputs.js'
 import { draftVersion, draftBriefVersion, isEarlierDraft } from '../writer/save.js'
 import { guideForReviewer } from '../experience/review.js'
 import { docsLinkRule, M91_SITE_URL } from '../util/m91links.js'
@@ -22,11 +22,8 @@ export async function loadDraft(store, briefId, { version, briefVersion } = {}) 
   return drafts.find((d) => (version == null || draftVersion(d) === Number(version)) && (briefVersion == null || draftBriefVersion(d) === Number(briefVersion))) ?? null
 }
 
-/** The current m91_facts record's payload (newest date first), or null. */
-export async function loadFacts(store) {
-  const recs = (await store.getRecords({ type: 'm91_facts', status: 'current' })).sort((a, b) => String(b.date).localeCompare(String(a.date)))
-  return recs[0]?.payload ?? null
-}
+/** The current m91_facts record's payload: the same one the Writer gets. */
+export { loadFacts } from '../writer/inputs.js'
 
 /** The newest review written for an earlier draft of this brief (B3 PREVIOUS REVIEW), or null. */
 export async function loadPreviousReview(store, briefId, current) {
@@ -86,7 +83,7 @@ export async function buildReviewerSections({ store, config, draft, brief, facts
     guide: guide ? JSON.stringify(guideForReviewer(guide)) : null,
     brief: JSON.stringify(brief),
     checks: JSON.stringify(results),
-    facts: facts ? JSON.stringify({ can: facts.can ?? [], cannot: facts.cannot ?? [], integrations: facts.integrations ?? [] }) : '(no current m91_facts record: treat every M91 claim as unverified)',
+    facts: facts ? factSheet(facts) : '(no current m91_facts record: treat every M91 claim as unverified)',
     allowedUrls: allowed.list.join('\n'),
     story: brief.story?.use ? JSON.stringify(story ?? brief.story) : null,
     tutorial: isTutorial ? JSON.stringify({ tutorial: brief.tutorial, snippets: snippets.map(({ id, language, source_url, code }) => ({ id, language, source_url, code })) }) : null,

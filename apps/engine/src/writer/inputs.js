@@ -56,6 +56,15 @@ export function supportedSources(sourcePack) {
 }
 
 /** TONE section text. */
+/** The current m91_facts record's payload (newest date first), or null. The Writer and the Reviewer use the same one. */
+export async function loadFacts(store) {
+  const recs = (await store.getRecords({ type: 'm91_facts', status: 'current' })).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+  return recs[0]?.payload ?? null
+}
+
+/** The M91 FACTS section: what M91 can do, cannot do, and works with. The Reviewer fails any M91 claim not in it. */
+export const factSheet = (facts) => JSON.stringify({ can: facts.can ?? [], cannot: facts.cannot ?? [], integrations: facts.integrations ?? [] })
+
 export async function toneSection(store, brief, config) {
   const guidance = brief.tone?.guidance ?? []
   if (brief.tone?.source === 'style_notes' && brief.tone?.profile_id) {
@@ -178,7 +187,7 @@ export const fullBriefForWriter = (brief) => Object.fromEntries(Object.entries(b
  */
 export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
   const order = [
-    ['brief', 'BRIEF'], ['briefRules', 'BRIEF RULES'], ['tone', 'TONE'], ['lessons', 'LESSONS'], ['allowedUrls', 'ALLOWED URLS'],
+    ['brief', 'BRIEF'], ['briefRules', 'BRIEF RULES'], ['m91Facts', 'M91 FACTS'], ['tone', 'TONE'], ['lessons', 'LESSONS'], ['allowedUrls', 'ALLOWED URLS'],
     ['internalLinks', 'INTERNAL LINKS'], ['interactiveIdeas', 'INTERACTIVE IDEAS'], ['tutorialText', 'TUTORIAL SOURCE TEXT'], ['snippets', 'CODE SNIPPETS'],
     ['previousContext', 'PREVIOUS CONTEXT'], ['previousDraft', 'PREVIOUS DRAFT'], ['feedback', 'FEEDBACK'],
     ['excerpts', 'QUOTED EXCERPTS'], ['sourcePack', 'SOURCE PACK']

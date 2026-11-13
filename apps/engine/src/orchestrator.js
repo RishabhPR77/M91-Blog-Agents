@@ -63,7 +63,9 @@ export function defaultAgents({ config, store, notifier, agentDeps, scoutDeps = 
       return { model: config.scout.model, output }
     },
     async writer(ctx) {
-      const output = await runWriter({ mode: ctx.writerMode ?? 'new', runId: ctx.runId, briefId: ctx.briefId, briefVersion: ctx.briefVersion, feedback: ctx.writerMode === 'revise' ? ctx.routeFeedback ?? ctx.review?.feedback ?? [] : [], sourcePack: ctx.writerMode === 'revise' ? ctx.sourcePack : null, brief: ctx.brief, previousDraft: inMemoryDraft(ctx) }, deps)
+      // DRY_RUN saves nothing: the Scout's facts are handed over, as for the Reviewer.
+      const facts = (ctx.leads?.dry_run_records?.m91_facts ?? []).find((r) => r.status === 'current')?.payload
+      const output = await runWriter({ mode: ctx.writerMode ?? 'new', runId: ctx.runId, briefId: ctx.briefId, briefVersion: ctx.briefVersion, feedback: ctx.writerMode === 'revise' ? ctx.routeFeedback ?? ctx.review?.feedback ?? [] : [], sourcePack: ctx.writerMode === 'revise' ? ctx.sourcePack : null, brief: ctx.brief, previousDraft: inMemoryDraft(ctx), facts }, deps)
       return { model: output.model_used ?? config.writer.model, output }
     },
     async reviewer(ctx) {

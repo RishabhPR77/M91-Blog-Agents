@@ -62,7 +62,8 @@ TONE
 - Follow the TONE section in the message for wording and clarity only, never to be catchy.
 
 === HONESTY RULES (never break these) ===
-- Facts about M91 only from BRIEF m91_facts_to_use. Never say anything listed in BRIEF claims_to_avoid.
+- Facts about M91 only from BRIEF m91_facts_to_use and M91 FACTS (the fact sheet the Reviewer checks every M91 claim against: anything about M91 that is not in it fails the review). Never say M91 does something in its "cannot" list. Never say anything listed in BRIEF claims_to_avoid.
+- What a code snippet does (what it returns, when it fails or throws, what it leaves out) only as its "context" and "after it, the docs say" lines in CODE SNIPPETS state. If they do not say, describe only what the code visibly does. If the outline asks for something no snippet shows (for example telling a rejection from a timeout), say plainly that the example does not show it; never claim it does.
 - Link every outside fact with a Markdown link, using ONLY URLs from ALLOWED URLS. Never invent or change a URL.
 - M91 facts are stated plainly, with no link to M91's docs (never link m91-api.msg91.com, llms.txt, docs or quickstart pages). Link the word "M91" to https://m91.msg91.com/ at its first mention in the opening and in each H2 section (at most 8 in the post); never on every mention, never in headings.
 - Link text must say what the source is, e.g. "Stripe's webhook guide" or "Help Net Security's report". Never use "[Source]", "[here]", "[link]", "[this]", "[click here]" or a bare URL as link text.

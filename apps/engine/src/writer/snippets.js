@@ -120,8 +120,28 @@ export function extractSnippets(sourceText) {
     if (line.trim()) prose.push(line.trim())
     out.push(line)
   }
+  // What the docs say right after a code block: often what it returns, when it fails, or what it leaves out. The
+  // Writer describes a snippet only from this and the context before it (the Reviewer reads the whole page).
+  for (const s of snippets) {
+    if (s.kind !== 'block') continue
+    const at = out.indexOf(`[[SNIPPET:${s.id}]]`)
+    if (at < 0) continue
+    const after = []
+    let chars = 0
+    for (let k = at + 1; k < out.length && chars < SNIPPET_AFTER_MAX; k++) {
+      const l = out[k].trim()
+      if (HEADER.test(out[k]) || /^\[\[SNIPPET:/.test(l) || /^#{1,6}\s/.test(l)) break
+      if (!l) continue
+      after.push(l)
+      chars += l.length + 1
+    }
+    s.after = after.join(' ').slice(0, SNIPPET_AFTER_MAX)
+  }
   return { snippets, text: out.join('\n') }
 }
+
+/** Characters of docs text kept after each code block (what it returns, when it fails). */
+export const SNIPPET_AFTER_MAX = 600
 
 const COMMENT = /^(\s*)(#(?!!)|\/\/)\s?(.*)$/
 const USAGE_MARKER = /^(usage|examples?)\s*:\s*(.*)$/i
@@ -182,8 +202,9 @@ export function snippetSection(snippets, { maxLines = Infinity } = {}) {
       `[${s.id}] kind: ${s.kind ?? 'block'} · language: ${s.language} · lines 1-${lines.length} · source: ${s.source_url ?? 'unknown'}`,
       `context: ${s.context || '(none)'}`
     ]
-    if (lines.length > maxLines) return [...head, `(${lines.length} lines: too long to list here. Do not insert ${s.id} or a range of it; use the other snippets, e.g. its usage snippets.)`].join('\n')
-    return [...head, '```' + s.language, ...lines.map((l, i) => `${String(i + 1).padStart(w)}| ${l}`), '```'].join('\n')
+    const after = s.after ? [`after it, the docs say: ${s.after}`] : []
+    if (lines.length > maxLines) return [...head, `(${lines.length} lines: too long to list here. Do not insert ${s.id} or a range of it; use the other snippets, e.g. its usage snippets.)`, ...after].join('\n')
+    return [...head, '```' + s.language, ...lines.map((l, i) => `${String(i + 1).padStart(w)}| ${l}`), '```', ...after].join('\n')
   }).join('\n\n')
 }
 
