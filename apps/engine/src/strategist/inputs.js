@@ -77,9 +77,10 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     return [...saved, ...extra]
   }
 
-  // M91 facts: today's current record, or the Scout must run first.
-  const factsRec = (await records('m91_facts', 'current')).find((r) => r.date === today)
-  if (!factsRec) throw new InputsError(`No m91_facts record for today (${today}). Run the Scout first (npm run scout, or npm run strategist -- --with-scout).`)
+  // M91 facts: today's current record, else the newest one (the Scout keeps it when M91's docs did not load today).
+  const factsRecs = await records('m91_facts', 'current')
+  const factsRec = factsRecs.find((r) => r.date === today) ?? [...factsRecs].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]
+  if (!factsRec) throw new InputsError(`No m91_facts record yet. Run the Scout first (npm run scout, or npm run strategist -- --with-scout).`)
   const facts = { can: factsRec.payload.can ?? [], cannot: factsRec.payload.cannot ?? [], integrations: factsRec.payload.integrations ?? [] }
 
   // The weekly editor's pick (or a due pinned topic) is the only lead of the run; its cluster was made by the Scout.
@@ -167,10 +168,19 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
   for (const r of tutorials) leadIndex.set(r.payload.tutorial_id, { kind: 'tutorial', record: r })
 
   const factUrls = new Set([...facts.can, ...facts.cannot, ...facts.integrations].map((f) => urlKey(f.source_url)))
+  // Every URL in the inputs, by key, with its spelling as given (a near-miss in the brief is put back to it).
   const allowed = new Set(factUrls)
-  for (const r of [...rapidStories, ...otherStories]) allowed.add(urlKey(r.payload.source_url))
-  for (const r of clusters) for (const u of compactCluster(r.payload).source_urls) allowed.add(urlKey(u))
-  for (const r of tutorials) for (const s of [...(r.payload.steps_outline ?? []), ...(r.payload.supporting_facts ?? [])]) allowed.add(urlKey(s.source_url))
+  const allowedSpelling = new Map()
+  const allow = (u) => {
+    const k = urlKey(u)
+    if (!k) return
+    allowed.add(k)
+    if (!allowedSpelling.has(k)) allowedSpelling.set(k, String(u).trim())
+  }
+  for (const f of [...facts.can, ...facts.cannot, ...facts.integrations]) allow(f.source_url)
+  for (const r of [...rapidStories, ...otherStories]) allow(r.payload.source_url)
+  for (const r of clusters) for (const u of compactCluster(r.payload).source_urls) allow(u)
+  for (const r of tutorials) for (const s of [...(r.payload.steps_outline ?? []), ...(r.payload.supporting_facts ?? [])]) allow(s.source_url)
   allowed.delete('')
 
   // The knowledge map (what readers can already read) and this post's own sources.
@@ -180,9 +190,11 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     const pack = await store.getRecord(scoutResult.source_pack_id)
     for (const c of pack?.payload?.claims ?? []) for (const r of c.results ?? []) if (r.verdict === 'supports') slotSources.push({ url: r.url, publisher: r.publisher, what_it_covers: r.note })
   }
-  for (const s of slotSources) allowed.add(urlKey(s.url))
+  for (const s of slotSources) allow(s.url)
   // The weekly pick's news hook (its source loaded when the news check found it).
-  if (weeklyTarget?.pick.hook?.source_url) allowed.add(urlKey(weeklyTarget.pick.hook.source_url))
+  if (weeklyTarget?.pick.hook?.source_url) allow(weeklyTarget.pick.hook.source_url)
+  // The questions the weekly pick rests on: the Scout loaded each thread, and the Strategist sees its URL (demand).
+  for (const e of weeklyTarget?.pick.evidence ?? []) if (e.kind === 'question' && e.url) allow(e.url)
   // The weekly editor (or the person) decided the topic, not the group balance.
   const blocked = target ? null : blockedGroup(recentBriefs)
   return {
@@ -206,6 +218,7 @@ export async function buildInputs({ config, store, scoutResult, now = Date.now, 
     competitors: sc.competitors,
     leadIndex,
     allowedUrls: allowed,
+    allowedSpelling,
     leadCount: leadIndex.size,
     // The post this run writes.
     target: weeklyTarget ? weeklyForPrompt(weeklyTarget.pick) : pinTarget ? { pinned_id: pinTarget.pin.pinned_id, topic: pinTarget.pin.topic }
@@ -222,7 +235,7 @@ const json = (v) => JSON.stringify(v)
 export const weeklyForPrompt = (p) => ({
   weekly: true, pick_id: p.pick_id, title: p.title, question: p.question, format: p.format, angle: p.angle, why_now: p.why_now,
   hook: p.hook ? { title: p.hook.title, what_happened: p.hook.what_happened, outlet: p.hook.outlet, published_date: p.hook.published_date, source_url: p.hook.source_url } : null,
-  demand: (p.evidence ?? []).filter((e) => e.kind === 'question').map((e) => ({ question: e.text, where: e.where ?? null, demand: e.demand ?? null }))
+  demand: (p.evidence ?? []).filter((e) => e.kind === 'question').map((e) => ({ question: e.text, where: e.where ?? null, demand: e.demand ?? null, ...(e.url && { url: e.url }) }))
 })
 const listOrNone = (arr) => (arr.length ? json(arr) : 'none')
 

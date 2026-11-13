@@ -72,6 +72,15 @@ test('the best version failed its hard checks: nothing is sent, the run fails as
   assert.match(notifier.sent.slack[0], /^❌ Not approved:/)
 })
 
+test('the best version failed only a minor check (one long sentence): it is still sent on, the run does not fail', async () => {
+  const restore = quiet()
+  const { store, r } = await fullRun({ MAX_WRITER_REVISIONS: '2' }, { reviews: [{ pass: false, total: 60 }, { pass: false, total: 80 }, { pass: false, total: 70 }], minorFails: [1, 2, 3] })
+  restore()
+  assert.notEqual(r.status, 'failed', JSON.stringify(r.run.warnings))
+  assert.ok(!r.run.warnings.some((w) => /failed its hard content checks/.test(w)))
+  assert.ok(byType(store, 'draft').some((d) => d.payload.best_of?.version === 2), 'v2 (80/100) went ahead')
+})
+
 test('AUTO_APPROVE off: the post waits for you (ready line in Slack); Publish later sends the Slack message', async () => {
   const restore = quiet()
   const { store, notifier, r, m } = await fullRun({ AUTO_APPROVE: 'false' }, { reviews: [{ pass: true, total: 90 }] })

@@ -110,6 +110,23 @@ test('llms.txt failure fails the run', async () => {
   assert.equal(s.ai.requests.length, 0)
 })
 
+test('docs down or a failed facts call with earlier facts saved: the earlier facts are used, the run goes on', async () => {
+  const older = { can: [{ fact: 'Rings a phone until someone answers.', source_url: LLMS }], cannot: [], integrations: [], research_at: '2026-10-16T08:00:00Z' }
+  for (const [name, opts] of [['docs down', { web: fakeWeb({ llmsStatus: 500 }) }], ['facts call fails', { answers: { facts: new AiError('no answer', { kind: 'timeout' }) } }]]) {
+    const store = memoryStore()
+    const rec = await store.createRecord({ type: 'm91_facts', briefId: null, payload: older, status: 'current', date: '2026-10-16' })
+    const s = setup({ ...opts, store })
+    const r = await s.run()
+    assert.ok(r.warnings.some((w) => /^M91 facts not rebuilt today \(.+\): using the facts from 2026-10-16$/.test(w)), `${name}: ${r.warnings.join(' | ')}`)
+    assert.equal(recordsOf(s.store, 'm91_facts').length, 1, `${name}: no new facts record`)
+    assert.equal(recordsOf(s.store, 'm91_facts')[0].id, rec.id)
+  }
+  // An account problem (token, billing, config) still stops the run.
+  const store = memoryStore()
+  await store.createRecord({ type: 'm91_facts', briefId: null, payload: older, status: 'current', date: '2026-10-16' })
+  await assert.rejects(setup({ answers: { facts: fatal('token') }, store }).run(), /facts call failed/)
+})
+
 test('facts call failure fails the run; token errors are not retried', async () => {
   const s = setup({ answers: { facts: fatal('token') } })
   await assert.rejects(s.run(), /facts call failed/)

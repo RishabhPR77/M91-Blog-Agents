@@ -76,6 +76,35 @@ export function autoFix(input, { config, inputs }) {
   b.news.source_url = httpsFix(b.news.source_url)
   b.tutorial.steps = b.tutorial.steps.map((s) => ({ ...s, source_url: httpsFix(s.source_url) }))
 
+  // Links not in the inputs: a near-miss of an input link (case, "-" for "_", a trailing slash) is put back to that
+  // link; any other source or outline link is left out. A model often re-spells a thread's URL, and asking it again
+  // rarely helped: a run stopped on one such link (R-261113-1131-JTR8).
+  if (inputs?.allowedUrls) {
+    const resolve = linkResolver(inputs, config)
+    const fix = (u, what) => {
+      const r = resolve(u)
+      if (r && r !== u) fixes.push(`${what} ${u} → ${r} (spelled as in the inputs)`)
+      return r
+    }
+    b.sources = b.sources.flatMap((s) => {
+      const r = fix(s.url, 'source')
+      if (r) return [{ ...s, url: r }]
+      fixes.push(`left out source ${s.url}: not in the inputs`)
+      return []
+    })
+    b.outline = b.outline.map((s, i) => ({ ...s, source_urls: s.source_urls.flatMap((u) => {
+      const r = fix(u, `outline[${i}] link`)
+      if (r) return [r]
+      fixes.push(`left out outline[${i}] link ${u}: not in the inputs`)
+      return []
+    }) }))
+    // The rest keep an unknown link: their own checks name the problem (a fact, a story, a step).
+    b.m91_facts_to_use = b.m91_facts_to_use.map((f) => ({ ...f, source_url: fix(f.source_url, 'M91 fact link') ?? f.source_url }))
+    b.story.source_url = fix(b.story.source_url, 'story link') ?? b.story.source_url
+    b.news.source_url = fix(b.news.source_url, 'news link') ?? b.news.source_url
+    b.tutorial.steps = b.tutorial.steps.map((s) => ({ ...s, source_url: fix(s.source_url, 'tutorial step link') ?? s.source_url }))
+  }
+
   // Standing claims, word for word.
   for (const claim of STANDING_CLAIMS) {
     if (!b.claims_to_avoid.includes(claim)) {
@@ -129,6 +158,106 @@ export function autoFix(input, { config, inputs }) {
     b.internal_links = []
     fixes.push('cleared internal_links (there are no published posts yet)')
   }
+  return { brief: b, fixes }
+}
+
+/** A link's loose form: host without www, path in lower case without "-", "_", spaces or a trailing slash. */
+function looseUrl(u) {
+  try {
+    const x = new URL(String(u).trim())
+    let path = x.pathname
+    try {
+      path = decodeURIComponent(path)
+    } catch {}
+    return `${x.hostname.toLowerCase().replace(/^www\./, '')}${path.toLowerCase().replace(/[-_\s]+/g, '').replace(/\/+$/, '')}`
+  } catch {
+    return null
+  }
+}
+
+/** (url) → the input's spelling of that link, a near-miss's input link, or null when the inputs do not have it. */
+export function linkResolver(inputs, config) {
+  const keys = new Set(inputs.allowedUrls)
+  if (config.m91?.ctaUrl) keys.add(urlKey(config.m91.ctaUrl))
+  const byLoose = new Map()
+  for (const k of keys) {
+    const l = looseUrl(k)
+    if (l && !byLoose.has(l)) byLoose.set(l, inputs.allowedSpelling?.get(k) ?? k)
+  }
+  return (u) => {
+    if (!u) return u
+    if (keys.has(urlKey(u))) return u
+    return byLoose.get(looseUrl(u)) ?? null
+  }
+}
+
+/**
+ * The last step when the model's repairs did not fix a brief: every fix code can make safely, so a mechanical
+ * problem never stops a run. Lists over their limit are cut; the story, news and tutorial fields are copied from
+ * their records; M91 facts that are not in the facts record are left out; an empty why_today or answer_first is
+ * filled. A problem that needs judgment (the lead, the outline, the keyword, a duplicate topic) is left for the
+ * checks to report. Returns { brief, fixes }.
+ */
+export function salvageBrief(input, { config, inputs }) {
+  const fixes = []
+  const b = structuredClone(input)
+  const st = config.strategist
+  if (b.titles.length > 3) { b.titles = b.titles.slice(0, 3); fixes.push('kept the first 3 titles') }
+  if (b.titles[0] && b.titles[0].length > st.titleMaxChars) {
+    const i = b.titles.findIndex((t) => t.length <= st.titleMaxChars && !GENERIC_TITLE.some((re) => re.test(t)))
+    if (i > 0) { [b.titles[0], b.titles[i]] = [b.titles[i], b.titles[0]]; fixes.push(`titles[0] too long: titles[${i}] put first`) }
+  }
+  if ((b.terms_to_define ?? []).length > 8) { b.terms_to_define = b.terms_to_define.slice(0, 8); fixes.push('kept 8 terms_to_define') }
+  if (b.supporting_keywords.length > SUPPORTING_MAX) { b.supporting_keywords = b.supporting_keywords.slice(0, SUPPORTING_MAX); fixes.push(`kept ${SUPPORTING_MAX} supporting_keywords`) }
+  const ideas = b.interactive_ideas.filter((x) => isBlockType(x.block_type) && x.why).slice(0, 4)
+  if (ideas.length !== b.interactive_ideas.length) { b.interactive_ideas = ideas; fixes.push('left out interactive ideas with an unknown block or no reason (at most 4)') }
+  const links = b.internal_links.filter((l) => inputs.publishedUrls?.has(urlKey(l.url)) && l.anchor_text).slice(0, 3)
+  if (links.length !== b.internal_links.length) { b.internal_links = links; fixes.push('left out internal links that are not published posts (at most 3)') }
+
+  // M91 facts: only those in the facts record.
+  const factTexts = [...inputs.facts.can.map((f) => f.fact), ...inputs.facts.cannot.map((f) => f.fact), ...inputs.facts.integrations.map((f) => `${f.name} ${f.what_it_enables}`)]
+  const facts = b.m91_facts_to_use.filter((f) => inputs.factUrls.has(urlKey(f.source_url)) && factTexts.some((t) => wordOverlap(f.fact, t) >= 0.6))
+  const dropped = b.m91_facts_to_use.length - facts.length
+  if (dropped) { b.m91_facts_to_use = facts; fixes.push(`left out ${dropped} M91 fact(s) not in the facts record`) }
+
+  // Story: copied from its record, or dropped when it is not a story in the inputs.
+  if (b.story.use) {
+    const s = inputs.leadIndex.get(b.story.story_id)
+    if (!s || s.kind !== 'story') { b.story = { use: false, story_id: '', attribution_line: '', source_url: '', how_to_use: '' }; fixes.push('story left out: not a story in the inputs') }
+    else if (b.story.source_url !== s.record.payload.source_url || b.story.attribution_line !== s.record.payload.attribution_line) {
+      b.story = { ...b.story, source_url: s.record.payload.source_url, attribution_line: s.record.payload.attribution_line }
+      fixes.push('story source and attribution copied from the story record')
+    }
+  }
+  // Rapid response: the news is the story's.
+  const lead = inputs.leadIndex.get(b.lead.id)
+  if (b.post_type === 'rapid_response' && lead?.kind === 'story' && urlKey(b.news.source_url) !== urlKey(lead.record.payload.source_url)) {
+    b.news = { ...b.news, is_news_based: true, source_url: lead.record.payload.source_url }
+    fixes.push("news.source_url set to the story's source URL")
+  }
+  // The weekly pick's hook: the news is the hook's.
+  const hook = inputs.target?.weekly ? inputs.target.hook : null
+  if (hook && (!b.news.is_news_based || urlKey(b.news.source_url) !== urlKey(hook.source_url))) {
+    b.news = { is_news_based: true, outlet: hook.outlet ?? b.news.outlet ?? '', published_date: hook.published_date ?? b.news.published_date ?? '', claim_in_own_words: b.news.claim_in_own_words || hook.what_happened || hook.title || '', source_url: hook.source_url }
+    fixes.push("news filled from the weekly pick's hook")
+  }
+  // Tutorial: only the lead's steps, every gap kept.
+  if (b.tutorial.use) {
+    const t = inputs.leadIndex.get(b.tutorial.tutorial_id)
+    if (t?.kind === 'tutorial') {
+      const leadSteps = t.record.payload.steps_outline ?? []
+      const steps = b.tutorial.steps.filter((s) => leadSteps.some((l) => l.step === s.step && urlKey(l.source_url) === urlKey(s.source_url)))
+      if (steps.length !== b.tutorial.steps.length && steps.length) { b.tutorial.steps = steps; fixes.push("left out tutorial steps that are not the lead's") }
+      const gaps = (t.record.payload.gaps ?? []).filter((g) => !b.tutorial.gaps.includes(g))
+      if (gaps.length) { b.tutorial.gaps = [...b.tutorial.gaps, ...gaps]; fixes.push(`added ${gaps.length} tutorial gap(s) from the lead`) }
+    }
+  }
+  if (inputs.target && !inputs.target.timely && !String(b.why_today ?? '').trim() && inputs.target.why_now) { b.why_today = inputs.target.why_now; fixes.push("why_today taken from the pick's why_now") }
+  b.outline = b.outline.map((s, i) => {
+    if (s.answer_first) return s
+    fixes.push(`outline[${i}].answer_first filled from its heading`)
+    return { ...s, answer_first: `Answer "${s.heading}" directly in the first two sentences.` }
+  })
   return { brief: b, fixes }
 }
 

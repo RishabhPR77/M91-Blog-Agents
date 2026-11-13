@@ -770,17 +770,29 @@ export async function runScout(params = {}, deps = {}) {
     }
   }
 
-  /** Today's m91_facts record, or a new one built from the docs bundle. Failure fails the run. */
+  /**
+   * Today's m91_facts record, or a new one built from the docs bundle. When today's cannot be built (M91's docs do not
+   * load, or the facts call fails for a reason other than the account), the newest earlier record is used with a
+   * warning: M91's facts change rarely, and a docs outage no longer stops the run. With no earlier record it fails.
+   */
   async function getFacts() {
     const current = await store.getRecords({ type: 'm91_facts', status: 'current' })
     const todays = current.find((r) => r.date === today)
     if (todays) return { id: todays.id, payload: todays.payload, reused: true }
+    const older = [...current].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0] ?? null
+    const useOlder = (why) => {
+      warnings.push(`M91 facts not rebuilt today (${why}): using the facts from ${older.date}`)
+      return { id: older.id, payload: older.payload, reused: true }
+    }
 
     let bundle
     try {
       bundle = await buildDocsBundle({ docsUrl: config.m91.docsUrl, hosts: sc.docsHosts, maxPages: sc.docsMaxPages, maxChars: sc.docsMaxChars, fetch: fetchImpl })
     } catch (error) {
-      if (error instanceof DocsError) throw new ScoutError(error.message)
+      if (error instanceof DocsError) {
+        if (older) return useOlder(error.message)
+        throw new ScoutError(error.message)
+      }
       throw error
     }
     warnings.push(...bundle.warnings)
@@ -790,6 +802,7 @@ export async function runScout(params = {}, deps = {}) {
     } catch (error) {
       if (error instanceof CancelledError) throw error
       await runLog(error.meta ?? { call: 'facts', model: sc.model, delivery: sc.delivery, ms: 0, retries: 0 }, { error: error.message })
+      if (older && !FATAL_KINDS.includes(error?.kind)) return useOlder(`the facts call failed: ${error.message}`)
       throw new ScoutError(`M91 facts call failed: ${error.message}`)
     }
     const allowed = new Map(bundle.sources.map((u) => [urlKey(u), u]))

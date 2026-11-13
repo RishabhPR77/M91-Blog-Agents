@@ -58,7 +58,8 @@ test('the Strategist plans only the weekly pick: one lead, its format and angle,
   assert.match(q.prompt, /Never re-explain those concepts/)
   assert.match(q.message, /--- POST TO PLAN \(this week's post, chosen by the editor\) ---\n\{"weekly":true,"pick_id":"W-261022-1200-PICK","title":"How to make an AI agent ask before it deletes data"/)
   assert.match(q.message, /"format":"tutorial"/)
-  assert.match(q.message, /"demand":\[\{"question":"How to stop Claude Code running rm -rf\?","where":"Reddit r\/ClaudeAI","demand":"320 upvotes"\}\]/)
+  // Each question with the thread the Scout loaded, so the brief can cite it exactly (and it is an allowed source).
+  assert.match(q.message, /"demand":\[\{"question":"How to stop Claude Code running rm -rf\?","where":"Reddit r\/ClaudeAI","demand":"320 upvotes","url":"https:\/\/www\.reddit\.com\/r\/ClaudeAI\/comments\/abc\/"\}\]/)
   assert.match(q.message, /--- KNOWLEDGE MAP \(what the reader already learned, newest first\) ---\n\[\{"title":"What a human approval step is"/)
   assert.match(q.message, /--- QUESTION CLUSTERS ---\n\[\{"cluster_id":"C-1"/)
   assert.ok(!/"cluster_id":"C-2"/.test(q.message), 'no other cluster')

@@ -84,12 +84,15 @@ export async function toneSection(store, brief, config) {
  * directly; the skill repository root gives its README and a file URL in it gives that file
  * (both through the GitHub API). Capped at maxChars (whole pages kept; the last one cut).
  */
-export async function tutorialSourceText(brief, { config, fetch = globalThis.fetch, timeoutMs = 15000 }) {
+export async function tutorialSourceText(brief, { config, fetch = globalThis.fetch, timeoutMs = 15000, warnings = [] }) {
   const urls = (brief.tutorial?.steps ?? []).map((s) => s.source_url)
+  // A page that does not load (GitHub limits API calls without a token; a docs page may be down) is a warning, not
+  // the end of the run: the Writer gets the pages that loaded, and with none it describes the steps in words (it
+  // never writes code itself).
   const { text } = await fetchSourcePages(urls, { config, fetch, timeoutMs, onError: (url, error) => {
-    throw new WriterInputError(`tutorial source ${url} could not be fetched (${error.message}); no tutorial without its source text`)
+    warnings.push(`tutorial source ${url} could not be fetched (${error.message}): the post has no code from it`)
   } })
-  if (!text) throw new WriterInputError('the tutorial has no fetchable source text (M91 docs or the skill repository)')
+  if (!text) warnings.push('the tutorial has no fetchable source text: the steps are described in words, with no code')
   return text
 }
 

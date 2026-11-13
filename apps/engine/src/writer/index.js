@@ -209,7 +209,7 @@ export async function runWriter(params = {}, deps = {}) {
   if (mode === 'revise' && !feedback.length && !params.sourcePack) throw new WriterError('revise mode needs Reviewer feedback for the Writer (or a source pack)')
 
   const isTutorial = brief.post_type === 'tutorial' || brief.tutorial?.use === true
-  const tutorialText = isTutorial ? await tutorialSourceText(brief, { config, fetch: deps.fetch }) : ''
+  const tutorialText = isTutorial ? await tutorialSourceText(brief, { config, fetch: deps.fetch, warnings }) : ''
   // The only code a post may show: blocks extracted from the tutorial source or the cited docs pages.
   const snippetSource = isTutorial ? tutorialText : await citedDocsSourceText(brief, { config, fetch: deps.fetch, warnings })
   const { snippets, text: tokenisedSource } = extractSnippets(snippetSource)

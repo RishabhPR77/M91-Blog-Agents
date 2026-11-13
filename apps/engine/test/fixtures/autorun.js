@@ -6,7 +6,7 @@ import { memoryStore, fakeNotifier } from '../helpers.js'
 import { brief, draftAnswer } from '../writer/fixtures.js'
 
 /** Agents that save real brief and draft records; the drafts' hard checks pass unless hardFails says which versions fail. */
-export function agents({ reviews, hardFails = [] }) {
+export function agents({ reviews, hardFails = [], minorFails = [] }) {
   let n = 0
   return (rc, { store }) => ({
     ...stubAgents,
@@ -17,7 +17,7 @@ export function agents({ reviews, hardFails = [] }) {
     },
     async writer(ctx) {
       const version = (await store.getRecords({ type: 'draft', brief_id: ctx.briefId })).length + 1
-      const payload = { ...draftAnswer(), brief_id: ctx.briefId, version, brief_version: 1, word_count: 1300, reading: { post_grade: 7.2, intro_grade: 6.5 }, checks: { hard_passed: !hardFails.includes(version), results: [] } }
+      const payload = { ...draftAnswer(), brief_id: ctx.briefId, version, brief_version: 1, word_count: 1300, reading: { post_grade: 7.2, intro_grade: 6.5 }, checks: { hard_passed: !hardFails.includes(version) && !minorFails.includes(version), ...(minorFails.includes(version) && { major_passed: true }), results: [] } }
       const rec = await store.createRecord({ type: 'draft', briefId: ctx.briefId, payload, status: 'drafted', version, meta: { brief_version: 1 } })
       return { model: 'stub', output: { record_id: rec.id, version, brief_version: 1, title: payload.title, draft: payload } }
     },

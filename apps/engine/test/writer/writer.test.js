@@ -315,8 +315,14 @@ test('tutorial: source text fetched, code given as CODE SNIPPETS, [[SNIPPET:Sn]]
   assert.equal(saved.checks.results.find((x) => x.id === 'ai_written_code').passed, true)
   assert.deepEqual(saved.snippets_used, ['S2'])
   assert.equal(r.hard_passed, true)
+  // A source that does not load no longer stops the run: the steps are described in words, with no code.
+  const quietAgain = quiet()
   const broken = await setup({ briefOver: tutorialBrief, fetch: async () => ({ ok: false, status: 500, text: async () => '' }) })
-  await assert.rejects(broken.run(), /no tutorial without its source text/)
+  const b = await broken.run()
+  quietAgain()
+  assert.ok(b.warnings.some((w) => /tutorial source .* could not be fetched \(HTTP 500\): the post has no code from it/.test(w)), b.warnings.join('\n'))
+  assert.ok(b.warnings.some((w) => /no fetchable source text: the steps are described in words/.test(w)))
+  assert.ok(!broken.ai.requests[0].message.includes('--- TUTORIAL SOURCE TEXT ---'))
 })
 
 test('tutorial: AI-written code and an unknown snippet id fail hard; the repair sees tokens, not code', async () => {

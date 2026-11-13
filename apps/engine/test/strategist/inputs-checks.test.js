@@ -149,7 +149,8 @@ const cases = [
   ['update candidate', { lead: { kind: 'cluster', id: 'C-2' }, topic_group: 2 }, /update_candidate/],
   ['invented fact', { m91_facts_to_use: [{ fact: 'M91 has 10 million users worldwide.', source_url: LLMS }] }, /does not match any M91 fact/],
   ['fact url not in facts', { m91_facts_to_use: [{ fact: 'Rings every phone in a channel at full volume until someone answers.', source_url: ISSUE }] }, /not a source in the m91_facts record/],
-  ['invented url', { sources: [{ url: 'https://made-up.example.com/x', what_it_supports: 'x' }] }, /made-up\.example\.com.*not in the inputs/],
+  // An invented source or outline link is left out by autoFix; elsewhere (a fact, a story, a step) the checks name it.
+  ['invented url', { m91_facts_to_use: [{ fact: 'Rings every phone in a channel at full volume until someone answers.', source_url: 'https://made-up.example.com/x' }] }, /made-up\.example\.com.*not in the inputs/],
   ['sources empty', { sources: [] }, /sources is empty/],
   ['too few sections', { outline: validBrief().outline.slice(0, 3) }, /outline has 3 sections/],
   ['too few question headings', { outline: validBrief().outline.map((s) => ({ ...s, heading: s.heading.replace('?', '') })) }, /headings are questions/],

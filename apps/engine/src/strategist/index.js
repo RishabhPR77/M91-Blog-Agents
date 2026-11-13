@@ -8,7 +8,7 @@ import { createViaSocketClient, TruncatedError } from '../viasocket.js'
 import { strategist_brief, strategist_brief_target } from './schemas.js'
 import { buildPlanPrompt, repairTail, rebriefTail, TRUNCATED_PROBLEM } from './prompts.js'
 import { buildInputs, buildStrategistMessage, InputsError } from './inputs.js'
-import { validateBrief, autoFix, findProblems } from './checks.js'
+import { validateBrief, autoFix, findProblems, salvageBrief } from './checks.js'
 import { finalizeBrief, saveBrief, markLeadsUsed, setLeadStatus } from './save.js'
 import { emit, throwIfCancelled, CancelledError } from '../events.js'
 import { saveRunLog } from '../util/runlog.js'
@@ -123,6 +123,19 @@ export async function runStrategist(params = {}, deps = {}) {
     }
     if (!problems.length) break
     if (repairs >= st.maxRepairs) {
+      // Repairs used up: code makes every safe fix it can, so a mechanical problem never stops a run. Only a problem
+      // that needs judgment (the lead, the outline, the keyword, a duplicate topic) still fails the brief.
+      if (brief) {
+        const salvaged = salvageBrief(brief, { config, inputs })
+        const left = await findProblems(salvaged.brief, { config, inputs, store, excludeBriefId: mode === 'rebrief' ? briefId : null })
+        if (!left.length) {
+          brief = salvaged.brief
+          autoFixes.push(...salvaged.fixes)
+          warnings.push(`brief fixed by code after ${repairs} repair(s): ${salvaged.fixes.join('; ')}`)
+          break
+        }
+        problems = left
+      }
       throw new StrategistError(`The brief still fails ${problems.length} check(s) after ${repairs} repair(s); no lead was marked used`, problems)
     }
     repairs++

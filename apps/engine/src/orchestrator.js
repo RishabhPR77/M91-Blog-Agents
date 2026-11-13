@@ -119,6 +119,21 @@ export class TransitionError extends Error {}
 export { LockedError }
 
 /** A one-line summary plus record ids for a step's output (never the whole payload). */
+// A step's notes that the run lists for you: what code fixed or worked around so the run could go on.
+const NOTABLE = {
+  strategist: (w) => /^brief fixed by code|^message trimmed/.test(w),
+  writer: (w) => /^tutorial source|^the tutorial has no fetchable|^message trimmed|^drafted_with_issues/.test(w),
+  scout: (w) => /^M91 facts not rebuilt today/.test(w)
+}
+const LABEL = { strategist: 'Strategist', writer: 'Writer', scout: 'Scout' }
+
+/** The notes of a step's output worth listing on the run, each with its agent's name. */
+export function notableWarnings(agent, out) {
+  const keep = NOTABLE[agent]
+  if (!keep || !Array.isArray(out?.warnings)) return []
+  return out.warnings.filter((w) => typeof w === 'string' && keep(w)).map((w) => `${LABEL[agent]}: ${w}`)
+}
+
 export function summariseOutput(agent, out) {
   if (!out || typeof out !== 'object') return null
   if (agent === 'scout' && out.mode === 'research') {
@@ -309,6 +324,9 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
       emit('step.finished', { agent, step: agent, data: { ms: now() - started, model: model ?? null } })
       const summary = summariseOutput(agent, output)
       if (summary) emit('step.output', { agent, step: agent, ...summary })
+      // What the run shows you of a step's own notes: what code fixed or worked around instead of stopping (a brief
+      // fixed by code, a tutorial page that did not load, a message trimmed to fit, yesterday's M91 facts).
+      for (const w of notableWarnings(agent, output)) if (!warnings.includes(w)) warnings.push(w)
       return output
     } catch (error) {
       // A step interrupted by a cancel is "cancelled", not "failed" (also when a later error follows the cancel).
@@ -626,7 +644,9 @@ export async function runPipeline({ config = getConfig(), store, notifier, agent
     if (!best?.draft) return false
     const rec = best.draft.record_id ? (await store.getRecords({ type: 'draft', brief_id: briefId })).find((d) => d.id === best.draft.record_id) : null
     const payload = rec?.payload ?? best.draft.draft ?? null
-    if (payload?.checks?.hard_passed !== true) {
+    // A minor hard check (one long sentence or paragraph) is listed for you, as everywhere else: only a major one
+    // holds the best version back. Before, one long sentence in every version failed the whole run.
+    if ((payload?.checks?.major_passed ?? payload?.checks?.hard_passed) !== true) {
       warnings.push(`the best version (v${best.version}, ${best.total}/100) failed its hard content checks, so it was not sent on`)
       return false
     }
