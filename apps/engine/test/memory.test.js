@@ -64,6 +64,16 @@ test('judgeRecords: protection — published posts, current facts/tone, approved
   const p = (r) => j.get(r.id).protection
   assert.deepEqual([post, exp, facts, know].map(p), ['never', 'never', 'never', 'never'])
   assert.deepEqual([draft, brief, pick, lesson, pin].map(p), ['confirm', 'confirm', 'confirm', 'confirm', 'confirm'])
+  // An approved post that was only emailed (never on the blog) can be deleted as a whole, with the extra confirm.
+  const B2 = '261113-1456-KEBY'
+  const emailed = [
+    rec('brief', { briefId: B2, status: 'approved', version: 1, payload: { brief_version: 1 } }),
+    rec('draft', { briefId: B2, status: 'approved', version: 2 }),
+    rec('markdown_export', { briefId: B2, status: 'final', version: 2 }),
+    rec('knowledge', { briefId: B2, status: 'current' })
+  ]
+  const j2 = judgeRecords([post, ...emailed], { now: NOW })
+  assert.deepEqual(emailed.map((r) => j2.get(r.id).protection), ['confirm', 'confirm', 'confirm', 'confirm'])
   // A roadmap from before the weekly editor is no longer protected: it can be cleaned up.
   assert.equal(p(oldRoadmap), null)
   assert.equal(p(oldFacts), null)

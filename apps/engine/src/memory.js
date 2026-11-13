@@ -59,14 +59,17 @@ export function judgeRecords(records, { now = Date.now(), staleDays = DEFAULT_ST
   // Per brief: its newest brief version, its drafts, and whether it became a live post.
   const briefs = new Map()
   const chain = (id) => {
-    if (!briefs.has(id)) briefs.set(id, { briefs: [], drafts: [], live: false })
+    if (!briefs.has(id)) briefs.set(id, { briefs: [], drafts: [], live: false, onBlog: false })
     return briefs.get(id)
   }
   for (const r of of('brief')) if (r.briefId) chain(r.briefId).briefs.push(r)
   for (const r of of('draft')) if (r.briefId) chain(r.briefId).drafts.push(r)
   for (const r of of('published_post')) {
     const id = r.briefId ?? r.payload?.brief_id
-    if (id && r.status !== 'unpublished') chain(id).live = true
+    if (id && r.status !== 'unpublished') {
+      chain(id).live = true
+      chain(id).onBlog = true
+    }
   }
   for (const c of briefs.values()) {
     c.newest = [...c.briefs].sort((a, b) => briefVersionOf(b) - briefVersionOf(a))[0] ?? null
@@ -121,9 +124,11 @@ export function judgeRecords(records, { now = Date.now(), staleDays = DEFAULT_ST
     // Protection.
     if (r.type === 'published_post') r.status === 'published' || r.status === 'publishing' ? protect(r, 'never', 'a published post') : protect(r, 'confirm', 'a blog post record')
     if ((r.type === 'm91_facts' || r.type === 'tone_profile') && r.status === 'current') protect(r, 'never', `the current ${r.type === 'm91_facts' ? 'M91 facts' : 'style notes'}`)
-    if (r.type === 'knowledge' && r.status === 'current') protect(r, 'never', 'what an approved post taught (later posts link to it)')
+    // Only a post on the blog is never deleted (other pages link to it). An approved post that was only emailed can be
+    // deleted as a whole, with the extra confirm (2026-11-13: posts the editor decided not to publish).
+    if (r.type === 'knowledge' && r.status === 'current') protect(r, !r.briefId || briefs.get(r.briefId)?.onBlog ? 'never' : 'confirm', 'what an approved post taught (later posts link to it)')
     if (r.type === 'weekly_pick' && r.status === 'written') protect(r, 'confirm', 'why a post was chosen (its post page shows it)')
-    if (r.type === 'markdown_export' && r.briefId && briefs.get(r.briefId)?.live) protect(r, 'never', "an approved post's export")
+    if (r.type === 'markdown_export' && r.briefId && briefs.get(r.briefId)?.live) protect(r, briefs.get(r.briefId).onBlog ? 'never' : 'confirm', "an approved post's export")
     if (r.type === 'published_guide' && r.status === 'live') protect(r, 'confirm', 'a guide that is live on msg91.com/guide (the editor and the links use it)')
     if (r.type === 'lesson') protect(r, 'confirm', 'a lesson the agents learn from')
     if (r.type === 'pinned_topic' && r.status === 'open') protect(r, 'confirm', 'an open pinned topic')
