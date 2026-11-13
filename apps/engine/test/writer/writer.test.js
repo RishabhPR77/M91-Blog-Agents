@@ -139,7 +139,7 @@ test('prompt has the simplicity re-read and link-text rules; LESSONS section and
   assert.match(s.ai.requests[0].message, /--- LESSONS ---\n- Keep intros to two sentences\.\n--- ALLOWED URLS ---/)
 })
 
-test('repair: a hard failure gets one repair call listing the problems, then passes', async () => {
+test('repair: a hard failure gets one repair call, in the same thread, with only the problems; then passes', async () => {
   const restore = quiet()
   const bad = draftAnswer({ post_markdown: GOOD_MD.replace('A pause keeps', "We've seen that a pause keeps") })
   const s = await setup({ answers: { new: bad } })
@@ -147,9 +147,11 @@ test('repair: a hard failure gets one repair call listing the problems, then pas
   restore()
   assert.deepEqual(s.ai.requests.map((q) => q.call), ['new', 'repair'])
   const rep = s.ai.requests[1]
-  assert.notEqual(rep.threadId, s.ai.requests[0].threadId)
+  assert.equal(rep.threadId, s.ai.requests[0].threadId, 'continues the thread of the answer it repairs')
   assert.equal(rep.prompt, s.ai.requests[0].prompt, 'same prompt as the failed call')
-  assert.match(rep.message, /--- YOUR PREVIOUS ANSWER ---\n\{/)
+  assert.match(rep.message, /^Your previous answer is just above in this conversation\.\n--- PROBLEMS FOUND BY THE CHECKER ---/)
+  assert.ok(!rep.message.includes('--- YOUR PREVIOUS ANSWER ---'), 'the draft is not sent again')
+  assert.ok(rep.message.length < 3000, `a short message (${rep.message.length} characters), not the whole brief and draft again`)
   assert.match(rep.message, /--- PROBLEMS FOUND BY THE CHECKER ---\n- first_person: we've seen/)
   assert.match(rep.message, /--- WHAT TO DO ---\nReturn a corrected answer/)
   assert.equal(r.repairs_used, 1)

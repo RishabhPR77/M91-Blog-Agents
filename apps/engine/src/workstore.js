@@ -246,7 +246,7 @@ export function createWorkStore(mem0, { config, now = Date.now } = {}) {
       const fresh = read()
       const ids = Object.values(fresh.records).filter((r) => r.type !== 'run' && r.briefId === briefId).map((r) => r.id)
       drop(fresh, ids, { unclaim: [briefId] })
-      log.info('approved post copied to Mem0', { briefId, records: created.map((r) => r.type), local_deleted: ids.length })
+      log.info('approved post copied to memory', { briefId, records: created.map((r) => r.type), local_deleted: ids.length })
       return { created, deleted: ids }
     },
     /** One short Mem0 record per finished run (not in DRY_RUN). */

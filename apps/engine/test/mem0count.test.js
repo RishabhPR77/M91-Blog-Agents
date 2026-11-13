@@ -104,7 +104,7 @@ test('a run saves its Mem0 totals in the run record, and run.finished carries th
   assert.equal(mem0Requests(outer.counts), 0, 'the request scope does not count the run')
 })
 
-test('API: one "api Mem0 calls" log line per request that used Mem0 (method, path, status, counts; no headers)', async () => {
+test('API: one "api memory calls" log line per request that used Mem0 (method, path, status, counts; no headers)', async () => {
   const lines = []
   const restore = setSink((_level, line) => lines.push(line))
   const store = countingStore()
@@ -121,7 +121,7 @@ test('API: one "api Mem0 calls" log line per request that used Mem0 (method, pat
     await new Promise((r) => server.close(r))
     restore()
   }
-  const api = lines.map((l) => JSON.parse(l)).filter((l) => l.msg === 'api Mem0 calls')
+  const api = lines.map((l) => JSON.parse(l)).filter((l) => l.msg === 'api memory calls')
   const records = api.find((l) => l.path === '/api/records')
   assert.ok(records, JSON.stringify(api))
   assert.deepEqual([records.method, records.status, records.mem0.reads >= 1, records.level], ['GET', 200, true, 'info'])

@@ -173,7 +173,8 @@ export const fullBriefForWriter = (brief) => Object.fromEntries(Object.entries(b
 /**
  * Message sections in the brief's order (8.5), only those given. Kept under viaSocket's 50,000-char
  * cap by listing very long CODE SNIPPETS without their lines (snippetsCompact), then trimming TUTORIAL
- * SOURCE TEXT, then a full PREVIOUS DRAFT. Returns { message, tutorialText, trimmed[] }.
+ * SOURCE TEXT, then a full PREVIOUS DRAFT, then leaving out INTERACTIVE IDEAS, LESSONS and the last
+ * sources of the SOURCE PACK. Returns { message, tutorialText, trimmed[] }.
  */
 export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
   const order = [
@@ -205,6 +206,32 @@ export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
   }
   delete sec.previousContextFallback
   message = build()
+  // Still too long: the interactive ideas, then the lessons, and last a few sources (from the end of the pack). The
+  // sources go last because they back the post's claims, which the Reviewer scores.
+  for (const [key, label] of [['interactiveIdeas', 'interactive ideas'], ['lessons', 'lessons']]) {
+    if (message.length > max && sec[key]) {
+      sec[key] = null
+      trimmed.push(label)
+      message = build()
+    }
+  }
+  if (message.length > max && sec.sourcePack) {
+    let pack = null
+    try {
+      pack = JSON.parse(sec.sourcePack)
+    } catch {
+      // Not JSON: left as it is.
+    }
+    if (Array.isArray(pack)) {
+      const before = pack.length
+      while (pack.length > 1 && message.length > max) {
+        pack = pack.slice(0, -1)
+        sec.sourcePack = JSON.stringify(pack)
+        message = build()
+      }
+      if (pack.length < before) trimmed.push(`source pack (${before - pack.length} of ${before} sources left out)`)
+    }
+  }
   if (message.length > max) throw new WriterInputError(`Writer message is ${message.length} characters; viaSocket's limit is ${max}`)
   return { message, tutorialText: sec.tutorialText ?? '', trimmed }
 }

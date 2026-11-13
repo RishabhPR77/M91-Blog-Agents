@@ -88,7 +88,7 @@ export default function RunLive() {
     ['Started', fmtDateTime(view.startedAt)],
     [running ? 'Elapsed' : 'Total time', fmtDuration(elapsed)],
     ['AI calls', String(view.totals.aiCalls) + (view.totals.retries ? ` (+${view.totals.retries} retries)` : '')],
-    ['Mem0 calls', view.mem0 ? `${view.mem0.requests} (${view.mem0.reads} reads · ${view.mem0.searches} searches · ${view.mem0.writes} writes · ${view.mem0.cache_hits} cached)` : running ? 'counted at the end' : 'not counted (older run)']
+    ['Memory calls', view.mem0 ? `${view.mem0.requests} (${view.mem0.reads} reads · ${view.mem0.searches} searches · ${view.mem0.writes} writes · ${view.mem0.cache_hits} cached)` : running ? 'counted at the end' : 'not counted (older run)']
   ]
   const warnings = detail?.run?.warnings ?? []
 
@@ -127,8 +127,8 @@ export default function RunLive() {
           <ActivityFeed view={view} />
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-6 text-sm">
             {header.map(([k, v]) => (
-              <div key={k} className={k === 'Mem0 calls' ? 'col-span-2' : ''}>
-                <dt className="text-xs text-ink-3">{k === 'Mem0 calls' ? 'Memory calls' : k}</dt>
+              <div key={k} className={k === 'Memory calls' ? 'col-span-2' : ''}>
+                <dt className="text-xs text-ink-3">{k}</dt>
                 <dd className="mt-0.5 font-medium tabular-nums" data-testid={`run-${k.toLowerCase().replace(/\s+/g, '-')}`}>{v}</dd>
               </div>
             ))}

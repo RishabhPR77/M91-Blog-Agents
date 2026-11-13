@@ -73,6 +73,7 @@ TONE
 - Tutorials: only the steps in the brief. NEVER write code or commands yourself, not even one line. To show code, put a line containing only [[SNIPPET:S<n>]] where it belongs, choosing from CODE SNIPPETS. If no snippet fits a step, describe the step in words. Say plainly what the docs do not cover (the gaps); never fill a gap with a guess.
 - Every other post: the same rule. Never write code or commands yourself; show code only as a [[SNIPPET:S<n>]] line from CODE SNIPPETS, otherwise describe it in words.
 - Never invent numbers, quotes, customers, companies or results.
+- Technical mechanics only as far as the sources, BRIEF or CODE SNIPPETS state them: how a system, API or pattern works, what it guarantees, and what happens on a failure, retry, timeout, restart or two requests at once. When you recommend a design, say what it does not handle yet (for example a crash between the answer and the action, or the same answer arriving twice) instead of implying it is complete. If the sources do not say, write that plainly rather than filling the gap.
 - Never present the post as legal, regulatory or compliance advice.
 - Never use these words or phrases: {{banned_phrases}}.
 
@@ -99,11 +100,13 @@ export const REVISE = `Task: revise the post to fix every item in FEEDBACK.
 - Return the full revised post, not only the changed parts.
 - In "revision_notes", add one item per feedback item: the feedback quote and what you changed.`
 
-/** Message tail for a repair call (brief 8.4). */
+/**
+ * Message tail for a repair call (brief 8.4). With previousAnswer null the repair continues the thread of that answer
+ * (the model has it just above), so only the problems are sent.
+ */
 export function repairTail(previousAnswer, problems) {
   return [
-    '--- YOUR PREVIOUS ANSWER ---',
-    typeof previousAnswer === 'string' ? previousAnswer : JSON.stringify(previousAnswer),
+    ...(previousAnswer === null ? ['Your previous answer is just above in this conversation.'] : ['--- YOUR PREVIOUS ANSWER ---', typeof previousAnswer === 'string' ? previousAnswer : JSON.stringify(previousAnswer)]),
     '--- PROBLEMS FOUND BY THE CHECKER ---',
     ...problems.map((p) => `- ${p}`),
     '--- WHAT TO DO ---',

@@ -269,9 +269,15 @@ export async function runWriter(params = {}, deps = {}) {
     }
   }
 
+  // The thread of the last answer. A repair continues it: the model already has the full message and its own answer
+  // there (viaSocket keeps the history), so the repair sends only the problems. Resending the whole message and the
+  // whole draft again went over viaSocket's 50,000 characters on longer posts and stopped the run.
+  let lastThread = null
+  let lastTutorialSent = ''
+
   /** One logical call: retries within AI_MAX_RETRIES for unusable answers, then the fallback model. */
-  async function callModel(callName, tail) {
-    const { message, tutorialText: sentTutorial, trimmed } = buildWriterMessage(sections, tail)
+  async function callModel(callName, tail, { continueThread = null } = {}) {
+    const { message, tutorialText: sentTutorial, trimmed } = continueThread ? { message: tail, tutorialText: lastTutorialSent, trimmed: [] } : buildWriterMessage(sections, tail)
     if (trimmed.length) warnings.push(`message trimmed to fit 50,000 characters: ${trimmed.join(', ')}`)
     // With a fallback: 2 tries on the main model, then 1 on the fallback (brief 4). Without: 1 + AI_MAX_RETRIES tries.
     const mainTries = fallbackAiSend ? 2 : Math.max(1, (config.viasocket.maxRetries ?? 3) + 1)
@@ -283,8 +289,11 @@ export async function runWriter(params = {}, deps = {}) {
       const send = attempts[i]
       const isFallback = send === fallbackAiSend && i === attempts.length - 1
       const started = now()
+      const threadId = continueThread ?? writerThreadId(params.briefId, version, callName)
       try {
-        const r = await send({ agent: 'writer', call: callName, prompt, message, jsonSchema: writer_draft, threadId: writerThreadId(params.briefId, version, callName), retries: config.viasocket.maxRetries })
+        const r = await send({ agent: 'writer', call: callName, prompt, message, jsonSchema: writer_draft, threadId, retries: config.viasocket.maxRetries })
+        lastThread = r.threadId ?? threadId
+        lastTutorialSent = sentTutorial
         const fixes = [...(r.parseFixes ?? [])]
         const errors = draftSchemaErrors(r.content)
         await runLog({ call: callName, model: r.model ?? (isFallback ? wc.fallbackModel : wc.model), delivery: r.delivery ?? wc.delivery, ms: r.ms ?? now() - started, result: errors.length ? 'schema_invalid' : 'ok', hard_failures: errors, auto_fixes: fixes, error: null, fallback: isFallback })
@@ -294,7 +303,11 @@ export async function runWriter(params = {}, deps = {}) {
         if (error instanceof CancelledError) throw error
         await runLog({ call: callName, model: isFallback ? wc.fallbackModel : wc.model, delivery: wc.delivery, ms: now() - started, result: 'error', hard_failures: [], auto_fixes: [], error: error.message, fallback: isFallback })
         if (FATAL_KINDS.includes(error?.kind)) throw new WriterError(`${callName} call failed (${error.kind}): ${error.message}`, { kind: error.kind })
-        if (error instanceof TruncatedError) return { truncated: true, partial: error.result?.content ?? null, tutorialSent: sentTutorial }
+        if (error instanceof TruncatedError) {
+          lastThread = error.result?.threadId ?? threadId
+          lastTutorialSent = sentTutorial
+          return { truncated: true, partial: error.result?.content ?? null, tutorialSent: sentTutorial }
+        }
         if (error?.kind === 'timeout') {
           // rtlayer timeout: one retry on a fresh thread, then the fallback, then fail.
           if (timeoutRetried) {
@@ -344,7 +357,9 @@ export async function runWriter(params = {}, deps = {}) {
     if (answer.truncated) {
       if (repairs >= wc.maxRepairs) throw new WriterError(`the ${mode} answer was cut off (finish_reason "truncated") and no repairs are left`, { kind: 'truncated' })
       repairs++
-      answer = await callModel('repair', repairTail(answer.partial ?? '(cut off)', [truncatedProblem(maxWords)]))
+      answer = lastThread
+        ? await callModel('repair', repairTail(null, [truncatedProblem(maxWords)]), { continueThread: lastThread })
+        : await callModel('repair', repairTail(answer.partial ?? '(cut off)', [truncatedProblem(maxWords)]))
       continue
     }
     autoFixes.push(...answer.fixes)
@@ -361,7 +376,9 @@ export async function runWriter(params = {}, deps = {}) {
     if (checks.major_passed || repairs >= wc.maxRepairs) break
     repairs++
     // The repair sees snippet tokens again, so it places them instead of copying code.
-    answer = await callModel('repair', repairTail({ ...draft, post_markdown: tokeniseSnippets(draft.post_markdown, snippets, snippetInserts) }, majorProblems(checks.results)))
+    answer = lastThread
+      ? await callModel('repair', repairTail(null, majorProblems(checks.results)), { continueThread: lastThread })
+      : await callModel('repair', repairTail({ ...draft, post_markdown: tokeniseSnippets(draft.post_markdown, snippets, snippetInserts) }, majorProblems(checks.results)))
   }
 
   // ---------- save ----------

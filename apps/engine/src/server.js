@@ -779,7 +779,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       const ids = body.ids
       if (!Array.isArray(ids) || !ids.length || ids.length > 200 || !ids.every((x) => typeof x === 'string' && x)) throw new ApiError(400, 'bad_params', 'ids must be a list of 1 to 200 record ids')
       if (isRunning()) throw new ApiError(409, 'run_in_progress', 'a run is in progress: delete when it has finished')
-      if (store.dryRun) throw new ApiError(409, 'dry_run', 'DRY_RUN is on: Mem0 deletes are skipped, so nothing would be deleted')
+      if (store.dryRun) throw new ApiError(409, 'dry_run', 'DRY_RUN is on: memory deletes are skipped, so nothing would be deleted')
       const u = config ? usageStatus(config, { now }) : null
       if (u?.level === 'stop') throw new ApiError(429, 'mem0_quota', stopMessage(u))
       const held = store.held()
@@ -897,8 +897,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       if (!req.url?.startsWith('/api/')) return
       const requests = mem0Requests(counts)
       const line = { method: req.method, path: new URL(req.url, 'http://localhost').pathname, status: res.statusCode, ms: now() - started, mem0: { ...counts, requests } }
-      if (requests || counts.cache_hits) log.info('api Mem0 calls', line)
-      else log.debug('api Mem0 calls', line)
+      if (requests || counts.cache_hits) log.info('api memory calls', line)
+      else log.debug('api memory calls', line)
     })
     return result
   })

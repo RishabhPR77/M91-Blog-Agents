@@ -82,10 +82,13 @@ export function WhyStopped({ view, warnings = [] }: { view: RunView; warnings?: 
   if (view.status !== 'failed' && view.status !== 'cancelled') return null
   const failedStep = Object.values(view.steps).find((s) => !s.name.includes('.') && (s.status === 'failed' || s.status === 'cancelled'))
   const lastRoute = [...view.routes].reverse().find((r) => r.total != null)
+  // The run's own reason is usually the failed step's error again: shown only when it says something more.
+  const err = failedStep?.error ?? ''
+  const own = view.resultSummary && !(err && (view.resultSummary.includes(err) || err.includes(view.resultSummary))) ? view.resultSummary : null
   const reasons = [
-    failedStep ? `${label(failedStep.name)} ${failedStep.status === 'cancelled' ? 'was stopped' : 'failed'}${failedStep.error ? `: ${failedStep.error}` : ''}` : null,
-    view.resultSummary ? `The run's own reason: ${view.resultSummary}` : null,
-    lastRoute ? `Last review: ${lastRoute.total}/100 (round ${lastRoute.round ?? '?'})${lastRoute.reason ? `, because of ${lastRoute.reason}` : ''}` : null,
+    failedStep ? `${label(failedStep.name)} ${failedStep.status === 'cancelled' ? 'was stopped' : 'failed'}${err ? `: ${err}` : ''}` : null,
+    own ? `The run's own reason: ${own}` : null,
+    lastRoute ? `Last review: ${lastRoute.total}/100 (round ${lastRoute.round != null ? lastRoute.round + 1 : '?'})${lastRoute.reason ? `, because of ${lastRoute.reason}` : ''}` : null,
     ...warnings.map((w) => `Warning: ${w}`)
   ].filter((x): x is string => Boolean(x))
   return (

@@ -118,7 +118,7 @@ export function PipelineTracker({ view, hidePromo = false, hideDesigner = false,
                 <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Review rounds">
                   {rounds.map((r) => (
                     <li key={r.seq} className="animate-fade rounded-full bg-ink/[0.05] px-2.5 py-0.5 text-xs text-ink-2 tabular-nums">
-                      Round {r.round ?? '?'}: {r.total}/100 → {r.sendTo === 'human' || r.action === 'await_human' ? 'you' : r.sendTo ?? 'next'}
+                      Round {r.round != null ? r.round + 1 : '?'}: {r.total}/100 → {r.sendTo === 'human' || r.action === 'await_human' ? 'you' : r.sendTo ?? 'next'}
                     </li>
                   ))}
                 </ul>

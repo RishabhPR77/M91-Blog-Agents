@@ -65,7 +65,9 @@ export function fakeAi(answers = {}, { model = 'gemini-2.5-flash' } = {}) {
   const requests = []
   const attempts = {}
   const fn = async (opts) => {
-    const call = opts.threadId.match(/-(new|revise|repair)-[a-z0-9]{4}$/)?.[1] ?? 'unknown'
+    // The call name the Writer sends; a repair continues the thread of the answer it repairs, so the thread id alone
+    // does not say which call it is.
+    const call = opts.call ?? opts.threadId.match(/-(new|revise|repair)-[a-z0-9]{4}$/)?.[1] ?? 'unknown'
     attempts[call] = (attempts[call] ?? 0) + 1
     requests.push({ call, ...opts })
     let a = answers[call] ?? draftAnswer()

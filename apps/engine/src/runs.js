@@ -299,7 +299,7 @@ export function createRunManager({ config = getConfig(), storeFactory, notifierF
     await queue
     unsubscribe()
     // Logged before the terminal event: run.finished / run.failed / run.cancelled must stay the run's last event.
-    if (mem0) log.info('run Mem0 calls', { runId, mode, ...mem0, requests: mem0Requests(mem0) })
+    if (mem0) log.info('run memory calls', { runId, mode, ...mem0, requests: mem0Requests(mem0) })
     emit(type, { message: run.result_summary, data: { status: run.status, ms: run.ms, brief_id: run.brief_id, ...(mem0 && { mem0: { ...mem0, requests: mem0Requests(mem0) } }) } })
     if (result.status === 'cancelled') {
       try {

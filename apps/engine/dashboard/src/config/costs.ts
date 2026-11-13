@@ -44,7 +44,7 @@ export const COSTS = {
   unpublish: { normal: '0', lowCost: '0', mem0: '≈10', note: 'no AI: rebuild without the post and deploy' },
   // Phase 11: the Markdown export is code too (export_save: the final export, record and file).
   export: { normal: '0', lowCost: '0', mem0: '≈0–4', note: 'no AI: builds the Markdown file; nothing saved' },
-  export_save: { normal: '0', lowCost: '0', mem0: '≈4–6', note: 'no AI: the final export (Mem0 record and file)' },
+  export_save: { normal: '0', lowCost: '0', mem0: '≈4–6', note: 'no AI: the final export (memory record and file)' },
   set_index: { normal: '0', lowCost: '0', mem0: '≈10', note: 'no AI: switch noindex, rebuild and deploy' }
 } satisfies Record<string, Estimate>
 
