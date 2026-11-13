@@ -250,3 +250,14 @@ test('Phase 12 sentence and paragraph limits: the details name the sentences; th
   assert.equal(get(p, 'paragraph_length').passed, true)
   assert.equal(get(run(GOOD), 'reading_post_hard').detail, 'hard limit grade 8', 'READING_GRADE_POST_MAX=7 plus margin 1: the hard limit is 8')
 })
+
+test('answer_first: only question H2s; FAQ, checklist and "What to do next" have no such opening; the detail says the rule', () => {
+  const longOpening = 'A ringing phone gets attention. It is loud. A chat can wait.'
+  const md = GOOD.replace('A ringing phone gets attention fast. A chat message can wait unread for hours.', longOpening)
+    + '\n\n## Agent approval checklist\n\n- [ ] Pick who answers.\n- [ ] Send a test alert.\n\n## Frequently Asked Questions\n\n### Does it ring silent phones?\n\nYes, through silent mode.\n'
+  const r = get(run(md), 'answer_first')
+  assert.equal(r.passed, false)
+  assert.equal(r.value, 1, 'only the question H2 with three opening sentences')
+  assert.match(r.detail, /^open each question H2 with a paragraph of one or two sentences that answers it, before any list, table or longer paragraph: ".+\?" \(first paragraph has 3 sentences\)$/)
+  assert.ok(!/checklist|Frequently Asked Questions/.test(r.detail))
+})

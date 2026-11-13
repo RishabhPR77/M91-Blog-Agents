@@ -256,14 +256,18 @@ export function runContentChecks({ draft, brief, config, allowedUrls, snippets =
   const paraMax = c.paragraphMaxSentences ?? 3
   const longParas = allParas.filter((x) => sentenceCount(x) > paraMax)
   R('paragraph_length', longParas.length === 0, 'hard', longParas.length, longParas.length ? `${longParas.length} paragraph(s) over ${paraMax} sentences: ${longParas.slice(0, 2).map((x) => `"${x.split(/\s+/).slice(0, 8).join(' ')}…"`).join(' | ')}` : `every paragraph at most ${paraMax} sentences`)
+  // Question H2s open with one or two sentences that answer them, as the Reviewer's checklist says. The FAQ, a
+  // checklist and "What to do next" have no such opening (before, code flagged them and the Reviewer took points off
+  // for a rule its own checklist does not have). The detail says the rule and each section's count, so the Writer's
+  // polish can fix exactly that.
+  const NO_OPENING = /what to do next|frequently asked questions|\bfaq\b|checklist$/i
   const answerFails = p.sections
-    .filter((s) => !/what to do next/i.test(s.heading))
-    .filter((s) => {
-      const first = paragraphsOf(s.lines)[0]
-      return !first || sentenceCount(first) > 2
-    })
-    .map((s) => s.heading)
-  R('answer_first', answerFails.length === 0, 'soft', answerFails.length, answerFails.length ? `sections without a short answer first: ${answerFails.slice(0, 3).join(' | ')}` : 'ok')
+    .filter((s) => /\?\s*$/.test(s.heading) && !NO_OPENING.test(s.heading.trim()))
+    .map((s) => ({ heading: s.heading, first: paragraphsOf(s.lines)[0] }))
+    .filter((x) => !x.first || sentenceCount(x.first) > 2)
+  R('answer_first', answerFails.length === 0, 'soft', answerFails.length, answerFails.length
+    ? `open each question H2 with a paragraph of one or two sentences that answers it, before any list, table or longer paragraph: ${answerFails.slice(0, 5).map((x) => `"${x.heading}" (${x.first ? `first paragraph has ${sentenceCount(x.first)} sentences` : 'opens with no paragraph'})`).join(' | ')}`
+    : 'ok')
 
   // Links
   const linkUrls = [...new Set(p.links.map((l) => l.url))]
