@@ -48,3 +48,19 @@ test('a short post is sent as before: whole brief, every check', async () => {
   assert.ok(message.includes(`--- BRIEF ---\n${JSON.stringify({ ...brief, post_type: 'guide', tutorial: { use: false } })}`))
   assert.ok(!message.includes('--- TUTORIAL ---'))
 })
+
+test('a compact CHECK RESULTS keeps the reading grades and the word count, passed or not', async () => {
+  const config = fakeConfig()
+  const results = [
+    { id: 'reading_post', passed: true, severity: 'soft', value: 6.7, detail: 'target grade 8' },
+    { id: 'reading_intro', passed: true, severity: 'hard', value: 5.9, detail: 'hard limit grade 9' },
+    { id: 'words_target', passed: false, severity: 'soft', value: 2913, detail: 'target 1800–2500' },
+    { id: 'sentence_hard', passed: false, severity: 'hard', value: 2, detail: 'two sentences over 25 words' },
+    { id: 'cta_exact', passed: true, severity: 'hard', value: 1, detail: 'ok' }
+  ]
+  const { sections } = await buildReviewerSections({ store: memoryStore(), config, draft: { title: 'T', post_markdown: '# T', checks: { results } }, brief: { ...brief, post_type: 'guide', tutorial: { use: false } }, facts: null })
+  const compact = JSON.parse(sections.checksCompact)
+  assert.deepEqual(compact.measured.map((r) => [r.id, r.value]), [['reading_post', 6.7], ['reading_intro', 5.9], ['words_target', 2913], ['sentence_hard', 2]])
+  assert.deepEqual(compact.failed, [])
+  assert.equal(compact.passed_others, 1)
+})

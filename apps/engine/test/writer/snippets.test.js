@@ -67,6 +67,11 @@ test('language: fence tag first, then a guess', () => {
   assert.equal(snippetLanguage('', 'npx skills add x'), 'bash')
   assert.equal(snippetLanguage('', 'from m91 import ring'), 'python')
   assert.equal(snippetLanguage('', 'const a = await ring()'), 'js')
+  // TypeScript is labelled TypeScript, also when the docs tag it js (it does not run as JavaScript).
+  assert.equal(snippetLanguage('ts', 'let a = 1'), 'ts')
+  assert.equal(snippetLanguage('js', 'const key = process.env.M91_KEY!;'), 'ts')
+  assert.equal(snippetLanguage('', 'function ring(text: string) {}'), 'ts')
+  assert.equal(snippetLanguage('javascript', 'if (!ok && a !== b) stop()'), 'js')
   assert.equal(snippetLanguage('', 'just words'), 'text')
   assert.equal(normaliseCode('\n   a  \n     b\n\n'), 'a\n  b')
 })

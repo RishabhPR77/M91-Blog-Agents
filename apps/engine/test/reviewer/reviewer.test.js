@@ -244,10 +244,10 @@ test('message guard: the source pack is trimmed first to stay under 50,000 chara
 
 test('the Reviewer prompt uses PASS_AREA_MIN for the publishing minimum and for "must" items', () => {
   const p6 = buildReviewerPrompt(cfg)
-  assert.ok(p6.includes('6 = acceptable minimum for publishing;'))
+  assert.ok(p6.includes('An area below 6 is below the minimum for publishing.'))
   assert.ok(p6.includes('if it causes a failed gate or an area below 6;'))
   const p7 = buildReviewerPrompt(config({ PASS_AREA_MIN: '7' }))
-  assert.ok(p7.includes('7 = acceptable minimum for publishing;') && p7.includes('an area below 7;'))
+  assert.ok(p7.includes('An area below 7 is below the minimum for publishing.') && p7.includes('an area below 7;'))
   assert.ok(!p6.includes('{{'), 'every placeholder filled')
 })
 
@@ -289,7 +289,7 @@ test('C4 prompt and schema: the new gate, the experience area and send_to "desig
   assert.ok(GATE_IDS.includes('no_new_facts_in_design') && AREA_IDS.includes('experience'))
   const p = buildReviewerPrompt(cfg)
   assert.match(p, /- no_new_facts_in_design: the text in GUIDE/)
-  assert.match(p, /- experience: each interactive part in GUIDE helps the reader/)
+  assert.match(p, /- experience \(if there is no GUIDE, score it like structure\): \(1\) each interactive part in GUIDE helps the reader/)
   assert.match(p, /"send_to": "designer" when only the GUIDE's own text/)
 })
 
@@ -336,4 +336,19 @@ test('C4 runReviewer: a guide adds a GUIDE section after POST (designer text onl
   restore2()
   assert.ok(!/--- GUIDE ---/.test(p.ai.requests[0].message))
   assert.equal(p.store.byType('review')[0].payload.guide_reviewed, false)
+})
+
+test('areas are scored from five criteria each, 10 when all are met; the Writer gets the same checklists', async () => {
+  const { REVIEWER_AREAS } = await import('../../src/writer/prompts.js')
+  const p = buildReviewerPrompt(config({ EXPERIENCE_ENABLED: 'false' }))
+  assert.match(p, /start at 10 and take off 2 points for each criterion the post does not meet/)
+  assert.match(p, /A post that meets every criterion scores 10: give it\./)
+  assert.ok(!/nothing to improve/.test(p), 'the old anchors are gone')
+  const areas = p.split('\n').filter((l) => /^- [a-z_0-9]+[ :(]/.test(l) && /\(1\)/.test(l))
+  assert.equal(areas.length, 10)
+  for (const a of areas) assert.match(a, /\(1\).*\(2\).*\(3\).*\(4\).*\(5\)/, a.slice(0, 40))
+  assert.equal(REVIEWER_AREAS.split('\n').length, 10)
+  assert.match(REVIEWER_AREAS, /^- answers_question: \(1\) the first two sentences answer the main question directly/)
+  assert.match(REVIEWER_AREAS, /- simplicity \(judged for the reader BRIEF names, not a child\)/)
+  assert.match(REVIEWER_AREAS, /- to_the_point \(length inside the target is fine: judge waste, not length\)/)
 })

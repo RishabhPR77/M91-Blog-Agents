@@ -12,6 +12,9 @@ import { REVIEWER_PROMPT } from '../reviewer/prompts.js'
  */
 export const REVIEWER_GATES = REVIEWER_PROMPT.split('=== GATES (each must pass; give evidence) ===\n')[1].split('\n\n=== AREAS')[0].replace('{{design_gate}}', '').trim()
 
+/** The Reviewer's scored areas with their five criteria each, word for word (the scoring line left out). */
+export const REVIEWER_AREAS = REVIEWER_PROMPT.split('\n\n=== AREAS')[1].split('\n\n=== FEEDBACK')[0].split('\n').filter((l) => l.startsWith('- ')).join('\n').replace('{{design_area}}', '')
+
 export const WRITER_BASE = `You are the Writer for M91's blog.
 M91 (by MSG91) rings a person's phone through silent mode when software, a workflow or an AI agent needs a human: one person takes responsibility, approves or rejects, and the answer returns to the software.
 
@@ -22,7 +25,8 @@ SOURCE TEXT holds the text of the outside pages BRIEF cites. The Reviewer opens 
 TO THE POINT
 - Answer the reader's question directly and stop. No catchy hooks, no clever or dramatic openings, no rhetorical questions to open, no filler, no padding.
 - Every sentence must help the reader understand or do something. If a sentence does neither, delete it.
-- Length: aim for {{words_min}}–{{words_max}} words of prose (code and tables not counted), using only what the inputs support (SOURCE TEXT, M91 FACTS, BRIEF, CODE SNIPPETS): steps, examples in words, what to check, what goes wrong, the FAQ. If the inputs support less, write less: a shorter post where every sentence is supported beats a longer one with guesses. Never pad, never repeat a point, never add a detail the inputs do not give.
+- Length: aim for about {{words_min}}–{{words_aim}} words of prose (code and tables not counted), never more than {{words_max}}, using only what the inputs support (SOURCE TEXT, M91 FACTS, BRIEF, CODE SNIPPETS): steps, examples in words, what to check, what goes wrong, the FAQ. If the inputs support less, write less: a shorter post where every sentence is supported beats a longer one with guesses. Never pad, never add a detail the inputs do not give.
+- Make each point once. Never restate a rule, a warning or a gap you already gave: refer back to it in a few words.
 - One question per section. Every paragraph must help answer that section's question: no history, background or side topics unless the brief asks for them.
 - The answer comes in the first 2 sentences of the post and in the first 2 sentences of every section.
 - No warm-up openings such as "In this article", "In today's world", "Let's dive in" or "Have you ever".
@@ -91,8 +95,9 @@ TONE
 === WHAT THE REVIEWER CHECKS ===
 After you, a strict Reviewer reads the post with the same M91 FACTS and opens the source pages. It fails the post if ANY of these gates fails, whatever the score:
 {{reviewer_gates}}
-It also scores accuracy: every claim precise and supported by its source, nothing overstated.
-Before you answer, check every sentence against each gate. Rewrite or remove any sentence that would fail one.
+Then it scores ten areas, each from five criteria: 10 when the post meets all five, 2 points off for each one missed. A post that meets every criterion scores close to 100:
+{{reviewer_areas}}
+Before you answer, check the post against every gate and every criterion. Rewrite or remove any sentence that would fail a gate or miss a criterion.
 
 === CONTEXT (for future revisions) ===
 Fill "context" honestly: a summary of at most 120 words, 3–7 key points, the H2 headings in order, the M91 facts you used, every URL you linked, the attribution line you used (or "none"), and any open issues (for example "the docs do not explain step X, so the post says so").
@@ -135,11 +140,17 @@ export function repairTail(previousAnswer, problems) {
 export const truncatedProblem = (maxWords) => `Your previous answer was cut off: return the same post, at most ${maxWords} words.`
 
 /** prompt = WRITER_BASE + blank line + the mode prompt, placeholders filled. */
+/** The middle of a word range, rounded to 50: what the Writer aims for. */
+export const wordsAim = (min, max) => Math.round((Number(min) + (Number(max) - Number(min)) / 2) / 50) * 50
+
 export function buildWriterPrompt(config, brief, mode, { previousContext = false, lessons = false } = {}) {
   const c = config.content
   const base = fill(WRITER_BASE, {
     words_min: brief.word_target?.min ?? c.targetWordsMin,
     words_max: brief.word_target?.max ?? c.targetWordsMax,
+    // Models overshoot a word range (2,577, 2,782 and 2,913 words against 2,500 on 2026-11-13): the Writer aims for
+    // the lower half, so the post lands inside the range without padding or repetition.
+    words_aim: wordsAim(brief.word_target?.min ?? c.targetWordsMin, brief.word_target?.max ?? c.targetWordsMax),
     intro_grade: brief.reading_level?.intro_max_grade ?? c.readingGradeIntroMax,
     post_grade: brief.reading_level?.post_max_grade ?? c.readingGradePostMax,
     sentence_max: c.sentenceMaxWords ?? 20,
@@ -149,7 +160,8 @@ export function buildWriterPrompt(config, brief, mode, { previousContext = false
     cta_url: config.m91.ctaUrl ?? brief.cta?.url ?? '',
     keyword: brief.keyword ?? '',
     banned_phrases: BANNED_PHRASES.map((p) => `"${p}"`).join(', '),
-    reviewer_gates: REVIEWER_GATES
+    reviewer_gates: REVIEWER_GATES,
+    reviewer_areas: REVIEWER_AREAS
   })
   const task = mode === 'revise' ? REVISE : fill(NEW, { previous_context_rule: previousContext ? PREVIOUS_CONTEXT_RULE : '' })
   return `${base}\n\n${task}${lessons ? `\n${LESSONS_LINE}` : ''}`

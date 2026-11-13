@@ -86,7 +86,9 @@ export async function buildReviewerSections({ store, config, draft, brief, facts
     // checks (the passed ones counted).
     briefCompact: JSON.stringify({ ...briefRules(brief), questions: brief.questions ?? [] }),
     checks: JSON.stringify(results),
-    checksCompact: JSON.stringify({ failed: results.filter((r) => !r.passed), passed: results.filter((r) => r.passed).length }),
+    // Always with the measurements the Reviewer scores by (reading grades, word count), passed or not: a compact
+    // list of failed checks only left out a good reading grade and cost the post simplicity points.
+    checksCompact: JSON.stringify({ measured: results.filter((r) => MEASURED.test(r.id)).map(({ id, passed, value, detail }) => ({ id, passed, value, detail })), failed: results.filter((r) => !r.passed && !MEASURED.test(r.id)), passed_others: results.filter((r) => r.passed && !MEASURED.test(r.id)).length }),
     facts: facts ? factSheet(facts) : '(no current m91_facts record: treat every M91 claim as unverified)',
     allowedUrls: allowed.list.join('\n'),
     story: brief.story?.use ? JSON.stringify(story ?? brief.story) : null,
@@ -111,6 +113,8 @@ export async function buildReviewerSections({ store, config, draft, brief, facts
  * the source pack, the story record, the integrations list. Returns { message, trimmed[] }.
  */
 const TONE_KEEP = 1500
+// The checks the Reviewer scores by, kept in a compact CHECK RESULTS.
+const MEASURED = /^(reading_|words_target$|sentence_)/
 const SOURCE_TEXT_KEEP = 6000
 
 export function buildReviewerMessage(s, tail = '', max = MESSAGE_MAX) {
@@ -122,7 +126,7 @@ export function buildReviewerMessage(s, tail = '', max = MESSAGE_MAX) {
   const build = () => [...order.filter(([k]) => sec[k]).map(([k, label]) => `--- ${label} ---\n${sec[k]}`), ...(tail ? [tail] : [])].join('\n')
   const trimmed = []
   let message = build()
-  for (const [key, compact, what] of [['brief', 'briefCompact', 'brief (the fields the Reviewer judges by)'], ['checks', 'checksCompact', 'check results (failed checks only)']]) {
+  for (const [key, compact, what] of [['brief', 'briefCompact', 'brief (the fields the Reviewer judges by)'], ['checks', 'checksCompact', 'check results (measurements and failed checks)']]) {
     if (message.length <= max || !sec[compact] || sec[compact].length >= (sec[key]?.length ?? 0)) continue
     sec[key] = sec[compact]
     trimmed.push(what)

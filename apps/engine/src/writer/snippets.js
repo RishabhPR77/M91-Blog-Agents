@@ -11,15 +11,21 @@ const CODE_FILE = /\.(sh|bash|zsh|js|mjs|cjs|ts|py|json|ya?ml|toml)$/i
 const LANG_ALIASES = {
   bash: 'bash', sh: 'bash', shell: 'bash', zsh: 'bash', console: 'bash', terminal: 'bash', curl: 'bash',
   json: 'json', jsonc: 'json',
-  js: 'js', javascript: 'js', node: 'js', mjs: 'js', cjs: 'js', ts: 'js', typescript: 'js',
+  js: 'js', javascript: 'js', node: 'js', mjs: 'js', cjs: 'js', ts: 'ts', typescript: 'ts', tsx: 'ts',
   py: 'python', python: 'python', python3: 'python',
   text: 'text', txt: 'text', plain: 'text', plaintext: 'text'
 }
 
 /** bash | json | js | python | text, from a fence tag or file extension, else guessed from the code. */
+// TypeScript-only syntax: a non-null assertion (x!.y), a type annotation, an interface or type alias, "as const".
+// A block labelled JavaScript that has any of these is TypeScript (a reviewer found such a block marked
+// JavaScript, which does not run as JavaScript).
+const TS_SYNTAX = /\binterface\s+\w+\s*\{|\btype\s+\w+\s*=|[\w)]\s*:\s*(string|number|boolean|unknown|any|void|never|Promise<)|\bas const\b|[\w\])]!(?=[.;),\s])/
+
 export function snippetLanguage(tag, code) {
   const t = String(tag ?? '').toLowerCase().replace(/^\./, '')
-  if (LANG_ALIASES[t]) return LANG_ALIASES[t]
+  const js = (lang) => (lang === 'js' && TS_SYNTAX.test(String(code ?? '')) ? 'ts' : lang)
+  if (LANG_ALIASES[t]) return js(LANG_ALIASES[t])
   if (/^ya?ml$|^toml$/.test(t)) return 'text'
   const s = String(code ?? '').trim()
   if (/^[[{]/.test(s)) {
@@ -30,7 +36,7 @@ export function snippetLanguage(tag, code) {
   }
   if (/^(#!\/bin\/|\$ |curl\b|npm\b|npx\b|node\b|export\b|\.\/|cd\b|git\b|pip\b|brew\b)/m.test(s)) return 'bash'
   if (/^\s*(import \w|from \w+ import|def \w+\(|print\()/m.test(s)) return 'python'
-  if (/\b(const|let|function|await|require\()\b|=>/.test(s)) return 'js'
+  if (/\b(const|let|function|await|require\()\b|=>/.test(s)) return js('js')
   return 'text'
 }
 
