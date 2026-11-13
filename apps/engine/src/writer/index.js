@@ -214,6 +214,11 @@ export async function runWriter(params = {}, deps = {}) {
   // The only code a post may show: blocks extracted from the tutorial source or the cited docs pages.
   const snippetSource = isTutorial ? tutorialText : await citedDocsSourceText(brief, { config, fetch: deps.fetch, warnings })
   const { snippets, text: tokenisedSource } = extractSnippets(snippetSource)
+  // A tutorial gets only its step pages as TUTORIAL SOURCE TEXT; the M91 docs pages the brief cites besides them (the
+  // ones its M91 facts come from) go in M91 DOCS TEXT, as for any post. A tutorial once said M91 POSTs exactly twice:
+  // the page that says "for each answer" was not among its steps.
+  const tutorialUrls = isTutorial ? (brief.tutorial?.steps ?? []).map((s) => s.source_url).filter(Boolean) : []
+  const otherDocs = isTutorial ? extractSnippets(await citedDocsSourceText(brief, { config, fetch: deps.fetch, warnings: [] })).text.replace(/\[\[SNIPPET:S\d+(?::L\d+-L\d+)?\]\]/g, '(code example left out)') : ''
   const allowed = allowedUrlSet(brief, { sourcePack: params.sourcePack, ctaUrl: config.m91.ctaUrl, snippets, config })
   // The text of the outside pages the brief cites: the Reviewer opens the same pages to check the post.
   const sourceText = await citedSourceText(brief, { config, fetch: deps.fetch, warnings, extra: mode === 'revise' ? supportedSources(params.sourcePack).map((r) => ({ url: r.url, what: r.claim })) : [] })
@@ -231,7 +236,9 @@ export async function runWriter(params = {}, deps = {}) {
     m91Facts: facts ? factSheet(facts) : null,
     sourceText: sourceText.text || null,
     // M91's own docs pages the brief cites, the parts about this post (a tutorial has them whole as TUTORIAL SOURCE TEXT).
-    docsText: isTutorial ? null : docsTextFor(tokenisedSource, briefHints(brief)) || null,
+    // A tutorial: the cited docs pages that are not among its steps (the callback fields page, say). Their code is not
+    // in CODE SNIPPETS, so it is left out here.
+    docsText: (isTutorial ? docsTextFor(otherDocs, briefHints(brief), undefined, { skip: tutorialUrls }) : docsTextFor(tokenisedSource, briefHints(brief))) || null,
     tone: tone.text,
     lessons: lessons.length ? lessons.map((l) => `- ${l}`).join('\n') : null,
     allowedUrls: allowed.list.map((u) => `- ${u}`).join('\n'),

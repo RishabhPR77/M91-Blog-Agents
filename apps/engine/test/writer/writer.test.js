@@ -501,3 +501,18 @@ test('Phase 12 Writer prompt: one question per section, the answer first, no war
   assert.match(p, /point to that guide in one sentence instead of explaining the concept again/)
   assert.match(p, /"terms_to_define"/)
 })
+
+test('tutorial: the M91 docs pages the brief cites besides its steps reach the Writer as M91 DOCS TEXT (code left out)', async () => {
+  const restore = quiet()
+  // The brief's M91 fact comes from the docs index (llms.txt), which is not one of the tutorial's steps.
+  const fetch = async (url) => (url === LLMS
+    ? { ok: true, status: 200, headers: { get: () => 'text/markdown' }, text: async () => '# M91\nCallbacks: M91 POSTs an answered event for each answer and a closed event when the alert closes.\n\n```bash\ncurl -X POST https://example.com/hook\n```\n' }
+    : tutorialFetch(url))
+  const s = await setup({ briefOver: tutorialBrief, fetch, answers: { new: draftAnswer({ post_markdown: tutorialPost('[[SNIPPET:S2]]') }) } })
+  await s.run()
+  restore()
+  const msg = s.ai.requests[0].message
+  assert.match(msg, /--- M91 DOCS TEXT ---\n=== SOURCE: https:\/\/m91\.msg91\.com\/llms\.txt ===\n# M91\nCallbacks: M91 POSTs an answered event for each answer and a closed event when the alert closes\.\n\(code example left out\)/)
+  const docs = msg.split('--- M91 DOCS TEXT ---\n')[1].split('\n--- ')[0]
+  assert.ok(!docs.includes('=== SOURCE: https://github.com/MSG91/m91-skill'), 'the step pages are in TUTORIAL SOURCE TEXT, not again here')
+})

@@ -81,7 +81,11 @@ export async function runReviewer(params = {}, deps = {}) {
   const sourceText = await citedSourceText(brief, { config, fetch: deps.fetch, warnings: pageWarnings, extra: supportedSources(sourcePack).map((r) => ({ url: r.url, what: r.claim })) })
   // M91's own docs pages the post relies on, the same parts the Writer had.
   const isTutorial = brief.post_type === 'tutorial' || brief.tutorial?.use === true
-  const docsRaw = isTutorial ? await tutorialSourceText(brief, { config, fetch: deps.fetch, warnings: [] }) : await citedDocsSourceText(brief, { config, fetch: deps.fetch, warnings: [] })
+  // A tutorial: its step pages and the other docs pages the brief cites (each once).
+  const docsRaw = [
+    ...(isTutorial ? [await tutorialSourceText(brief, { config, fetch: deps.fetch, warnings: [] })] : []),
+    await citedDocsSourceText(brief, { config, fetch: deps.fetch, warnings: [] })
+  ].join('\n')
   const docsText = docsTextFor(extractSnippets(docsRaw).text, briefHints(brief))
   const { sections, allowed } = await buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets: draft.snippets ?? [], guide, sourceText: sourceText.text, docsText })
   const prompt = buildReviewerPrompt(config)

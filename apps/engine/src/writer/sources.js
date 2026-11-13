@@ -128,8 +128,15 @@ export const briefHints = (brief) => [brief?.keyword, ...(brief?.supporting_keyw
  * tokens), each cut to its parts about the post. The Writer used to get M91's docs only as the short fact sheet and
  * guessed the API's details (how many callbacks, when it polls); the Reviewer knew them.
  */
-export function docsTextFor(text, hints, max = DOCS_TEXT_MAX) {
-  const pages = String(text ?? '').split(/^(?==== SOURCE: )/m).map((p) => p.trim()).filter((p) => p.startsWith('=== SOURCE: '))
+export function docsTextFor(text, hints, max = DOCS_TEXT_MAX, { skip = [] } = {}) {
+  // Each page once (a tutorial's step pages and the brief's cited pages can overlap).
+  const seen = new Set()
+  const pages = String(text ?? '').split(/^(?==== SOURCE: )/m).map((p) => p.trim()).filter((p) => {
+    const head = p.split('\n')[0]
+    if (!head.startsWith('=== SOURCE: ') || seen.has(head) || skip.some((u) => head === `=== SOURCE: ${u} ===`)) return false
+    seen.add(head)
+    return true
+  })
   if (!pages.length) return ''
   const per = Math.floor(max / pages.length)
   return pages.map((p) => {
