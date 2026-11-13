@@ -62,7 +62,7 @@ export async function loadFacts(store) {
   return recs[0]?.payload ?? null
 }
 
-/** The M91 FACTS section: what M91 can do, cannot do, and works with. The Reviewer fails any M91 claim not in it. */
+/** The M91 FACTS section: what M91 can do, cannot do, and works with. The Writer and the Reviewer get the same one. */
 export const factSheet = (facts) => JSON.stringify({ can: facts.can ?? [], cannot: facts.cannot ?? [], integrations: facts.integrations ?? [] })
 
 export async function toneSection(store, brief, config) {

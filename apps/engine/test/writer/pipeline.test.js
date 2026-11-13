@@ -188,7 +188,7 @@ test('the real Reviewer in the loop (DRY_RUN): fail with a quoted "must" item �
   assert.match(writerAi.requests.filter((q) => q.agent === 'writer')[1].message, /--- FEEDBACK ---\n\[\{"source":"reviewer","area":"simplicity","quote":"A ringing phone gets attention fast\."/)
   const reviewSteps = r.run.steps.filter((x) => x.name === 'reviewer')
   assert.match(reviewSteps[0].summary, /^Score \d+(\.\d)?\/100 · fail · no_invented_content, simplicity 5 → writer$/)
-  assert.match(reviewSteps[1].summary, /^Score 90\/100 · pass · gates 11\/11 · 0 should-fix items$/)
+  assert.match(reviewSteps[1].summary, /^Score 90\/100 · pass · gates 8\/8 · 0 should-fix items$/)
   const events = replay(run_id)
   const routes = events.filter((e) => e.type === 'loop.route').map((e) => e.data.action)
   assert.deepEqual(routes, ['revise', 'approve'])

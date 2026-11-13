@@ -57,7 +57,7 @@ test('pass rule edges: 79.9 fails, 80.0 passes (PASS_SCORE_MIN=80, Phase 9); 84.
   const contradicted = decide(reviewAnswer({ sources: [{ url: 'https://m91.msg91.com/llms.txt', claim: 'rings until answered', verdict: 'contradicts' }] }), ctx())
   assert.equal(contradicted.gates.find((x) => x.id === 'sources_contradicted').passed, false)
   assert.equal(contradicted.pass, false)
-  assert.equal(contradicted.gates.length, 11, '9 AI gates (Phase 10: no_new_facts_in_design) + 2 code gates')
+  assert.equal(contradicted.gates.length, 8, '6 AI gates (5, plus Phase 10 no_new_facts_in_design) + 2 code gates')
 })
 
 test('consistency rules: a fail with no "must" item gets generic ones; a pass with "must" items downgrades them', () => {
@@ -71,7 +71,7 @@ test('consistency rules: a fail with no "must" item gets generic ones; a pass wi
   const passWithMust = decide(reviewAnswer({ feedback: [item({ severity: 'must' })] }), ctx())
   assert.equal(passWithMust.pass, true)
   assert.deepEqual(passWithMust.feedback.map((f) => f.severity), ['should'])
-  assert.match(reviewSummaryLine(passWithMust), /^Score 90\/100 · pass · gates 11\/11 · 1 should-fix item$/)
+  assert.match(reviewSummaryLine(passWithMust), /^Score 90\/100 · pass · gates 8\/8 · 1 should-fix item$/)
   assert.match(reviewSummaryLine(failNoMust), /^Score \d+(\.\d)?\/100 · fail · simplicity 5 → writer$/)
 })
 
@@ -172,7 +172,7 @@ test('runReviewer: one call on a fresh reviewer thread, inputs in B3 order, revi
   assert.match(allowedSection, /- https:\/\/m91\.msg91\.com\/ \(M91's main site/)
   assert.equal(r.pass, true)
   assert.equal(r.total, 90)
-  assert.equal(r.gates.length, 11)
+  assert.equal(r.gates.length, 8)
   const rec = s.store.byType('review')[0]
   assert.equal(rec.status, 'pass')
   assert.deepEqual([rec.metadata.brief_version, rec.metadata.pass, rec.metadata.total, rec.version], [1, true, 90, 1])

@@ -68,7 +68,6 @@ Topic groups:
 === RULES ===
 - Never invent facts, numbers, quotes, stories, customers, URLs or ids.
 - Never plan a section that needs facts, statistics, case studies or customer names the inputs do not contain.
-- Never plan a section or step that needs an M91 behaviour M91 FACTS does not state (for example what a call returns on a timeout, or how to tell a rejection from a timeout). The Reviewer fails any M91 claim not in M91 FACTS. Plan only what M91 FACTS state; put each gap in notes_for_writer as "the docs do not cover <gap>: say so, do not fill it".
 - Word target: {{words_min}}–{{words_max}} words; to the point, no padding. Reading level: intro and TL;DR at most grade {{intro_grade}}, whole post at most grade {{post_grade}}.
 {{lessons_rule}}
 

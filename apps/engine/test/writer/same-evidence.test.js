@@ -51,6 +51,8 @@ test('the Writer gets M91 FACTS: the fact sheet the Reviewer checks against, wit
   }
   const { message, prompt } = ai.requests[0]
   assert.match(message, /--- M91 FACTS ---\n\{"can":\["Rings a phone until someone answers\."\],"cannot":\["M91 does not run the approved action\."\],"integrations":\["Slack"\]\}/)
-  assert.match(prompt, /Facts about M91 only from BRIEF m91_facts_to_use and M91 FACTS/)
+  assert.match(prompt, /Facts about M91 only from the inputs: BRIEF m91_facts_to_use, M91 FACTS/)
+  assert.match(prompt, /=== WHAT THE REVIEWER CHECKS ===\n[^\n]+\nA gate fails only for a problem that would mislead or misinform a reader\.[^\n]*\n- m91_claims_correct: /, 'the Writer checks its post against the Reviewer gates')
+  assert.ok(!/claims_to_avoid_respected|tutorial_traceable|story_attribution_correct/.test(prompt), 'only the five gates')
   assert.match(prompt, /after it, the docs say/)
 })

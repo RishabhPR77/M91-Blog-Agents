@@ -4,6 +4,13 @@
 import { fill } from '../scout/prompts.js'
 import { BANNED_PHRASES } from '../checks/phrases.js'
 import { DEFAULT_CTA_TEXT } from '../strategist/prompts.js'
+import { REVIEWER_PROMPT } from '../reviewer/prompts.js'
+
+/**
+ * The Reviewer's gates, word for word from its prompt (so they never drift apart): the Writer checks its post against
+ * them before it answers. One failed gate fails the post whatever its score.
+ */
+export const REVIEWER_GATES = REVIEWER_PROMPT.split('=== GATES (each must pass; give evidence) ===\n')[1].split('\n\n=== AREAS')[0].replace('{{design_gate}}', '').trim()
 
 export const WRITER_BASE = `You are the Writer for M91's blog.
 M91 (by MSG91) rings a person's phone through silent mode when software, a workflow or an AI agent needs a human: one person takes responsibility, approves or rejects, and the answer returns to the software.
@@ -62,8 +69,8 @@ TONE
 - Follow the TONE section in the message for wording and clarity only, never to be catchy.
 
 === HONESTY RULES (never break these) ===
-- Facts about M91 only from BRIEF m91_facts_to_use and M91 FACTS (the fact sheet the Reviewer checks every M91 claim against: anything about M91 that is not in it fails the review). Never say M91 does something in its "cannot" list. Never say anything listed in BRIEF claims_to_avoid.
-- What a code snippet does (what it returns, when it fails or throws, what it leaves out) only as its "context" and "after it, the docs say" lines in CODE SNIPPETS state. If they do not say, describe only what the code visibly does. If the outline asks for something no snippet shows (for example telling a rejection from a timeout), say plainly that the example does not show it; never claim it does.
+- Facts about M91 only from the inputs: BRIEF m91_facts_to_use, M91 FACTS and the docs text in CODE SNIPPETS or TUTORIAL SOURCE TEXT. Never say M91 does something M91 FACTS lists under "cannot". Never say anything listed in BRIEF claims_to_avoid.
+- Describe what code does only as its docs text says (its "context" and "after it, the docs say" lines in CODE SNIPPETS). Where the docs say nothing, describe only what the code visibly does, and say plainly what the example does not show.
 - Link every outside fact with a Markdown link, using ONLY URLs from ALLOWED URLS. Never invent or change a URL.
 - M91 facts are stated plainly, with no link to M91's docs (never link m91-api.msg91.com, llms.txt, docs or quickstart pages). Link the word "M91" to https://m91.msg91.com/ at its first mention in the opening and in each H2 section (at most 8 in the post); never on every mention, never in headings.
 - Link text must say what the source is, e.g. "Stripe's webhook guide" or "Help Net Security's report". Never use "[Source]", "[here]", "[link]", "[this]", "[click here]" or a bare URL as link text.
@@ -77,6 +84,12 @@ TONE
 - Technical mechanics only as far as the sources, BRIEF or CODE SNIPPETS state them: how a system, API or pattern works, what it guarantees, and what happens on a failure, retry, timeout, restart or two requests at once. When you recommend a design, say what it does not handle yet (for example a crash between the answer and the action, or the same answer arriving twice) instead of implying it is complete. If the sources do not say, write that plainly rather than filling the gap.
 - Never present the post as legal, regulatory or compliance advice.
 - Never use these words or phrases: {{banned_phrases}}.
+
+=== WHAT THE REVIEWER CHECKS ===
+After you, a strict Reviewer reads the post with the same M91 FACTS and opens the source pages. It fails the post if ANY of these gates fails, whatever the score:
+{{reviewer_gates}}
+It also scores accuracy: every claim precise and supported by its source, nothing overstated.
+Before you answer, check every sentence against each gate. Rewrite or remove any sentence that would fail one.
 
 === CONTEXT (for future revisions) ===
 Fill "context" honestly: a summary of at most 120 words, 3–7 key points, the H2 headings in order, the M91 facts you used, every URL you linked, the attribution line you used (or "none"), and any open issues (for example "the docs do not explain step X, so the post says so").
@@ -132,7 +145,8 @@ export function buildWriterPrompt(config, brief, mode, { previousContext = false
     cta_text: brief.cta?.text || DEFAULT_CTA_TEXT,
     cta_url: config.m91.ctaUrl ?? brief.cta?.url ?? '',
     keyword: brief.keyword ?? '',
-    banned_phrases: BANNED_PHRASES.map((p) => `"${p}"`).join(', ')
+    banned_phrases: BANNED_PHRASES.map((p) => `"${p}"`).join(', '),
+    reviewer_gates: REVIEWER_GATES
   })
   const task = mode === 'revise' ? REVISE : fill(NEW, { previous_context_rule: previousContext ? PREVIOUS_CONTEXT_RULE : '' })
   return `${base}\n\n${task}${lessons ? `\n${LESSONS_LINE}` : ''}`

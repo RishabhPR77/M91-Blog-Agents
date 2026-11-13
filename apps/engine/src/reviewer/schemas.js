@@ -3,7 +3,9 @@
 import Ajv from 'ajv'
 
 // Before Phase 10 (and whenever EXPERIENCE_ENABLED=false): no design gate, no experience area, no "designer" route.
-export const LEGACY_GATE_IDS = Object.freeze(['m91_claims_correct', 'claims_to_avoid_respected', 'no_invented_content', 'sources_support_claims', 'story_attribution_correct', 'tutorial_traceable', 'answers_main_question', 'no_legal_advice_framing'])
+// Five gates, each for a problem that would mislead a reader. claims_to_avoid_respected is part of m91_claims_correct
+// and story_attribution_correct of no_invented_content; tutorial_traceable went (code fails code that is not a snippet).
+export const LEGACY_GATE_IDS = Object.freeze(['m91_claims_correct', 'no_invented_content', 'sources_support_claims', 'answers_main_question', 'no_legal_advice_framing'])
 export const LEGACY_AREA_IDS = Object.freeze(['answers_question', 'simplicity', 'accuracy', 'seo', 'structure', 'tone', 'originality', 'ai_answer_readiness', 'to_the_point', 'm91_fit_cta'])
 export const GATE_IDS = Object.freeze([...LEGACY_GATE_IDS, 'no_new_facts_in_design'])
 export const AREA_IDS = Object.freeze([...LEGACY_AREA_IDS, 'experience'])
