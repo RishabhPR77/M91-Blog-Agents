@@ -2,7 +2,7 @@
 
 import { urlKey } from '../checks/content.js'
 import { MESSAGE_MAX } from '../scout/prompts.js'
-import { allowedUrlSet, supportedSources, toneSection, factSheet } from '../writer/inputs.js'
+import { allowedUrlSet, supportedSources, toneSection, factSheet, briefRules } from '../writer/inputs.js'
 import { draftVersion, draftBriefVersion, isEarlierDraft } from '../writer/save.js'
 import { guideForReviewer } from '../experience/review.js'
 import { docsLinkRule, M91_SITE_URL } from '../util/m91links.js'
@@ -82,11 +82,17 @@ export async function buildReviewerSections({ store, config, draft, brief, facts
     // Phase 10: the guide built from this draft (null: no guide; the post is reviewed as written).
     guide: guide ? JSON.stringify(guideForReviewer(guide)) : null,
     brief: JSON.stringify(brief),
+    // Used only when the message is too long (a long post): the brief fields the Reviewer judges by, and the failed
+    // checks (the passed ones counted).
+    briefCompact: JSON.stringify({ ...briefRules(brief), questions: brief.questions ?? [] }),
     checks: JSON.stringify(results),
+    checksCompact: JSON.stringify({ failed: results.filter((r) => !r.passed), passed: results.filter((r) => r.passed).length }),
     facts: facts ? factSheet(facts) : '(no current m91_facts record: treat every M91 claim as unverified)',
     allowedUrls: allowed.list.join('\n'),
     story: brief.story?.use ? JSON.stringify(story ?? brief.story) : null,
-    tutorial: isTutorial ? JSON.stringify({ tutorial: brief.tutorial, snippets: snippets.map(({ id, language, source_url, code }) => ({ id, language, source_url, code })) }) : null,
+    // Where each code block in the post comes from. The code itself is in POST (the tutorial's steps are in BRIEF):
+    // sending each snippet's whole source again, a long script included, pushed the message over 50,000 characters.
+    tutorial: isTutorial ? JSON.stringify({ code_in_post_from: snippets.map(({ id, language, source_url, code }) => ({ id, language, source_url, lines: String(code ?? '').split('\n').length })) }) : null,
     sourcePack: sourcePack ? JSON.stringify(sourcePack.claims ?? sourcePack.payload?.claims ?? sourcePack) : null,
     previousReview: previousReview ? JSON.stringify({
       feedback: (previousReview.feedback ?? []).map(({ area, quote, problem, fix, severity }) => ({ area, quote, problem, fix, severity })),
@@ -98,9 +104,12 @@ export async function buildReviewerSections({ store, config, draft, brief, facts
 }
 
 /**
- * Message in B3's order, under viaSocket's 50,000-character cap: the source pack, then the story
- * record, then the integrations list are trimmed first. Returns { message, trimmed[] }.
+ * Message in B3's order, under viaSocket's 50,000-character cap. POST is never cut. When too long, in this order:
+ * the brief down to the fields the Reviewer judges by, the check results down to the failed ones, the tone notes,
+ * the source pack, the story record, the integrations list. Returns { message, trimmed[] }.
  */
+const TONE_KEEP = 1500
+
 export function buildReviewerMessage(s, tail = '', max = MESSAGE_MAX) {
   const order = [
     ['post', 'POST'], ['guide', 'GUIDE'], ['brief', 'BRIEF'], ['checks', 'CHECK RESULTS'], ['facts', 'M91 FACTS'], ['allowedUrls', 'ALLOWED URLS'],
@@ -110,6 +119,17 @@ export function buildReviewerMessage(s, tail = '', max = MESSAGE_MAX) {
   const build = () => [...order.filter(([k]) => sec[k]).map(([k, label]) => `--- ${label} ---\n${sec[k]}`), ...(tail ? [tail] : [])].join('\n')
   const trimmed = []
   let message = build()
+  for (const [key, compact, what] of [['brief', 'briefCompact', 'brief (the fields the Reviewer judges by)'], ['checks', 'checksCompact', 'check results (failed checks only)']]) {
+    if (message.length <= max || !sec[compact] || sec[compact].length >= (sec[key]?.length ?? 0)) continue
+    sec[key] = sec[compact]
+    trimmed.push(what)
+    message = build()
+  }
+  if (message.length > max && sec.tone && sec.tone.length > TONE_KEEP) {
+    sec.tone = `${sec.tone.slice(0, TONE_KEEP)} …(trimmed)`
+    trimmed.push('tone notes')
+    message = build()
+  }
   for (const [key, what] of [['sourcePack', 'source pack'], ['story', 'story record']]) {
     if (message.length <= max || !sec[key]) continue
     sec[key] = sec[key].slice(0, Math.max(200, sec[key].length - (message.length - max) - 50)) + ' …(trimmed)'
