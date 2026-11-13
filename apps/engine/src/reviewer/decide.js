@@ -3,6 +3,7 @@
 
 import { majorProblems, minorProblems } from '../checks/content.js'
 import { reviewerIds } from './schemas.js'
+import { SOURCE_PAGES_MAX } from '../writer/sources.js'
 
 // Phase 10: experience (10) is new; structure and originality give 5 each (the guide now carries structure).
 // Before Phase 10, and whenever EXPERIENCE_ENABLED=false.
@@ -115,7 +116,8 @@ export function decide(answer, { markdown, checkResults = [], allowedUrls = null
   const sources = checked.filter((s) => !outside.includes(s))
   if (outside.length) warnings.push(`dropped ${outside.length} source check(s) of URL(s) outside ALLOWED URLS: ${outside.map((s) => `${s.url} (${s.verdict})`).join(', ')}`)
   const max = config.reviewer.maxSourceChecks
-  if (checked.length > max) warnings.push(`Reviewer checked ${checked.length} sources; REVIEWER_MAX_SOURCE_CHECKS is ${max}`)
+  // SOURCE TEXT pages count too (it judges every cited page): only far more than both is worth a note.
+  if (checked.length > max + SOURCE_PAGES_MAX) warnings.push(`Reviewer checked ${checked.length} sources; REVIEWER_MAX_SOURCE_CHECKS is ${max} (plus up to ${SOURCE_PAGES_MAX} pages in SOURCE TEXT)`)
 
   const gates = [...aiGates, ...codeGates({ checkResults, sourcesChecked: sources })]
   const total = computeTotal(areas, weightsFor(design))

@@ -188,12 +188,15 @@ export const fullBriefForWriter = (brief) => Object.fromEntries(Object.entries(b
  * SOURCE TEXT, then a full PREVIOUS DRAFT, then leaving out INTERACTIVE IDEAS, LESSONS and the last
  * sources of the SOURCE PACK. Returns { message, tutorialText, trimmed[] }.
  */
+/** Characters of SOURCE TEXT kept before other sections are left out. */
+export const SOURCE_TEXT_KEEP = 8000
+
 export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
   const order = [
     ['brief', 'BRIEF'], ['briefRules', 'BRIEF RULES'], ['m91Facts', 'M91 FACTS'], ['tone', 'TONE'], ['lessons', 'LESSONS'], ['allowedUrls', 'ALLOWED URLS'],
     ['internalLinks', 'INTERNAL LINKS'], ['interactiveIdeas', 'INTERACTIVE IDEAS'], ['tutorialText', 'TUTORIAL SOURCE TEXT'], ['snippets', 'CODE SNIPPETS'],
     ['previousContext', 'PREVIOUS CONTEXT'], ['previousDraft', 'PREVIOUS DRAFT'], ['feedback', 'FEEDBACK'],
-    ['excerpts', 'QUOTED EXCERPTS'], ['sourcePack', 'SOURCE PACK']
+    ['excerpts', 'QUOTED EXCERPTS'], ['sourcePack', 'SOURCE PACK'], ['sourceText', 'SOURCE TEXT']
   ]
   const sec = { ...s }
   const build = () => [...order.filter(([k]) => sec[k] !== undefined && sec[k] !== null && sec[k] !== '').map(([k, label]) => `--- ${label} ---\n${sec[k]}`), ...(tail ? [tail] : [])].join('\n')
@@ -218,6 +221,16 @@ export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
   }
   delete sec.previousContextFallback
   message = build()
+  // The source pages: cut from the end (the outline's links come last) down to SOURCE_TEXT_KEEP before anything else.
+  const cutSources = (keep) => {
+    if (message.length <= max || !sec.sourceText) return
+    const target = Math.max(keep, sec.sourceText.length - (message.length - max) - 50)
+    if (target >= sec.sourceText.length) return
+    sec.sourceText = target > 0 ? `${sec.sourceText.slice(0, target)} …(trimmed)` : null
+    if (!trimmed.includes('source pages')) trimmed.push('source pages')
+    message = build()
+  }
+  cutSources(SOURCE_TEXT_KEEP)
   // Still too long: the interactive ideas, then the lessons, and last a few sources (from the end of the pack). The
   // sources go last because they back the post's claims, which the Reviewer scores.
   for (const [key, label] of [['interactiveIdeas', 'interactive ideas'], ['lessons', 'lessons']]) {
@@ -244,6 +257,7 @@ export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
       if (pack.length < before) trimmed.push(`source pack (${before - pack.length} of ${before} sources left out)`)
     }
   }
+  cutSources(0)
   if (message.length > max) throw new WriterInputError(`Writer message is ${message.length} characters; viaSocket's limit is ${max}`)
   return { message, tutorialText: sec.tutorialText ?? '', trimmed }
 }

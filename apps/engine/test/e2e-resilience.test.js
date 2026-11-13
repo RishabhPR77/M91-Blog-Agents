@@ -40,7 +40,7 @@ async function e2e({ env = {}, strategist, writer = {}, reviews = [reviewAnswer(
   const requests = []
   const aiSend = async (opts) => {
     const agent = opts.agent ?? String(opts.threadId).split('-')[0]
-    requests.push({ agent, call: opts.call ?? null, threadId: opts.threadId, length: String(opts.message ?? '').length })
+    requests.push({ agent, call: opts.call ?? null, threadId: opts.threadId, length: String(opts.message ?? '').length, sourceText: /^--- SOURCE TEXT ---$/m.test(String(opts.message ?? '')) })
     return ai[agent](opts)
   }
   const manager = createRunManager({
@@ -90,6 +90,9 @@ test('every failure of 2026-11-13 at once: bad links, a story line not copied, a
   assert.ok(repair, w.map((q) => q.call).join(','))
   assert.equal(repair.threadId, w.find((q) => q.call === 'new').threadId)
   assert.ok(repair.length < 3000, `repair message ${repair.length} characters`)
+  // The Writer's first call and every review read the cited pages (SOURCE TEXT); a repair has them in its thread.
+  assert.ok(w.find((q) => q.call === 'new').sourceText, 'the Writer got SOURCE TEXT')
+  assert.ok(requests.filter((q) => q.agent === 'reviewer').every((q) => q.sourceText), 'every review got SOURCE TEXT')
   // Every message stayed under viaSocket's limit.
   for (const q of requests) assert.ok(q.length <= 50000, `${q.agent} ${q.call ?? ''}: ${q.length} characters`)
 })

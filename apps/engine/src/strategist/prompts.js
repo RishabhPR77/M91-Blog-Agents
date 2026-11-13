@@ -4,7 +4,10 @@ import { fill } from '../scout/prompts.js'
 
 export const STANDING_CLAIMS = Object.freeze([
   'Do not promise that silent-mode or Do Not Disturb interruption works identically on every phone or operating system.',
-  'Do not claim M91 executes the approved action; the originating software must act on the decision.'
+  'Do not claim M91 executes the approved action; the originating software must act on the decision.',
+  // M91's core rule: the reason a person is asked at all. A draft that told readers to go ahead after a timeout
+  // contradicted its own approval flow (R-261113-1207-HDEE).
+  'Do not tell readers that the software should go ahead after a rejection, a timeout or no answer; only an explicit approval lets it act.'
 ])
 
 export const DEFAULT_CTA_TEXT = 'Try M91: send your first alert in a few minutes.'
@@ -52,9 +55,10 @@ Topic groups:
 - "outline": {{outline_min}} to {{outline_max}} H2 sections. At least {{min_question_headings}} headings must be the real questions people ask, written as questions ending with "?". The main keyword appears in at least one H2. For a how-to, tutorial or checklist post, add a "<topic> checklist" section near the end (5–8 items the reader can tick). The last section before "What to do next" is "Frequently Asked Questions": its "points" are 6 to 10 real questions people ask about this topic, each one answered in the post. Do not plan a closing section of your own ("What should you do next?", "Next steps", "Where to go from here"): the Writer always ends with one "What to do next" section that holds the call to action. For each section: "answer_first" = what the first 1–2 sentences under it must answer directly; "points" = what the section covers; "source_urls" = the input URLs that support it.
 - "questions": the exact questions the post must answer (from the lead and related questions).
 - "m91_facts_to_use": facts ONLY from M91 FACTS, each with its source URL exactly as given (https).
-- "claims_to_avoid": things M91 does not do or must not be promised. ALWAYS include these two, word for word:
+- "claims_to_avoid": things M91 does not do or must not be promised. ALWAYS include these three, word for word:
   "Do not promise that silent-mode or Do Not Disturb interruption works identically on every phone or operating system."
   "Do not claim M91 executes the approved action; the originating software must act on the decision."
+  "Do not tell readers that the software should go ahead after a rejection, a timeout or no answer; only an explicit approval lets it act."
   Add others from M91 FACTS ("cannot") that apply to this topic.
 - "story": if you use a story, set use true, copy its id, its attribution line and its source URL exactly, and say how the writer should use it (briefly, as an example, attributed). Never present it as M91's own experience. Otherwise set use false and empty strings.
 - "tutorial": if post_type is "tutorial", set use true, copy the tutorial id, target and reader outcome, copy its steps with their source URLs exactly (you may drop steps, never add or change them), and copy its gaps. Otherwise set use false and empty values.

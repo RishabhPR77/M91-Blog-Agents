@@ -108,8 +108,10 @@ test('web limit (A2): a source check outside ALLOWED URLS is dropped and never t
   // An allowed source that contradicts still fails the gate.
   const bad = decide(reviewAnswer({ sources: [{ ...sources[1], verdict: 'contradicts' }] }), ctx({ allowedUrls: allowed }))
   assert.equal(bad.gates.find((g) => g.id === 'sources_contradicted').passed, false)
-  const many = Array.from({ length: 6 }, (_, i) => ({ url: `https://m91.msg91.com/p${i}`, claim: 'c', verdict: 'supports' }))
-  assert.ok(decide(reviewAnswer({ sources: many }), ctx()).warnings.some((w) => /checked 6 sources; REVIEWER_MAX_SOURCE_CHECKS is 5/.test(w)))
+  // SOURCE TEXT pages count too: only far more than REVIEWER_MAX_SOURCE_CHECKS plus the pages in SOURCE TEXT warns.
+  const many = Array.from({ length: 14 }, (_, i) => ({ url: `https://m91.msg91.com/p${i}`, claim: 'c', verdict: 'supports' }))
+  assert.ok(decide(reviewAnswer({ sources: many }), ctx()).warnings.some((w) => /checked 14 sources; REVIEWER_MAX_SOURCE_CHECKS is 5 \(plus up to 8 pages in SOURCE TEXT\)/.test(w)))
+  assert.ok(!decide(reviewAnswer({ sources: many.slice(0, 9) }), ctx()).warnings.some((w) => /REVIEWER_MAX_SOURCE_CHECKS/.test(w)))
 })
 
 test('prompt: links in the post outside ALLOWED URLS are reported, not opened', () => {
@@ -128,8 +130,8 @@ test('schema: exactly one entry per gate and area id', () => {
 test('prompt: exact B5 text with the limits filled in', () => {
   const p = buildReviewerPrompt(cfg)
   assert.ok(p.startsWith("You are the Reviewer for M91's blog: the strict, final check before a post is approved."))
-  assert.match(p, /at most 5 of them, to verify the claims/)
-  assert.match(p, /List at most 8 items, "must" items first\./)
+  assert.match(p, /at most 5 of them, for a claim SOURCE TEXT does not settle/)
+  assert.match(p, /List EVERY "must" problem in the post, all of them in this review, never a sample: .* Then at most 8 "should" items\./)
   assert.match(p, /Add up to 3 general lessons/)
   assert.ok(!/\{\{/.test(p))
   // The Phase 10 design gate and area are two more lines; with EXPERIENCE_ENABLED=false the text is the pre-Phase-10 one.
@@ -164,7 +166,9 @@ test('runReviewer: one call on a fresh reviewer thread, inputs in B3 order, revi
   assert.match(q.threadId, /^reviewer-261018-1400-ABCD-v1-[a-z0-9]{4}$/)
   assert.equal(q.jsonSchema.name, 'reviewer_result')
   const order = [...q.message.matchAll(/^--- ([A-Z0-9 ]+) ---$/gm)].map((m) => m[1])
-  assert.deepEqual(order, ['POST', 'BRIEF', 'CHECK RESULTS', 'M91 FACTS', 'ALLOWED URLS', 'TONE NOTES'])
+  // SOURCE TEXT: the cited pages (unit tests have no network, so each says it could not be loaded).
+  assert.deepEqual(order, ['POST', 'BRIEF', 'CHECK RESULTS', 'M91 FACTS', 'ALLOWED URLS', 'SOURCE TEXT', 'TONE NOTES'])
+  assert.match(q.message, /--- SOURCE TEXT ---\n=== SOURCE: https:\/\/[^\n]+ ===\n/)
   assert.match(q.message, /--- CHECK RESULTS ---\n\[\{"id":"cta_exact","passed":true,"severity":"hard","value":1,"detail":"ok"\}/)
   // No docs links in posts: the docs URL is not an allowed link; M91's main site is.
   const allowedSection = q.message.split('--- ALLOWED URLS ---\n')[1].split('\n--- ')[0]

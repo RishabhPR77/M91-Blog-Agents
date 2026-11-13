@@ -13,6 +13,8 @@ import { draftVersion, draftBriefVersion } from '../writer/save.js'
 import { reviewerResultSchema, reviewSchemaErrors } from './schemas.js'
 import { buildReviewerPrompt, reviewRepairTail, quotesProblem } from './prompts.js'
 import { loadDraft, loadFacts, loadPreviousReview, buildReviewerSections, buildReviewerMessage } from './inputs.js'
+import { citedSourceText } from '../writer/sources.js'
+import { supportedSources } from '../writer/inputs.js'
 import { decide, missingQuotes, reviewSummaryLine } from './decide.js'
 import { latestGuideDoc } from '../experience/index.js'
 import { guideText } from '../experience/review.js'
@@ -72,9 +74,13 @@ export async function runReviewer(params = {}, deps = {}) {
     const doc = await latestGuideDoc(store, params.briefId, version, briefVersion)
     guide = doc?.status === 'ok' ? doc.payload?.guide ?? null : null
   }
-  const { sections, allowed } = await buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets: draft.snippets ?? [], guide })
+  // The same source pages the Writer had, so every round checks every cited page (not a few opened at random) and
+  // the Writer and the Reviewer judge by the same text.
+  const pageWarnings = []
+  const sourceText = await citedSourceText(brief, { config, fetch: deps.fetch, warnings: pageWarnings, extra: supportedSources(sourcePack).map((r) => ({ url: r.url, what: r.claim })) })
+  const { sections, allowed } = await buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets: draft.snippets ?? [], guide, sourceText: sourceText.text })
   const prompt = buildReviewerPrompt(config)
-  const warnings = []
+  const warnings = [...pageWarnings]
   if (!facts) warnings.push('no current m91_facts record: the Reviewer judged M91 claims without M91 FACTS')
 
   // ---------- AI calls ----------

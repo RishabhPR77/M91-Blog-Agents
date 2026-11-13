@@ -66,7 +66,7 @@ export function labelledAllowedUrls(brief, { sourcePack = null, ctaUrl, snippets
  * Builds the message sections (B3). Returns { sections, allowed }.
  * @param {{ draft, brief, facts, sourcePack, story, previousReview, snippets }} input
  */
-export async function buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets = [], guide = null }) {
+export async function buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets = [], guide = null, sourceText = '' }) {
   const allowed = labelledAllowedUrls(brief, { sourcePack, ctaUrl: config.m91.ctaUrl, snippets, config })
   const results = (draft.checks?.results ?? []).map(({ id, passed, severity, value, detail }) => ({ id, passed, severity, value, detail }))
   const isTutorial = brief.post_type === 'tutorial' || brief.tutorial?.use === true
@@ -94,6 +94,8 @@ export async function buildReviewerSections({ store, config, draft, brief, facts
     // sending each snippet's whole source again, a long script included, pushed the message over 50,000 characters.
     tutorial: isTutorial ? JSON.stringify({ code_in_post_from: snippets.map(({ id, language, source_url, code }) => ({ id, language, source_url, lines: String(code ?? '').split('\n').length })) }) : null,
     sourcePack: sourcePack ? JSON.stringify(sourcePack.claims ?? sourcePack.payload?.claims ?? sourcePack) : null,
+    // The text of the outside pages the post cites (the Writer had the same).
+    sourceText: sourceText || null,
     previousReview: previousReview ? JSON.stringify({
       feedback: (previousReview.feedback ?? []).map(({ area, quote, problem, fix, severity }) => ({ area, quote, problem, fix, severity })),
       revision_notes: draft.revision_notes ?? []
@@ -109,11 +111,12 @@ export async function buildReviewerSections({ store, config, draft, brief, facts
  * the source pack, the story record, the integrations list. Returns { message, trimmed[] }.
  */
 const TONE_KEEP = 1500
+const SOURCE_TEXT_KEEP = 6000
 
 export function buildReviewerMessage(s, tail = '', max = MESSAGE_MAX) {
   const order = [
     ['post', 'POST'], ['guide', 'GUIDE'], ['brief', 'BRIEF'], ['checks', 'CHECK RESULTS'], ['facts', 'M91 FACTS'], ['allowedUrls', 'ALLOWED URLS'],
-    ['story', 'STORY'], ['tutorial', 'TUTORIAL'], ['sourcePack', 'SOURCE PACK'], ['previousReview', 'PREVIOUS REVIEW'], ['tone', 'TONE NOTES']
+    ['story', 'STORY'], ['tutorial', 'TUTORIAL'], ['sourcePack', 'SOURCE PACK'], ['sourceText', 'SOURCE TEXT'], ['previousReview', 'PREVIOUS REVIEW'], ['tone', 'TONE NOTES']
   ]
   const sec = { ...s }
   const build = () => [...order.filter(([k]) => sec[k]).map(([k, label]) => `--- ${label} ---\n${sec[k]}`), ...(tail ? [tail] : [])].join('\n')
@@ -130,6 +133,17 @@ export function buildReviewerMessage(s, tail = '', max = MESSAGE_MAX) {
     trimmed.push('tone notes')
     message = build()
   }
+  // The source pages: cut from the end (the outline's links come last), first down to SOURCE_TEXT_KEEP, at the end to
+  // whatever fits.
+  const cutSources = (keep) => {
+    if (message.length <= max || !sec.sourceText) return
+    const target = Math.max(keep, sec.sourceText.length - (message.length - max) - 50)
+    if (target >= sec.sourceText.length) return
+    sec.sourceText = target > 0 ? `${sec.sourceText.slice(0, target)} …(trimmed)` : null
+    if (!trimmed.includes('source pages')) trimmed.push('source pages')
+    message = build()
+  }
+  cutSources(SOURCE_TEXT_KEEP)
   for (const [key, what] of [['sourcePack', 'source pack'], ['story', 'story record']]) {
     if (message.length <= max || !sec[key]) continue
     sec[key] = sec[key].slice(0, Math.max(200, sec[key].length - (message.length - max) - 50)) + ' …(trimmed)'
@@ -142,6 +156,7 @@ export function buildReviewerMessage(s, tail = '', max = MESSAGE_MAX) {
     trimmed.push('M91 integrations list')
     message = build()
   }
+  cutSources(0)
   if (message.length > max) throw new ReviewerInputError(`Reviewer message is ${message.length} characters; viaSocket's limit is ${max}`)
   return { message, trimmed }
 }

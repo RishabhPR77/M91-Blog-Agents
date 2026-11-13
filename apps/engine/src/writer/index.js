@@ -14,6 +14,7 @@ import { writer_draft, draftSchemaErrors } from './schemas.js'
 import { buildWriterPrompt, repairTail, truncatedProblem } from './prompts.js'
 import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, citedDocsSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage, loadFacts, factSheet } from './inputs.js'
 import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets, SNIPPET_LIST_MAX_LINES } from './snippets.js'
+import { citedSourceText } from './sources.js'
 import { needsStartHere, starterPost, withStartHere } from '../timely/starthere.js'
 import { stripDocsLinks, isDocsFix } from '../util/m91links.js'
 import { linkNewsSource } from './newslink.js'
@@ -214,6 +215,8 @@ export async function runWriter(params = {}, deps = {}) {
   const snippetSource = isTutorial ? tutorialText : await citedDocsSourceText(brief, { config, fetch: deps.fetch, warnings })
   const { snippets, text: tokenisedSource } = extractSnippets(snippetSource)
   const allowed = allowedUrlSet(brief, { sourcePack: params.sourcePack, ctaUrl: config.m91.ctaUrl, snippets, config })
+  // The text of the outside pages the brief cites: the Reviewer opens the same pages to check the post.
+  const sourceText = await citedSourceText(brief, { config, fetch: deps.fetch, warnings, extra: mode === 'revise' ? supportedSources(params.sourcePack).map((r) => ({ url: r.url, what: r.claim })) : [] })
   const tone = await toneSection(store, brief, config)
   // The fact sheet the Reviewer checks every M91 claim against: the Writer sees the same one (with its "cannot" list).
   const facts = params.facts ?? (await loadFacts(store))
@@ -226,6 +229,7 @@ export async function runWriter(params = {}, deps = {}) {
 
   const sections = {
     m91Facts: facts ? factSheet(facts) : null,
+    sourceText: sourceText.text || null,
     tone: tone.text,
     lessons: lessons.length ? lessons.map((l) => `- ${l}`).join('\n') : null,
     allowedUrls: allowed.list.map((u) => `- ${u}`).join('\n'),

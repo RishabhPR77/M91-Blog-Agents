@@ -114,7 +114,7 @@ test('auto-fix: https for docs hosts, standing claims, flags, CTA, tone, cleared
   })
   const { brief, fixes } = autoFix(raw, { config: cfg, inputs })
   assert.equal(brief.m91_facts_to_use[0].source_url, LLMS)
-  assert.deepEqual(brief.claims_to_avoid.filter((c) => STANDING_CLAIMS.includes(c)).length, 2)
+  assert.deepEqual(brief.claims_to_avoid.filter((c) => STANDING_CLAIMS.includes(c)).length, STANDING_CLAIMS.length)
   assert.deepEqual(brief.review_flags, ['comparison'])
   assert.equal(brief.cta.url, CTA)
   assert.equal(brief.cta.text, DEFAULT_CTA_TEXT)
