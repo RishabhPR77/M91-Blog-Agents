@@ -57,3 +57,31 @@ describe('login redirect target', () => {
     expect(safeNext(null)).toBe('/')
   })
 })
+
+describe('The sliding pill in the top tabs', () => {
+  // jsdom has no layout: each tab gets a fixed box by its text, the bar starts at x = 100.
+  const BOX: Record<string, [number, number]> = { Home: [104, 80], Review: [184, 90], 'Posts & runs': [274, 120], Memory: [394, 100], More: [494, 90] }
+  const pillOf = () => document.querySelector('nav[aria-label="Main"] > span[aria-hidden]') as HTMLElement
+
+  it.each([['/', 4, 80], ['/memory', 294, 100], ['/week', 394, 90]])('on %s it sits on the active tab (a page under More: on More, not on Home)', async (route, left, width) => {
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.matches('nav[aria-label="Main"]')) return { left: 100, top: 0, width: 600, height: 40, right: 700, bottom: 40, x: 100, y: 0, toJSON() {} } as DOMRect
+      const key = Object.keys(BOX).find((k) => this.textContent?.trim().startsWith(k))
+      const [l, w] = key ? BOX[key] : [0, 0]
+      return { left: l, top: 0, width: w, height: 32, right: l + w, bottom: 32, x: l, y: 0, toJSON() {} } as DOMRect
+    })
+    mockFetch({
+      'GET /api/health': { body: { ok: true, version: '0.2.0', run_in_progress: false } },
+      'GET /api/settings': { body: SETTINGS },
+      'GET /api/approvals': { body: { approvals: [] } },
+      'GET /api/runs?limit=5': { body: { runs: [] } }
+    })
+    try {
+      renderApp(<Layout><p>page</p></Layout>, { route })
+      await waitFor(() => expect(pillOf().style.transform).toBe(`translateX(${left}px)`))
+      expect(pillOf().style.width).toBe(`${width}px`)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})

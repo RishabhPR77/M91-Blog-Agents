@@ -127,8 +127,14 @@ function PillNav({ items, more }: { items: NavItem[]; more: NavItem[] }) {
   const [pill, setPill] = useState<{ left: number; width: number } | null>(null)
   useLayoutEffect(() => {
     const place = () => {
-      const el = ref.current?.querySelector<HTMLElement>('[data-tab][aria-current="page"]')
-      setPill(el ? { left: el.offsetLeft, width: el.offsetWidth } : null)
+      const nav = ref.current
+      const el = nav?.querySelector<HTMLElement>('[data-tab][aria-current="page"]')
+      // Measured against the bar itself, not offsetLeft: offsetLeft counts from the nearest positioned parent, and
+      // More sits in its own wrapper, so on a page under More the pill went to the far left (over Home) and More's
+      // white text vanished on the white bar.
+      if (!nav || !el) return setPill(null)
+      const box = el.getBoundingClientRect()
+      setPill({ left: box.left - nav.getBoundingClientRect().left - nav.clientLeft, width: box.width })
     }
     place()
     window.addEventListener('resize', place)

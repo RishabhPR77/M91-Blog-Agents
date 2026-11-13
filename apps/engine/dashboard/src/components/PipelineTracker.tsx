@@ -9,6 +9,7 @@ import type { AgentModel } from '../api/types'
 import { trackerSteps, type RunView, type StepState, type StepStatus } from '../state/runEvents'
 import { useNow } from '../state/useRunView'
 import { DOING } from './RunProgress'
+import { roundsText, sentToWords, subStepLabel } from './stepWords'
 
 const LABEL: Record<string, string> = { editor: 'Editor', scout: 'Scout', strategist: 'Strategist', writer: 'Writer', checks: 'Checks', reviewer: 'Reviewer', promo: 'Promo', designer: 'Experience Designer', export: 'Markdown export', publisher: 'Publisher' }
 const ROLE: Record<string, string> = {
@@ -44,7 +45,7 @@ function Stats({ st }: { st: StepState }) {
     st.ms != null && st.status !== 'waiting' && st.status !== 'running' ? fmtDuration(st.ms) : null,
     st.aiCalls ? `${st.aiCalls} AI call${st.aiCalls === 1 ? '' : 's'}` : null,
     st.retries ? `${st.retries} retr${st.retries === 1 ? 'y' : 'ies'}` : null,
-    st.rounds > 1 ? `${st.rounds} rounds` : null
+    st.rounds > 1 ? roundsText(st.name, st.rounds) : null
   ].filter(Boolean)
   return bits.length ? <span className="tabular-nums">{bits.join(' · ')}</span> : null
 }
@@ -118,7 +119,7 @@ export function PipelineTracker({ view, hidePromo = false, hideDesigner = false,
                 <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Review rounds">
                   {rounds.map((r) => (
                     <li key={r.seq} className="animate-fade rounded-full bg-ink/[0.05] px-2.5 py-0.5 text-xs text-ink-2 tabular-nums">
-                      Round {r.round != null ? r.round + 1 : '?'}: {r.total}/100 → {r.sendTo === 'human' || r.action === 'await_human' ? 'you' : r.sendTo ?? 'next'}
+                      Round {r.round != null ? r.round + 1 : '?'}: {r.total}/100 · {sentToWords(r.sendTo, r.action)}
                     </li>
                   ))}
                 </ul>
@@ -132,7 +133,7 @@ export function PipelineTracker({ view, hidePromo = false, hideDesigner = false,
                       <li key={c} data-testid={`substep-${c}`} className="flex animate-fade items-center gap-1.5 text-xs text-ink-2">
                         <span className={sub.status === 'done' ? 'text-emerald-600' : sub.status === 'running' ? 'text-lime-600' : sub.status === 'failed' ? 'text-red-600' : 'text-ink-3'}><StatusIcon status={sub.status} size={11} /></span>
                         <span className="min-w-0">
-                          <span className="font-medium text-ink">{c.split('.').slice(1).join('.')}</span>
+                          <span className="font-medium text-ink">{subStepLabel(c)}</span>
                           <span className="text-ink-3">{[sub.ms != null && sub.status !== 'running' ? fmtDuration(sub.ms) : null, sub.aiCalls ? `${sub.aiCalls} call${sub.aiCalls === 1 ? '' : 's'}` : null, sub.retries ? `${sub.retries} retr${sub.retries === 1 ? 'y' : 'ies'}` : null].filter(Boolean).map((b) => ` · ${b}`).join('')}</span>
                         </span>
                       </li>

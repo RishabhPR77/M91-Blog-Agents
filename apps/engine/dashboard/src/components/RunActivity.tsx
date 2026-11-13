@@ -3,9 +3,16 @@
 // A run rebuilt from its record has no event lines: the feed then lists its steps' results instead.
 import { fmtDuration } from '../format'
 import type { LogLine, RunView } from '../state/runEvents'
+import { subStepLabel } from './stepWords'
 
 const LABEL: Record<string, string> = { editor: 'Editor', scout: 'Scout', strategist: 'Strategist', writer: 'Writer', checks: 'Checks', reviewer: 'Reviewer', promo: 'Promo', designer: 'Designer', export: 'Export', publisher: 'Publisher', guides: 'Guides', timely: 'News check' }
-const label = (step: string | null) => (step ? LABEL[step.split('.')[0]] ?? step : 'Run')
+// A sub-step says which part of its agent it is ("Scout · This week’s news started"), not just "Scout done" while the
+// Scout is still running.
+const label = (step: string | null) => {
+  if (!step) return 'Run'
+  const agent = LABEL[step.split('.')[0]] ?? step
+  return step.includes('.') ? `${agent} · ${subStepLabel(step)}` : agent
+}
 const time = (ts: string) => {
   const d = new Date(ts)
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })

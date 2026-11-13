@@ -44,6 +44,22 @@ describe('Why it stopped', () => {
 
   it('the round chips under the Reviewer start at 1', () => {
     render(<PipelineTracker view={play(events())} />)
-    expect(screen.getByLabelText('Review rounds').textContent).toMatch(/^Round 1: 57\.5\/100/)
+    expect(screen.getByLabelText('Review rounds').textContent).toMatch(/^Round 1: 57\.5\/100 · back to the Writer/)
+  })
+})
+
+describe('Plain words for the run page', () => {
+  it('names sub-steps and rounds the way a person says them', async () => {
+    const { subStepLabel, roundsText, sentToWords } = await import('../src/components/stepWords')
+    expect(subStepLabel('scout.timely')).toBe('This week’s news')
+    expect(subStepLabel('scout.questions-week')).toBe('What people asked this week')
+    expect(subStepLabel('scout.questions.g2')).toBe('Questions people ask: payment alerts')
+    expect(subStepLabel('strategist.plan')).toBe('Plans the brief')
+    expect(subStepLabel('scout.brand-new_call')).toBe('Brand new call')
+    expect(roundsText('checks', 2)).toBe('checked 2 times')
+    expect(roundsText('writer', 3)).toBe('3 drafts')
+    expect(roundsText('scout', 2)).toBe('ran 2 times')
+    expect(sentToWords('writer', 'revise')).toBe('back to the Writer')
+    expect(sentToWords(null, 'await_human')).toBe('to you')
   })
 })

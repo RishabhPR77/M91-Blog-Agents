@@ -24,8 +24,8 @@ describe('PipelineTracker', () => {
     const scout = screen.getByTestId('step-scout')
     expect(scout).toHaveAttribute('data-status', 'done')
     const subs = within(scout).getByRole('list', { name: 'Scout sub-steps' })
-    expect(within(subs).getByTestId('substep-scout.facts')).toHaveTextContent('facts · 59s · 1 call · 2 retries')
-    expect(within(subs).getByTestId('substep-scout.questions.g1')).toHaveTextContent('questions.g1')
+    expect(within(subs).getByTestId('substep-scout.facts')).toHaveTextContent('M91 facts from the docs · 59s · 1 call · 2 retries')
+    expect(within(subs).getByTestId('substep-scout.questions.g1')).toHaveTextContent('Questions people ask: AI agent approvals')
     expect(screen.getByTestId('step-promo')).toHaveAttribute('data-status', 'skipped')
   })
 
