@@ -792,6 +792,23 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       return send(res, failed.length && !deleted.length ? 502 : 200, { deleted, failed, mem0_requests: mem0Requests(currentMem0Counts()) - before })
     }
 
+    // A run lives twice: its full record in the work store and a short summary in memory, and run lists show the
+    // summary only once the full record is gone. One pass removed the record and the run came back from its summary,
+    // so deleted runs reappeared. Look again after each pass until nothing of those runs is left (at most 3 passes).
+    async function deleteRunsFully(wanted) {
+      const deleted = []
+      const failed = []
+      for (let pass = 0; pass < 3 && wanted.size; pass++) {
+        const all = [...(await store.getRecords({ type: 'run' })), ...(await store.getRecords({ type: 'run_log' }))]
+        const ids = all.filter((r) => (wanted.has(r.briefId) || wanted.has(r.payload?.run_id)) && !deleted.includes(r.id) && !failed.some((f) => f.id === r.id)).map((r) => r.id)
+        if (!ids.length) break
+        const r = await deleteIds(store, ids)
+        deleted.push(...r.deleted)
+        failed.push(...r.failed)
+      }
+      return { deleted, failed }
+    }
+
     // Delete a post that is not live (it failed, stopped or was never finished): everything it stored, i.e. its brief,
     // every draft version, the reviews, research packs, guide, the editor's pick, its runs and their per-call logs.
     // An approved or published post is refused (its export and knowledge are what later posts build on).
@@ -812,11 +829,13 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       }
       const runs = all.filter((r) => r.type === 'run' && r.payload?.brief_id === briefId)
       const runIds = new Set(runs.map((r) => r.payload?.run_id ?? r.briefId))
-      const logs = all.filter((r) => r.type === 'run_log' && runIds.has(r.briefId))
-      const ids = [...new Set([...mine, ...runs, ...logs].map((r) => r.id))]
-      if (!ids.length) return fail(res, 404, 'not_found', `nothing stored for ${briefId}`)
+      const ids = [...new Set(mine.map((r) => r.id))]
+      if (!ids.length && !runIds.size) return fail(res, 404, 'not_found', `nothing stored for ${briefId}`)
       const before = mem0Requests(currentMem0Counts())
-      const { deleted, failed } = await deleteIds(store, ids)
+      const own = await deleteIds(store, ids)
+      const ofRuns = await deleteRunsFully(runIds)
+      const deleted = [...own.deleted, ...ofRuns.deleted]
+      const failed = [...own.failed, ...ofRuns.failed]
       log.info('post delete', { brief: briefId, deleted: deleted.length, failed: failed.length })
       return send(res, failed.length && !deleted.length ? 502 : 200, { brief_id: briefId, deleted, failed, runs: runIds.size, mem0_requests: mem0Requests(currentMem0Counts()) - before })
     }
@@ -829,11 +848,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       if (!Array.isArray(runIds) || !runIds.length || runIds.length > 50 || !runIds.every((x) => typeof x === 'string' && RUN_ID_RE.test(x))) throw new ApiError(400, 'bad_params', 'run_ids must be a list of 1 to 50 run ids')
       if (manager?.activeRunId?.() && runIds.includes(manager.activeRunId())) throw new ApiError(409, 'run_in_progress', 'that run is still running: stop it or wait for it to finish')
       if (store.dryRun) throw new ApiError(409, 'dry_run', 'DRY_RUN is on: memory deletes are skipped, so nothing would be deleted')
-      const wanted = new Set(runIds)
-      const all = [...(await store.getRecords({ type: 'run' })), ...(await store.getRecords({ type: 'run_log' }))]
-      const ids = all.filter((r) => (r.type === 'run' || r.type === 'run_log') && (wanted.has(r.briefId) || wanted.has(r.payload?.run_id))).map((r) => r.id)
       const before = mem0Requests(currentMem0Counts())
-      const { deleted, failed } = ids.length ? await deleteIds(store, ids) : { deleted: [], failed: [] }
+      const { deleted, failed } = await deleteRunsFully(new Set(runIds))
       log.info('runs delete', { runs: runIds.length, deleted: deleted.length, failed: failed.length })
       return send(res, failed.length && !deleted.length ? 502 : 200, { runs: runIds.length, deleted, failed, mem0_requests: mem0Requests(currentMem0Counts()) - before })
     }

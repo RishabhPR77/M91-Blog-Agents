@@ -88,3 +88,29 @@ test('deleting a failed post removes everything it stored; an approved post is r
     restore()
   }
 })
+
+test('a run kept twice (its full local record and a memory summary the index shows once the record is gone) is deleted for good', async () => {
+  const restore = setSink(() => {})
+  const store = memoryStore()
+  const A = 'R-261113-1456-W3XQ'
+  // As live: the full record has a local "w-" id; the summary is a memory record flagged metadata.summary.
+  const full = await store.createRecord({ type: 'run', briefId: A, payload: { run_id: A, status: 'succeeded', steps: [] }, status: 'succeeded' })
+  store.records.delete(full.id)
+  full.id = 'w-run-1'
+  store.records.set(full.id, full)
+  await store.createRecord({ type: 'run', briefId: A, payload: { run_id: A, status: 'succeeded' }, status: 'succeeded', meta: { summary: true } })
+  const config = fakeConfig()
+  const manager = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => stubAgents })
+  const server = createServer({ triggerKey: 'fake-trigger-key-0123456789', manager, store, config })
+  await new Promise((ok) => server.listen(0, '127.0.0.1', ok))
+  const url = `http://127.0.0.1:${server.address().port}`
+  try {
+    const res = await fetch(`${url}/api/runs`, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ run_ids: [A] }) })
+    assert.equal(res.status, 200)
+    assert.equal((await res.json()).deleted.length, 2, 'the full record and its summary')
+    assert.deepEqual(store.byType('run'), [], 'nothing comes back')
+  } finally {
+    await new Promise((ok) => server.close(ok))
+    restore()
+  }
+})
