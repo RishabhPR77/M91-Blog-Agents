@@ -474,6 +474,21 @@ export function majorProblems(results) {
   return results.filter((r) => r.severity === 'hard' && !r.passed && !MINOR_HARD_CHECKS.includes(r.id)).map(problemLine)
 }
 
+/**
+ * Soft checks that cost points on the Reviewer's checklist: the keywords, answer-first openings, the FAQ, the outline,
+ * reading targets, long sentences, absolute claims, M91 links, exclamation marks, legal framing. The Writer fixes
+ * them in one polish pass before the review instead of losing points, or a round, for them.
+ */
+export const POLISH_CHECKS = Object.freeze(['answer_first', 'secondary_keywords', 'keyword_first_100', 'keyword_title_h1_slug', 'keyword_count', 'faq_count', 'internal_links_used', 'outline_match', 'reading_post', 'reading_intro_target', 'sentence_length', 'claims_soft', 'exclamations', 'm91_links', 'legal_framing'])
+
+/** What the polish pass fixes: minor hard checks, POLISH_CHECKS, and a post over its word range (never one under it). */
+export function polishProblems(results, { wordsMax = Infinity } = {}) {
+  const out = [...minorProblems(results), ...results.filter((r) => r.severity === 'soft' && !r.passed && POLISH_CHECKS.includes(r.id)).map(problemLine)]
+  const words = results.find((r) => r.id === 'words_target')
+  if (words && !words.passed && Number(words.value) > wordsMax) out.push(`${problemLine(words)}: cut repeated points and filler to stay within the range`)
+  return out
+}
+
 /** Failed hard checks that are minor (MINOR_HARD_CHECKS). */
 export function minorProblems(results) {
   return results.filter((r) => r.severity === 'hard' && !r.passed && MINOR_HARD_CHECKS.includes(r.id)).map(problemLine)

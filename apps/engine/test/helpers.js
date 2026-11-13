@@ -20,6 +20,8 @@ globalThis.fetch = async (url, opts) => {
 
 export function fakeEnv(overrides = {}) {
   return {
+    // Unit tests count the Writer's calls: the polish pass is on only where a test turns it on.
+    WRITER_POLISH: 'false',
     VIASOCKET_ORG_ID: 'org-test',
     VIASOCKET_PROJECT_ID: 'proj-test',
     VIASOCKET_EMBED_SECRET: 'fake-embed-secret-for-tests',

@@ -69,3 +69,22 @@ test('the Reviewer checks every page in SOURCE TEXT and lists every "must" probl
   assert.match(p, /List EVERY "must" problem in the post, all of them in this review, never a sample/)
   assert.ok(!/List at most \d+ items, "must" items first/.test(p))
 })
+
+test('M91 DOCS TEXT: each cited docs page cut to its parts about the post; both agents get it', async () => {
+  const { docsTextFor, briefHints } = await import('../../src/writer/sources.js')
+  const { buildReviewerMessage } = await import('../../src/reviewer/inputs.js')
+  const filler = Array.from({ length: 80 }, (_, i) => `Billing paragraph ${i} about invoices and plans.`).join('\n')
+  const tokenised = `=== SOURCE: https://m91.msg91.com/docs/api.md ===\n# M91 API\n${filler}\nThe answered event fires once per response; the closed event fires when the alert closes.\n[[SNIPPET:S1]]\n=== SOURCE: https://m91.msg91.com/llms.txt ===\n# M91\nRings a phone until someone answers.`
+  const hints = briefHints({ keyword: 'm91 callback events', outline: [{ heading: 'Which events does M91 send?' }] })
+  const docs = docsTextFor(tokenised, hints, 1200)
+  assert.ok(docs.length <= 1300)
+  assert.match(docs, /^=== SOURCE: https:\/\/m91\.msg91\.com\/docs\/api\.md ===\n# M91 API\n/)
+  assert.match(docs, /The answered event fires once per response; the closed event fires when the alert closes\./)
+  assert.match(docs, /\n\n=== SOURCE: https:\/\/m91\.msg91\.com\/llms\.txt ===\n# M91\nRings a phone until someone answers\.$/)
+  const w = buildWriterMessage({ brief: '{}', tone: 't', allowedUrls: '- x', docsText: docs })
+  assert.match(w.message, /--- M91 DOCS TEXT ---\n=== SOURCE: https:\/\/m91\.msg91\.com\/docs\/api\.md ===/)
+  const r = buildReviewerMessage({ post: 'p', brief: '{}', checks: '[]', facts: '{}', allowedUrls: '- x', docsText: docs, tone: 't' })
+  assert.match(r.message, /--- M91 DOCS TEXT ---\n=== SOURCE: https:\/\/m91\.msg91\.com\/docs\/api\.md ===/)
+  assert.match(WRITER_BASE, /Describe M91's API \(its events, callbacks, fields, limits, methods\) exactly as the docs say, keeping their qualifiers/)
+  assert.match(buildReviewerPrompt(config), /no claim contradicts M91 FACTS or M91 DOCS TEXT/)
+})

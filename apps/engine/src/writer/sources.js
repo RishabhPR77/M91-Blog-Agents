@@ -36,7 +36,11 @@ export function citedPages(brief, { config, extra = [] } = {}) {
 }
 
 const WORD = /[a-z0-9]{4,}/g
-const words = (s) => String(s).toLowerCase().match(WORD) ?? []
+// Common words that say nothing about a page's topic.
+const STOP = new Set(['about', 'after', 'also', 'been', 'does', 'each', 'from', 'have', 'here', 'into', 'just', 'like', 'more', 'most', 'only', 'over', 'should', 'some', 'than', 'that', 'their', 'them', 'then', 'there', 'they', 'this', 'what', 'when', 'where', 'which', 'while', 'will', 'with', 'would', 'your'])
+// A light stem, so "events" finds "event" and "answered" finds "answer".
+const stem = (w) => (w.length > 5 ? w.replace(/(ing|ed|es|s)$/, '') : w.length > 4 ? w.replace(/s$/, '') : w)
+const words = (s) => (String(s).toLowerCase().match(WORD) ?? []).filter((w) => !STOP.has(w)).map(stem)
 
 /**
  * The parts of a long page worth keeping, in page order: its opening (the headline and lede, up to 700 characters and
@@ -111,4 +115,25 @@ export async function citedSourceText(brief, { config, fetch = globalThis.fetch,
   })
   if (failed.length) warnings.push(`source pages: ${failed.length} of ${results.length} could not be loaded (${failed.slice(0, 3).map((f) => f.url).join(', ')}${failed.length > 3 ? ', …' : ''}); the Writer keeps to the brief for those`)
   return { text: parts.join('\n\n'), loaded: results.length - failed.length, failed: failed.map((f) => f.url) }
+}
+
+/** Characters of M91 docs text kept for the Writer and the Reviewer (the parts about the post's topic). */
+export const DOCS_TEXT_MAX = 12000
+
+/** The words a post is about: its keyword, supporting keywords, outline headings and M91 facts. */
+export const briefHints = (brief) => [brief?.keyword, ...(brief?.supporting_keywords ?? []), ...(brief?.outline ?? []).map((s) => s.heading), ...(brief?.m91_facts_to_use ?? []).map((f) => f.fact)].filter(Boolean)
+
+/**
+ * M91 DOCS TEXT: the docs pages a brief cites ("=== SOURCE: url ===" blocks, code already replaced by [[SNIPPET:Sn]]
+ * tokens), each cut to its parts about the post. The Writer used to get M91's docs only as the short fact sheet and
+ * guessed the API's details (how many callbacks, when it polls); the Reviewer knew them.
+ */
+export function docsTextFor(text, hints, max = DOCS_TEXT_MAX) {
+  const pages = String(text ?? '').split(/^(?==== SOURCE: )/m).map((p) => p.trim()).filter((p) => p.startsWith('=== SOURCE: '))
+  if (!pages.length) return ''
+  const per = Math.floor(max / pages.length)
+  return pages.map((p) => {
+    const [head, ...rest] = p.split('\n')
+    return `${head}\n${keepRelevant(rest.join('\n'), hints, per)}`
+  }).join('\n\n')
 }

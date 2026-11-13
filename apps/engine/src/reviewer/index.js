@@ -13,8 +13,9 @@ import { draftVersion, draftBriefVersion } from '../writer/save.js'
 import { reviewerResultSchema, reviewSchemaErrors } from './schemas.js'
 import { buildReviewerPrompt, reviewRepairTail, quotesProblem } from './prompts.js'
 import { loadDraft, loadFacts, loadPreviousReview, buildReviewerSections, buildReviewerMessage } from './inputs.js'
-import { citedSourceText } from '../writer/sources.js'
-import { supportedSources } from '../writer/inputs.js'
+import { citedSourceText, docsTextFor, briefHints } from '../writer/sources.js'
+import { supportedSources, tutorialSourceText, citedDocsSourceText } from '../writer/inputs.js'
+import { extractSnippets } from '../writer/snippets.js'
 import { decide, missingQuotes, reviewSummaryLine } from './decide.js'
 import { latestGuideDoc } from '../experience/index.js'
 import { guideText } from '../experience/review.js'
@@ -78,7 +79,11 @@ export async function runReviewer(params = {}, deps = {}) {
   // the Writer and the Reviewer judge by the same text.
   const pageWarnings = []
   const sourceText = await citedSourceText(brief, { config, fetch: deps.fetch, warnings: pageWarnings, extra: supportedSources(sourcePack).map((r) => ({ url: r.url, what: r.claim })) })
-  const { sections, allowed } = await buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets: draft.snippets ?? [], guide, sourceText: sourceText.text })
+  // M91's own docs pages the post relies on, the same parts the Writer had.
+  const isTutorial = brief.post_type === 'tutorial' || brief.tutorial?.use === true
+  const docsRaw = isTutorial ? await tutorialSourceText(brief, { config, fetch: deps.fetch, warnings: [] }) : await citedDocsSourceText(brief, { config, fetch: deps.fetch, warnings: [] })
+  const docsText = docsTextFor(extractSnippets(docsRaw).text, briefHints(brief))
+  const { sections, allowed } = await buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets: draft.snippets ?? [], guide, sourceText: sourceText.text, docsText })
   const prompt = buildReviewerPrompt(config)
   const warnings = [...pageWarnings]
   if (!facts) warnings.push('no current m91_facts record: the Reviewer judged M91 claims without M91 FACTS')

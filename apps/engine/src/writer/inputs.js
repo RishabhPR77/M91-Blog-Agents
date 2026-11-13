@@ -190,13 +190,15 @@ export const fullBriefForWriter = (brief) => Object.fromEntries(Object.entries(b
  */
 /** Characters of SOURCE TEXT kept before other sections are left out. */
 export const SOURCE_TEXT_KEEP = 8000
+/** Characters of M91 DOCS TEXT kept before other sections are left out. */
+export const DOCS_TEXT_KEEP = 6000
 
 export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
   const order = [
     ['brief', 'BRIEF'], ['briefRules', 'BRIEF RULES'], ['m91Facts', 'M91 FACTS'], ['tone', 'TONE'], ['lessons', 'LESSONS'], ['allowedUrls', 'ALLOWED URLS'],
     ['internalLinks', 'INTERNAL LINKS'], ['interactiveIdeas', 'INTERACTIVE IDEAS'], ['tutorialText', 'TUTORIAL SOURCE TEXT'], ['snippets', 'CODE SNIPPETS'],
     ['previousContext', 'PREVIOUS CONTEXT'], ['previousDraft', 'PREVIOUS DRAFT'], ['feedback', 'FEEDBACK'],
-    ['excerpts', 'QUOTED EXCERPTS'], ['sourcePack', 'SOURCE PACK'], ['sourceText', 'SOURCE TEXT']
+    ['excerpts', 'QUOTED EXCERPTS'], ['sourcePack', 'SOURCE PACK'], ['docsText', 'M91 DOCS TEXT'], ['sourceText', 'SOURCE TEXT']
   ]
   const sec = { ...s }
   const build = () => [...order.filter(([k]) => sec[k] !== undefined && sec[k] !== null && sec[k] !== '').map(([k, label]) => `--- ${label} ---\n${sec[k]}`), ...(tail ? [tail] : [])].join('\n')
@@ -221,14 +223,19 @@ export function buildWriterMessage(s, tail = '', max = MESSAGE_MAX) {
   }
   delete sec.previousContextFallback
   message = build()
-  // The source pages: cut from the end (the outline's links come last) down to SOURCE_TEXT_KEEP before anything else.
-  const cutSources = (keep) => {
-    if (message.length <= max || !sec.sourceText) return
-    const target = Math.max(keep, sec.sourceText.length - (message.length - max) - 50)
-    if (target >= sec.sourceText.length) return
-    sec.sourceText = target > 0 ? `${sec.sourceText.slice(0, target)} …(trimmed)` : null
-    if (!trimmed.includes('source pages')) trimmed.push('source pages')
+  const cut = (key, label, keep) => {
+    if (message.length <= max || !sec[key]) return
+    const target = Math.max(keep, sec[key].length - (message.length - max) - 50)
+    if (target >= sec[key].length) return
+    sec[key] = target > 0 ? `${sec[key].slice(0, target)} …(trimmed)` : null
+    if (!trimmed.includes(label)) trimmed.push(label)
     message = build()
+  }
+  // The source pages first, then M91's docs text: first down to what is kept before anything else goes, at the end
+  // to whatever fits.
+  const cutSources = (keep) => {
+    cut('sourceText', 'source pages', keep)
+    cut('docsText', 'M91 docs text', keep && DOCS_TEXT_KEEP)
   }
   cutSources(SOURCE_TEXT_KEEP)
   // Still too long: the interactive ideas, then the lessons, and last a few sources (from the end of the pack). The

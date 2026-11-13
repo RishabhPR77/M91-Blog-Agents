@@ -7,14 +7,14 @@ import { randomCode } from '../util/ids.js'
 import { createViaSocketClient, TruncatedError } from '../viasocket.js'
 import { emit, throwIfCancelled, CancelledError } from '../events.js'
 import { createUrlChecker } from '../scout/checks.js'
-import { runContentChecks, hardProblems, majorProblems, urlKey, parseMarkdown, ctaVariantKey } from '../checks/content.js'
+import { runContentChecks, hardProblems, majorProblems, polishProblems, urlKey, parseMarkdown, ctaVariantKey } from '../checks/content.js'
 import { latestLessons } from '../lessons.js'
 import { DEFAULT_CTA_TEXT } from '../strategist/prompts.js'
 import { writer_draft, draftSchemaErrors } from './schemas.js'
 import { buildWriterPrompt, repairTail, truncatedProblem } from './prompts.js'
 import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, citedDocsSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage, loadFacts, factSheet } from './inputs.js'
 import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets, SNIPPET_LIST_MAX_LINES } from './snippets.js'
-import { citedSourceText } from './sources.js'
+import { citedSourceText, docsTextFor, briefHints } from './sources.js'
 import { needsStartHere, starterPost, withStartHere } from '../timely/starthere.js'
 import { stripDocsLinks, isDocsFix } from '../util/m91links.js'
 import { linkNewsSource } from './newslink.js'
@@ -230,6 +230,8 @@ export async function runWriter(params = {}, deps = {}) {
   const sections = {
     m91Facts: facts ? factSheet(facts) : null,
     sourceText: sourceText.text || null,
+    // M91's own docs pages the brief cites, the parts about this post (a tutorial has them whole as TUTORIAL SOURCE TEXT).
+    docsText: isTutorial ? null : docsTextFor(tokenisedSource, briefHints(brief)) || null,
     tone: tone.text,
     lessons: lessons.length ? lessons.map((l) => `- ${l}`).join('\n') : null,
     allowedUrls: allowed.list.map((u) => `- ${u}`).join('\n'),
@@ -360,7 +362,20 @@ export async function runWriter(params = {}, deps = {}) {
   let checks = null
   let snippetsUsed = []
   let snippetInserts = []
+  // One polish pass before the review (2026-11-13): the warnings code finds that cost points on the Reviewer's
+  // checklist (keywords, answer-first openings, long sentences, a post over its range) are fixed in the same thread
+  // instead of costing points or a whole review round. If the polish makes the draft worse, the draft before it stays.
+  let polished = false
+  let beforePolish = null
+  const restoreBeforePolish = () => {
+    ;({ draft, checks, snippetsUsed, snippetInserts, answer } = beforePolish)
+    warnings.push('polish pass: its answer was not better, so the draft before it was kept')
+  }
   for (;;) {
+    if (answer.truncated && beforePolish) {
+      restoreBeforePolish()
+      break
+    }
     if (answer.truncated) {
       if (repairs >= wc.maxRepairs) throw new WriterError(`the ${mode} answer was cut off (finish_reason "truncated") and no repairs are left`, { kind: 'truncated' })
       repairs++
@@ -379,13 +394,29 @@ export async function runWriter(params = {}, deps = {}) {
     snippetsUsed = replaced.used
     snippetInserts = replaced.inserts
     checks = await check(draft, replaced)
-    // Only a major hard check calls the Writer again; a minor one (a long paragraph or sentence) is listed for you.
-    if (checks.major_passed || repairs >= wc.maxRepairs) break
-    repairs++
-    // The repair sees snippet tokens again, so it places them instead of copying code.
-    answer = lastThread
-      ? await callModel('repair', repairTail(null, majorProblems(checks.results)), { continueThread: lastThread })
-      : await callModel('repair', repairTail({ ...draft, post_markdown: tokeniseSnippets(draft.post_markdown, snippets, snippetInserts) }, majorProblems(checks.results)))
+    // A polish that broke a major check (and no repair left): the draft before it stays.
+    if (beforePolish && !checks.major_passed && (beforePolish.checks.major_passed || repairs >= wc.maxRepairs)) {
+      restoreBeforePolish()
+      break
+    }
+    if (!checks.major_passed && repairs < wc.maxRepairs) {
+      repairs++
+      // The repair sees snippet tokens again, so it places them instead of copying code.
+      answer = lastThread
+        ? await callModel('repair', repairTail(null, majorProblems(checks.results)), { continueThread: lastThread })
+        : await callModel('repair', repairTail({ ...draft, post_markdown: tokeniseSnippets(draft.post_markdown, snippets, snippetInserts) }, majorProblems(checks.results)))
+      continue
+    }
+    const polish = checks.major_passed && !polished && lastThread && wc.polish !== false
+      ? polishProblems(checks.results, { wordsMax: brief.word_target?.max ?? config.content.targetWordsMax })
+      : []
+    if (polish.length) {
+      polished = true
+      beforePolish = { draft: structuredClone(draft), checks, snippetsUsed, snippetInserts, answer }
+      answer = await callModel('polish', repairTail(null, polish), { continueThread: lastThread })
+      continue
+    }
+    break
   }
 
   // ---------- save ----------
@@ -393,7 +424,7 @@ export async function runWriter(params = {}, deps = {}) {
   const payload = {
     title: draft.title, post_markdown: draft.post_markdown, tldr: draft.tldr, seo: draft.seo, context: draft.context, revision_notes: draft.revision_notes,
     checks: { hard_passed: checks.hard_passed, major_passed: checks.major_passed, results: checks.results },
-    word_count: checks.word_count, reading: checks.reading, model_used: answer.model, writer_mode: mode, repairs_used: repairs, auto_fixes: autoFixes,
+    word_count: checks.word_count, reading: checks.reading, model_used: answer.model, writer_mode: mode, repairs_used: repairs, polished, auto_fixes: autoFixes,
     snippets_used: snippetsUsed, snippets_available: snippets.length,
     // The inserted snippets themselves, for the Reviewer (B3) and later re-checks.
     snippets: snippets.filter((s) => snippetsUsed.includes(s.id)),
@@ -407,7 +438,7 @@ export async function runWriter(params = {}, deps = {}) {
 
   const result = {
     mode, brief_id: params.briefId, brief_version: briefVersion, version, record_id: record.id, status, title: draft.title,
-    word_count: checks.word_count, reading: checks.reading, hard_passed: checks.hard_passed, repairs_used: repairs,
+    word_count: checks.word_count, reading: checks.reading, hard_passed: checks.hard_passed, repairs_used: repairs, polished,
     model_used: answer.model, auto_fixes: autoFixes, warnings
   }
   await postSlack(deps.notifier, config, result, draft.post_markdown, warnings)

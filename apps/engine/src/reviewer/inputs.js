@@ -66,7 +66,7 @@ export function labelledAllowedUrls(brief, { sourcePack = null, ctaUrl, snippets
  * Builds the message sections (B3). Returns { sections, allowed }.
  * @param {{ draft, brief, facts, sourcePack, story, previousReview, snippets }} input
  */
-export async function buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets = [], guide = null, sourceText = '' }) {
+export async function buildReviewerSections({ store, config, draft, brief, facts, sourcePack, story, previousReview, snippets = [], guide = null, sourceText = '', docsText = '' }) {
   const allowed = labelledAllowedUrls(brief, { sourcePack, ctaUrl: config.m91.ctaUrl, snippets, config })
   const results = (draft.checks?.results ?? []).map(({ id, passed, severity, value, detail }) => ({ id, passed, severity, value, detail }))
   const isTutorial = brief.post_type === 'tutorial' || brief.tutorial?.use === true
@@ -98,6 +98,8 @@ export async function buildReviewerSections({ store, config, draft, brief, facts
     sourcePack: sourcePack ? JSON.stringify(sourcePack.claims ?? sourcePack.payload?.claims ?? sourcePack) : null,
     // The text of the outside pages the post cites (the Writer had the same).
     sourceText: sourceText || null,
+    // M91's own docs pages the post relies on (the Writer had the same parts).
+    docsText: docsText || null,
     previousReview: previousReview ? JSON.stringify({
       feedback: (previousReview.feedback ?? []).map(({ area, quote, problem, fix, severity }) => ({ area, quote, problem, fix, severity })),
       revision_notes: draft.revision_notes ?? []
@@ -120,7 +122,7 @@ const SOURCE_TEXT_KEEP = 6000
 export function buildReviewerMessage(s, tail = '', max = MESSAGE_MAX) {
   const order = [
     ['post', 'POST'], ['guide', 'GUIDE'], ['brief', 'BRIEF'], ['checks', 'CHECK RESULTS'], ['facts', 'M91 FACTS'], ['allowedUrls', 'ALLOWED URLS'],
-    ['story', 'STORY'], ['tutorial', 'TUTORIAL'], ['sourcePack', 'SOURCE PACK'], ['sourceText', 'SOURCE TEXT'], ['previousReview', 'PREVIOUS REVIEW'], ['tone', 'TONE NOTES']
+    ['story', 'STORY'], ['tutorial', 'TUTORIAL'], ['sourcePack', 'SOURCE PACK'], ['docsText', 'M91 DOCS TEXT'], ['sourceText', 'SOURCE TEXT'], ['previousReview', 'PREVIOUS REVIEW'], ['tone', 'TONE NOTES']
   ]
   const sec = { ...s }
   const build = () => [...order.filter(([k]) => sec[k]).map(([k, label]) => `--- ${label} ---\n${sec[k]}`), ...(tail ? [tail] : [])].join('\n')
@@ -139,13 +141,19 @@ export function buildReviewerMessage(s, tail = '', max = MESSAGE_MAX) {
   }
   // The source pages: cut from the end (the outline's links come last), first down to SOURCE_TEXT_KEEP, at the end to
   // whatever fits.
-  const cutSources = (keep) => {
-    if (message.length <= max || !sec.sourceText) return
-    const target = Math.max(keep, sec.sourceText.length - (message.length - max) - 50)
-    if (target >= sec.sourceText.length) return
-    sec.sourceText = target > 0 ? `${sec.sourceText.slice(0, target)} …(trimmed)` : null
-    if (!trimmed.includes('source pages')) trimmed.push('source pages')
+  const cut = (key, label, keep) => {
+    if (message.length <= max || !sec[key]) return
+    const target = Math.max(keep, sec[key].length - (message.length - max) - 50)
+    if (target >= sec[key].length) return
+    sec[key] = target > 0 ? `${sec[key].slice(0, target)} …(trimmed)` : null
+    if (!trimmed.includes(label)) trimmed.push(label)
     message = build()
+  }
+  // The source pages first, then M91's docs text: first down to what is kept before anything else goes, at the end
+  // to whatever fits.
+  const cutSources = (keep) => {
+    cut('sourceText', 'source pages', keep)
+    cut('docsText', 'M91 docs text', keep && 4000)
   }
   cutSources(SOURCE_TEXT_KEEP)
   for (const [key, what] of [['sourcePack', 'source pack'], ['story', 'story record']]) {
