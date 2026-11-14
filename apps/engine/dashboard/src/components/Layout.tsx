@@ -148,7 +148,7 @@ function PillNav({ items, more }: { items: NavItem[]; more: NavItem[] }) {
     }
   }, [location.pathname, items.length])
   return (
-    <nav ref={ref} className="relative hidden items-center rounded-full border border-line bg-surface/90 p-1 shadow-[0_1px_2px_rgb(11_14_18/0.04)] md:flex" aria-label="Main">
+    <nav ref={ref} className="relative hidden items-center rounded-full border border-line bg-surface/90 p-1 shadow-[0_1px_2px_rgb(11_14_18/0.04)] lg:flex" aria-label="Main">
       <span aria-hidden className="absolute top-1 bottom-1 left-0 rounded-full bg-ink shadow-[0_6px_16px_-8px_rgb(11_14_18/0.6)] transition-[transform,width,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
         style={pill ? { transform: `translateX(${pill.left}px)`, width: pill.width, opacity: 1 } : { width: 0, opacity: 0 }} />
       {items.map((item) => <NavTab key={item.to} item={item} />)}
@@ -202,7 +202,9 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/approvals', label: 'Review', badge: waiting },
     { to: '/runs', label: 'Posts & runs', end: true },
     // The viaSocket memory: every record the engine keeps, why one may not be useful, and deleting what you do not need.
-    { to: '/memory', label: 'Memory' }
+    { to: '/memory', label: 'Memory' },
+    // Each agent's model, settings and instructions word for word.
+    { to: '/agents', label: 'Agents' }
   ]
   // This week (the editor's decisions, the news, the live guides) is on Home; its own page stays at /week.
   const more: NavItem[] = [
@@ -233,7 +235,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <TopLoader />
       <header className="sticky top-0 z-30 border-b border-line/70 bg-bg/85 backdrop-blur-xl backdrop-saturate-150">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-5 sm:px-8">
-          <button type="button" className="btn-ghost -ml-2 md:hidden" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" aria-expanded={menuOpen}>
+          <button type="button" className="btn-ghost -ml-2 lg:hidden" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" aria-expanded={menuOpen}>
             {menuOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
           <NavLink to="/" className="mr-5 flex items-center gap-2.5" aria-label="Blog Engine home">
@@ -255,7 +257,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </header>
       {menuOpen && (
-        <div className="fixed inset-x-0 top-16 bottom-0 z-40 animate-fade bg-bg/95 backdrop-blur-xl md:hidden">
+        <div className="fixed inset-x-0 top-16 bottom-0 z-40 animate-fade bg-bg/95 backdrop-blur-xl lg:hidden">
           <nav className="stagger mx-auto flex max-w-md flex-col gap-1 p-4" aria-label="Menu">
             {[...primary, ...more].map((item) => (
               <NavLink key={item.to} to={item.to} end={item.end}

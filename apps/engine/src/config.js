@@ -87,7 +87,7 @@ const DEFAULTS = {
   DEDUPE_MODE: 'local', DEDUPE_SIMILARITY_LOCAL: '0.65',
   URL_CHECK_TIMEOUT_MS: '10000',
   // Phase 4: Writer
-  WRITER_MAX_REPAIRS: '1', WRITER_POLISH: 'true', WRITER_REVISION_INPUT: 'full', TUTORIAL_SOURCE_MAX_CHARS: '40000', SLACK_POST_DRAFTS: 'false',
+  WRITER_MAX_REPAIRS: '1', WRITER_POLISH: 'true', WRITER_FACT_CHECK: 'true', WRITER_REVISION_INPUT: 'full', TUTORIAL_SOURCE_MAX_CHARS: '40000', SLACK_POST_DRAFTS: 'false',
   READING_GRADE_HARD_MARGIN: '1', SENTENCE_MAX_WORDS: '20', SENTENCE_HARD_MAX_WORDS: '25', PARAGRAPH_MAX_SENTENCES: '3', WORDS_HARD_MARGIN_PCT: '20', SLACK_CHUNK_CHARS: '2800',
   // Phase 5: Reviewer, lessons, promo pack
   REVIEWER_MAX_SOURCE_CHECKS: '5', REVIEW_FEEDBACK_MAX_ITEMS: '8', LESSONS_PER_REVIEW_MAX: '3',
@@ -337,6 +337,8 @@ export function loadConfig(env = process.env) {
       maxRepairs: int('WRITER_MAX_REPAIRS', { max: 5 }),
       // One polish pass before the review for the warnings that cost points on the Reviewer's checklist (1 AI call).
       polish: bool('WRITER_POLISH'),
+      // A fact check before the review on the Reviewer's model, and the Writer's fixes (1–2 AI calls).
+      factCheck: bool('WRITER_FACT_CHECK'),
       revisionInput: oneOf('WRITER_REVISION_INPUT', ['context', 'full']),
       // At most 48000: the tutorial text travels in the message, which viaSocket caps at 50,000 characters.
       tutorialSourceMaxChars: int('TUTORIAL_SOURCE_MAX_CHARS', { min: 1000, max: 48000 }),

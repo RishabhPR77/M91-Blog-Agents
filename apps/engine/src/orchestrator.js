@@ -122,7 +122,7 @@ export { LockedError }
 // A step's notes that the run lists for you: what code fixed or worked around so the run could go on.
 const NOTABLE = {
   strategist: (w) => /^brief fixed by code|^message trimmed/.test(w),
-  writer: (w) => /^tutorial source|^the tutorial has no fetchable|^message trimmed|^drafted_with_issues/.test(w),
+  writer: (w) => /^tutorial source|^the tutorial has no fetchable|^message trimmed|^drafted_with_issues|^fact check|^polish pass/.test(w),
   scout: (w) => /^M91 facts not rebuilt today/.test(w)
 }
 const LABEL = { strategist: 'Strategist', writer: 'Writer', scout: 'Scout' }

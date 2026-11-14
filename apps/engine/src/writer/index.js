@@ -15,6 +15,7 @@ import { buildWriterPrompt, repairTail, truncatedProblem } from './prompts.js'
 import { loadBrief, allowedUrlSet, supportedSources, toneSection, tutorialSourceText, citedDocsSourceText, excerptFor, briefRules, fullBriefForWriter, buildWriterMessage, loadFacts, factSheet } from './inputs.js'
 import { extractSnippets, snippetSection, replaceSnippetTokens, tokeniseSnippets, SNIPPET_LIST_MAX_LINES } from './snippets.js'
 import { citedSourceText, docsTextFor, briefHints } from './sources.js'
+import { FACT_CHECK, fact_check, factCheckMessage, factIssues, factFixLine } from './factcheck.js'
 import { needsStartHere, starterPost, withStartHere } from '../timely/starthere.js'
 import { stripDocsLinks, isDocsFix } from '../util/m91links.js'
 import { linkNewsSource } from './newslink.js'
@@ -373,10 +374,45 @@ export async function runWriter(params = {}, deps = {}) {
   // checklist (keywords, answer-first openings, long sentences, a post over its range) are fixed in the same thread
   // instead of costing points or a whole review round. If the polish makes the draft worse, the draft before it stays.
   let polished = false
+  let factChecked = false
+  let factFixes = 0
   let beforePolish = null
   const restoreBeforePolish = () => {
     ;({ draft, checks, snippetsUsed, snippetInserts, answer } = beforePolish)
-    warnings.push('polish pass: its answer was not better, so the draft before it was kept')
+    warnings.push(`${beforePolish.what}: its answer was not better, so the draft before it was kept`)
+    if (beforePolish.what === 'fact check fixes') factFixes = 0
+  }
+
+  // The fact check before the review: the Reviewer's model checks every claim against the evidence the Reviewer uses
+  // and returns the sentences to fix. Never stops the run: a failed or unusable check is a warning.
+  async function factCheck() {
+    const message = factCheckMessage({
+      post: draft.post_markdown,
+      facts: sections.m91Facts,
+      brief: JSON.stringify({ claims_to_avoid: brief.claims_to_avoid ?? [], m91_facts_to_use: brief.m91_facts_to_use ?? [], news: brief.news ?? null, story: brief.story ?? null }),
+      docsText: [sections.docsText, sections.tutorialText].filter(Boolean).join('\n\n') || null,
+      sourceText: sections.sourceText
+    })
+    if (!message) {
+      warnings.push('fact check skipped: its message would not fit in 50,000 characters')
+      return []
+    }
+    const started = now()
+    try {
+      const r = await aiSend({ agent: 'reviewer', call: 'factcheck', prompt: FACT_CHECK, message, jsonSchema: fact_check, threadId: `factcheck-${params.briefId}-v${version}-${Math.random().toString(36).slice(2, 6)}`, retries: config.viasocket.maxRetries })
+      const issues = factIssues(r.content, draft.post_markdown)
+      await runLog({ call: 'factcheck', model: r.model ?? config.reviewer?.model, delivery: r.delivery ?? null, ms: r.ms ?? now() - started, result: issues === null ? 'schema_invalid' : 'ok', hard_failures: [], auto_fixes: [], error: null, fallback: false })
+      if (issues === null) {
+        warnings.push('fact check: its answer was not usable, so the draft went to the review unchecked')
+        return []
+      }
+      return issues
+    } catch (error) {
+      if (error instanceof CancelledError) throw error
+      if (FATAL_KINDS.includes(error?.kind)) throw new WriterError(`fact check failed (${error.kind}): ${error.message}`, { kind: error.kind })
+      warnings.push(`fact check failed (${error.message}): the draft went to the review unchecked`)
+      return []
+    }
   }
   for (;;) {
     if (answer.truncated && beforePolish) {
@@ -419,19 +455,31 @@ export async function runWriter(params = {}, deps = {}) {
       : []
     if (polish.length) {
       polished = true
-      beforePolish = { draft: structuredClone(draft), checks, snippetsUsed, snippetInserts, answer }
+      beforePolish = { what: 'polish pass', draft: structuredClone(draft), checks, snippetsUsed, snippetInserts, answer }
       answer = await callModel('polish', repairTail(null, polish), { continueThread: lastThread })
       continue
     }
+    // The fact check, once, on the draft that passed the checks and the polish.
+    if (checks.major_passed && !factChecked && lastThread && wc.factCheck !== false) {
+      factChecked = true
+      const issues = await factCheck()
+      if (issues.length) {
+        factFixes = issues.length
+        beforePolish = { what: 'fact check fixes', draft: structuredClone(draft), checks, snippetsUsed, snippetInserts, answer }
+        answer = await callModel('factfix', repairTail(null, issues.map(factFixLine)), { continueThread: lastThread })
+        continue
+      }
+    }
     break
   }
+  if (factFixes) warnings.push(`fact check: ${factFixes} sentence(s) corrected before the review`)
 
   // ---------- save ----------
   throwIfCancelled()
   const payload = {
     title: draft.title, post_markdown: draft.post_markdown, tldr: draft.tldr, seo: draft.seo, context: draft.context, revision_notes: draft.revision_notes,
     checks: { hard_passed: checks.hard_passed, major_passed: checks.major_passed, results: checks.results },
-    word_count: checks.word_count, reading: checks.reading, model_used: answer.model, writer_mode: mode, repairs_used: repairs, polished, auto_fixes: autoFixes,
+    word_count: checks.word_count, reading: checks.reading, model_used: answer.model, writer_mode: mode, repairs_used: repairs, polished, fact_fixes: factFixes, auto_fixes: autoFixes,
     snippets_used: snippetsUsed, snippets_available: snippets.length,
     // The inserted snippets themselves, for the Reviewer (B3) and later re-checks.
     snippets: snippets.filter((s) => snippetsUsed.includes(s.id)),
@@ -445,7 +493,7 @@ export async function runWriter(params = {}, deps = {}) {
 
   const result = {
     mode, brief_id: params.briefId, brief_version: briefVersion, version, record_id: record.id, status, title: draft.title,
-    word_count: checks.word_count, reading: checks.reading, hard_passed: checks.hard_passed, repairs_used: repairs, polished,
+    word_count: checks.word_count, reading: checks.reading, hard_passed: checks.hard_passed, repairs_used: repairs, polished, fact_fixes: factFixes,
     model_used: answer.model, auto_fixes: autoFixes, warnings
   }
   await postSlack(deps.notifier, config, result, draft.post_markdown, warnings)

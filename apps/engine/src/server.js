@@ -6,6 +6,7 @@
 
 import http from 'node:http'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { agentsInfo, pipelineInfo } from './agentsinfo.js'
 import { readFileSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { extname, join, resolve, sep } from 'node:path'
@@ -864,6 +865,8 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
 
     // Settings
     if (path === '/api/settings' && method === 'GET') return send(res, 200, publicSettings(config))
+    // The Agents page: each agent's role, model, settings and instructions word for word (no secrets).
+    if (path === '/api/agents' && method === 'GET') return send(res, 200, { agents: agentsInfo(config), pipeline: pipelineInfo(config) })
     // Phase 7: the published posts for the dashboard's Posts page (never the post text).
     if (path === '/api/posts' && method === 'GET') {
       const posts = (await store.getRecords({ type: 'published_post' })).map((r) => {

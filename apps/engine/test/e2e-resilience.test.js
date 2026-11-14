@@ -22,7 +22,7 @@ const LONG_SENTENCE = ' When the phone rings in the middle of the night the pers
 beforeEach(() => resetEvents())
 
 /** One full run. strategist(lead) → the brief the model returns (plan and repair); writer, reviewer: fake answers. */
-async function e2e({ env = {}, strategist, writer = {}, reviews = [reviewAnswer()], web = fakeWeb(), store: given } = {}) {
+async function e2e({ env = {}, strategist, writer = {}, reviews = [reviewAnswer()], web = fakeWeb(), store: given, factcheck = { issues: [] } } = {}) {
   const restore = setSink(() => {})
   // As the engine runs live: interactive guides off, the best version sent on when no version passes.
   const config = fakeConfig({ M91_DOCS_URL: LLMS, M91_CTA_URL: CTA, TARGET_WORDS_MIN: '180', TARGET_WORDS_MAX: '500', AI_MAX_RETRIES: '1', EXPERIENCE_ENABLED: 'false', APPROVE_BEST_ON_FAIL: 'true', ...env })
@@ -41,6 +41,8 @@ async function e2e({ env = {}, strategist, writer = {}, reviews = [reviewAnswer(
   const aiSend = async (opts) => {
     const agent = opts.agent ?? String(opts.threadId).split('-')[0]
     requests.push({ agent, call: opts.call ?? null, threadId: opts.threadId, length: String(opts.message ?? '').length, sourceText: /^--- SOURCE TEXT ---$/m.test(String(opts.message ?? '')) })
+    // The fact check runs on the Reviewer's model but is not a review.
+    if (opts.call === 'factcheck') return done(opts, factcheck)
     return ai[agent](opts)
   }
   const manager = createRunManager({
@@ -115,4 +117,24 @@ test("M91's docs are down and only yesterday's facts exist: the run uses them an
   const { r, warnings } = await e2e({ strategist, store, web: fakeWeb({ llmsStatus: 500 }) })
   assert.equal(r.status, 'succeeded', `${r.error ?? ''}\n${warnings.join('\n')}`)
   assert.ok(warnings.some((w) => /^Scout: M91 facts not rebuilt today \(.+\): using the facts from 2026-10-16$/.test(w)), warnings.join('\n'))
+})
+
+test('as live (polish and fact check on): a factual slip is caught before the review, and the first review passes', async () => {
+  const strategist = (lead) => validBrief({ lead: { kind: 'cluster', id: lead }, terms_to_define: [], why_today: 'People asked this week.' })
+  const slip = 'M91 always calls exactly two people at once.'
+  const withSlip = draftAnswer({ post_markdown: GOOD_MD.replace('A pause keeps', `${slip} A pause keeps`) })
+  const fixed = draftAnswer({ post_markdown: GOOD_MD })
+  const { r, requests, warnings } = await e2e({
+    strategist,
+    env: { WRITER_POLISH: 'true', WRITER_FACT_CHECK: 'true' },
+    writer: { new: withSlip, polish: withSlip, factfix: fixed },
+    factcheck: { issues: [{ quote: slip, problem: 'M91 FACTS do not say this.', fix: 'remove' }] },
+    reviews: [reviewAnswer()]
+  })
+  assert.equal(r.status, 'succeeded', `${r.error ?? ''}\n${warnings.join('\n')}`)
+  const calls = requests.filter((q) => q.agent === 'writer' || q.call === 'factcheck').map((q) => q.call)
+  assert.ok(calls.includes("factcheck") && calls.at(-1) === "factfix", `calls: ${calls.join(",")} | warnings: ${warnings.join(" / ")}`)
+  assert.equal(requests.filter((q) => q.agent === 'reviewer' && q.call !== 'factcheck').length, 1, 'one review: it passed the first time')
+  assert.match(r.run.result_summary, /v1/)
+  assert.ok(warnings.some((w) => /fact check: 1 sentence\(s\) corrected before the review/.test(w)), warnings.join('\n'))
 })
