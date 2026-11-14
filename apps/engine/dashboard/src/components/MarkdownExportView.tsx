@@ -27,7 +27,7 @@ export function MarkdownExportView({ markdown, filename, frontMatter, downloadHr
     setTimeout(() => setCopied('idle'), 2000)
   }
   return (
-    <div data-testid="markdown-export">
+    <div className="min-w-0" data-testid="markdown-export">
       <div className="mb-8 flex flex-wrap items-center gap-3">
         <span className="inline-flex items-center gap-1.5 font-mono text-xs text-ink-2"><FileText size={14} />{filename}</span>
         <span className="text-xs text-ink-3">{markdown.length.toLocaleString('en-US')} characters</span>
@@ -45,9 +45,9 @@ export function MarkdownExportView({ markdown, filename, frontMatter, downloadHr
         <ul className="mb-3 list-disc pl-5 text-xs text-amber-700 dark:text-amber-300">{warnings.map((w) => <li key={w}>{w}</li>)}</ul>
       )}
       {frontMatter && (
-        <dl className="mx-auto mb-12 grid max-w-[680px] grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 border-y border-line py-4 text-xs" data-testid="front-matter">
+        <dl className="mx-auto mb-12 grid max-w-[680px] grid-cols-1 gap-x-6 gap-y-1.5 border-y border-line py-4 text-xs sm:grid-cols-[max-content_minmax(0,1fr)]" data-testid="front-matter">
           {Object.entries(frontMatter).map(([k, v]) => (
-            <div key={k} className="contents"><dt className="font-mono text-ink-3">{k}</dt><dd className="break-words text-ink-2">{Array.isArray(v) ? v.join(', ') : v === null || v === undefined ? '—' : String(v)}</dd></div>
+            <div key={k} className="contents"><dt className="font-mono text-ink-3">{k}</dt><dd className="mb-1 break-all text-ink-2 sm:mb-0">{Array.isArray(v) ? v.join(', ') : v === null || v === undefined ? '—' : String(v)}</dd></div>
           ))}
         </dl>
       )}

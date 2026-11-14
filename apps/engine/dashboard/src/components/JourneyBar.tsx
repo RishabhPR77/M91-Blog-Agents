@@ -16,18 +16,18 @@ export const STATE_WORD: Record<StageState, string> = { done: 'done', current: '
 
 export function JourneyBar({ stages, compact = false }: { stages: JourneyStage[]; compact?: boolean }) {
   return (
-    <ol className={`flex w-full ${compact ? 'gap-1' : 'gap-1.5 overflow-x-auto pb-1'}`} aria-label="Post journey" data-testid="journey">
+    <ol className={`w-full ${compact ? 'flex gap-1' : 'grid grid-cols-4 gap-x-1.5 gap-y-4 sm:flex sm:gap-1.5'}`} aria-label="Post journey" data-testid="journey">
       {stages.map((s) => {
         const seg = <span className={`block w-full rounded-full ${compact ? 'h-1.5' : 'h-1.5'} ${SEG[s.state]}`} />
         const quiet = s.state === 'todo' || s.state === 'off'
         return (
-          <li key={s.id} className={`flex min-w-0 flex-1 flex-col ${compact ? '' : 'min-w-[5.5rem]'}`} data-testid={`stage-${s.id}`} data-state={s.state} title={`${s.label}: ${STATE_WORD[s.state]}${s.detail ? ` · ${s.detail}` : ''}`}>
+          <li key={s.id} className="flex min-w-0 flex-1 flex-col" data-testid={`stage-${s.id}`} data-state={s.state} title={`${s.label}: ${STATE_WORD[s.state]}${s.detail ? ` · ${s.detail}` : ''}`}>
             {s.run_id && !compact ? <Link to={`/runs/${s.run_id}`} aria-label={`${s.label}: open its run`} className="block rounded-full py-1 transition-opacity hover:opacity-70">{seg}</Link> : <span className={compact ? '' : 'py-1'}>{seg}</span>}
             {!compact && (
               <>
                 <span className={`mt-2 text-xs font-medium ${quiet ? 'text-ink-3' : s.state === 'waiting' ? 'text-hl-ink' : s.state === 'failed' ? 'text-red-600 dark:text-red-300' : 'text-ink'}`}>{s.label}</span>
                 <span className="sr-only">{STATE_WORD[s.state]}</span>
-                {s.detail && <span className="mt-0.5 line-clamp-2 pr-2 text-[11px] leading-snug text-ink-3">{s.detail}</span>}
+                {s.detail && <span className="mt-0.5 line-clamp-2 pr-2 text-[11px] leading-snug [overflow-wrap:anywhere] text-ink-3">{s.detail}</span>}
               </>
             )}
           </li>

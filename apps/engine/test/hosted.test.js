@@ -154,7 +154,7 @@ test('login: a wrong ID and a wrong password both get the same 401 and message; 
     const ok = await login()
     assert.equal(ok.status, 200)
     const cookie = ok.headers.get('set-cookie')
-    assert.match(cookie, /^m91_session=[0-9a-f]{64};/)
+    assert.match(cookie, /^m91_session=\d{13}\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43};/)
     for (const flag of [/HttpOnly/, /SameSite=Strict/, /Path=\//, /Max-Age=43200/, /Secure/]) assert.match(cookie, flag)
     assert.ok(!cookie.includes(PASSWORD) && !cookie.includes(HASH))
     assert.equal(ok.headers.get('strict-transport-security'), 'max-age=31536000; includeSubDomains')

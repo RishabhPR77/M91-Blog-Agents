@@ -5,7 +5,7 @@
 // With DASHBOARD_AUTH=false the server binds to 127.0.0.1 only and /api needs no login.
 
 import http from 'node:http'
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { agentsInfo, pipelineInfo } from './agentsinfo.js'
 import { readFileSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
@@ -253,8 +253,29 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
   const admin = config?.dashboard?.admin ?? null
   const hosted = Boolean(config?.dashboard?.hosted)
   const loginMode = !auth ? 'off' : admin ? 'admin' : 'password'
-  const sessions = new Map() // token → expires at
-  const MAX_SESSIONS = 50
+  // Signed sessions (2026-11-14): the token carries its expiry and a nonce, signed with a key derived from the login
+  // credentials and the trigger key, so a restart or a deploy no longer logs everyone out (in-memory sessions did).
+  // Changing the password (or the trigger key) changes the key: every session ends. Logout revokes the token's nonce
+  // in memory; after a restart a logged-out token would validate again until it expires (at most sessionMs). The
+  // cookie is HttpOnly, Secure (hosted) and SameSite=Strict.
+  const sessionKey = createHash('sha256').update(['m91-session-v1', admin ? `${admin.username}\n${admin.passwordHash}` : password, triggerKey ?? ''].join('\n')).digest()
+  const sign = (body) => createHmac('sha256', sessionKey).update(body).digest('base64url')
+  const revoked = new Map() // nonce → expires at
+  const newSession = (t) => {
+    const body = `${t + sessionMs}.${randomBytes(16).toString('base64url')}`
+    return `${body}.${sign(body)}`
+  }
+  /** The session's { exp, nonce } when the token is ours, unexpired and not revoked; else null. */
+  const readSession = (token) => {
+    const m = /^(\d{10,16})\.([A-Za-z0-9_-]{16,64})\.([A-Za-z0-9_-]{20,128})$/.exec(String(token ?? ''))
+    if (!m) return null
+    const want = Buffer.from(sign(`${m[1]}.${m[2]}`))
+    const got = Buffer.from(m[3])
+    if (want.length !== got.length || !timingSafeEqual(want, got)) return null
+    const exp = Number(m[1])
+    if (exp <= now() || revoked.has(m[2])) return null
+    return { exp, nonce: m[2] }
+  }
   const loginTries = new Map() // ip → [timestamps]
   const failures = [] // timestamps of failed logins from anyone (a cap that spoofed addresses cannot get around)
   const LOGIN_PER_IP = 5 // per minute
@@ -394,14 +415,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
 
   function authed(req) {
     if (!auth) return true
-    const token = parseCookies(req.headers.cookie).m91_session
-    const exp = token && sessions.get(token)
-    if (!exp) return false
-    if (exp <= now()) {
-      sessions.delete(token)
-      return false
-    }
-    return true
+    return readSession(parseCookies(req.headers.cookie).m91_session) !== null
   }
 
   function openStream(req, res) {
@@ -472,15 +486,15 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         failures.push(t)
         return admin ? fail(res, 401, 'bad_credentials', 'wrong ID or password') : fail(res, 401, 'bad_password', 'wrong password')
       }
-      const token = randomBytes(32).toString('hex')
-      for (const [k, exp] of sessions) if (exp <= t) sessions.delete(k)
-      while (sessions.size >= MAX_SESSIONS) sessions.delete(sessions.keys().next().value)
-      sessions.set(token, t + sessionMs)
+      const token = newSession(t)
       return send(res, 200, { ok: true }, { 'set-cookie': `m91_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(sessionMs / 1000)}${cookieTail(req)}` })
     }
     if (path === '/api/logout' && method === 'POST') {
-      const token = parseCookies(req.headers.cookie).m91_session
-      if (token) sessions.delete(token)
+      const session = readSession(parseCookies(req.headers.cookie).m91_session)
+      if (session) {
+        for (const [k, exp] of revoked) if (exp <= now()) revoked.delete(k)
+        revoked.set(session.nonce, session.exp)
+      }
       return send(res, 200, { ok: true }, { 'set-cookie': `m91_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${cookieTail(req)}` })
     }
 

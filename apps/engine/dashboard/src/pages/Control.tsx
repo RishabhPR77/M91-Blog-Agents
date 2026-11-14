@@ -326,9 +326,9 @@ export default function Control() {
                 const line = journeyLine(p.stages)
                 return (
                   <li key={p.brief_id} className="flex flex-col gap-2 py-3.5 md:flex-row md:items-center md:gap-6">
-                    <Link to={`/approvals/${p.brief_id}`} className="min-w-0 flex-1 truncate font-serif text-[18px] font-semibold tracking-[-0.01em] underline-offset-[4px] hover:underline">{p.title || 'A post in the making'}</Link>
+                    <Link to={`/approvals/${p.brief_id}`} className="line-clamp-2 min-w-0 flex-1 font-serif text-[18px] md:truncate font-semibold tracking-[-0.01em] underline-offset-[4px] hover:underline">{p.title || 'A post in the making'}</Link>
                     <div className="w-full md:w-72"><JourneyBar stages={p.stages} compact /></div>
-                    <span className={`pill ${line.tone === 'green' ? 'pill-green' : line.tone === 'red' ? 'pill-red' : line.tone === 'gray' ? 'pill-gray' : line.tone === 'violet' ? 'pill-blue font-semibold' : 'pill-blue'} md:w-48 md:justify-center`}>{line.text}</span>
+                    <span className={`pill self-start ${line.tone === 'green' ? 'pill-green' : line.tone === 'red' ? 'pill-red' : line.tone === 'gray' ? 'pill-gray' : line.tone === 'violet' ? 'pill-blue font-semibold' : 'pill-blue'} md:w-48 md:self-auto md:justify-center`}>{line.text}</span>
                   </li>
                 )
               })}
@@ -395,9 +395,9 @@ export default function Control() {
               </div>
             </details>
             <details className="group" data-testid="run-one-agent">
-              <summary className="flex cursor-pointer list-none items-center gap-2 py-1 text-sm font-semibold text-ink">
+              <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-0.5 py-1 text-sm font-semibold text-ink">
                 <ChevronDown size={16} className="-rotate-90 transition-transform group-open:rotate-0" /> Run one agent, or another action
-                <span className="font-normal text-ink-3">(Scout, Strategist, Writer, Reviewer, export{flags.target !== 'none' ? ', publish' : ''})</span>
+                <span className="basis-full pl-6 font-normal text-ink-3 sm:basis-auto sm:pl-0">(Scout, Strategist, Writer, Reviewer, export{flags.target !== 'none' ? ', publish' : ''})</span>
               </summary>
               <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <RunButton title="Run Scout" description="Research: M91 facts, questions people ask, stories and tutorials." models={[['Scout', models?.scout]]} costKey="scout" lowCost={lowCost} built={isBuilt('scout')} disabledReason={busyReason}

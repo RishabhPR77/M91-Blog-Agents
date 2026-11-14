@@ -19,7 +19,7 @@ export function Card({ title, children, className = '', actions }: { title?: Rea
   return (
     <section className={`border-t border-line pt-6 pb-2 ${className}`}>
       {(title || actions) && (
-        <div className="mb-5 flex items-center justify-between gap-3">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           {title && <h2 className="font-serif text-[21px] font-semibold tracking-[-0.01em] text-ink [&_svg]:hidden">{title}</h2>}
           {actions}
         </div>

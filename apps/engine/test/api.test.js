@@ -218,7 +218,7 @@ test('auth on: 401 without a session, login (wrong / right), cookie flags, logou
     const ok = await call('POST', '/api/login', { password: 'fake-dashboard-pass' })
     assert.equal(ok.status, 200)
     const cookie = ok.headers.get('set-cookie')
-    assert.match(cookie, /m91_session=[0-9a-f]{64}/)
+    assert.match(cookie, /m91_session=\d{13}\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/)
     assert.match(cookie, /HttpOnly/)
     assert.match(cookie, /SameSite=Strict/)
     assert.match(cookie, /Max-Age=43200/)

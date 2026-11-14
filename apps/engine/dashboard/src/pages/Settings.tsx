@@ -20,7 +20,7 @@ export default function Settings() {
       <PageHeader title="Settings" subtitle={<>Change these in <code>.env</code> and restart the engine. Secrets are never shown here.</>} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Run defaults">
-          <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
+          <dl className="grid grid-cols-1 gap-y-1 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-y-2 [&_dd]:mb-2 [&_dd]:break-words sm:[&_dd]:mb-0">
             <dt className="text-slate-500">Dry run by default</dt><dd data-testid="setting-dry-run">{yes(d.runtime.dry_run)}</dd>
             <dt className="text-slate-500">Auto-publish</dt><dd>{yes(d.runtime.auto_publish)}</dd>
             <dt className="text-slate-500">Log level</dt><dd>{d.runtime.log_level}</dd>
@@ -30,7 +30,7 @@ export default function Settings() {
         </Card>
         <Card title="Weekly editor">
           {d.weekly ? (
-            <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
+            <dl className="grid grid-cols-1 gap-y-1 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-y-2 [&_dd]:mb-2 [&_dd]:break-words sm:[&_dd]:mb-0">
               <dt className="text-slate-500">Editor model</dt><dd className="font-mono text-xs" data-testid="setting-editor-model">{d.models.editor ? `${d.models.editor.service} · ${d.models.editor.model} · ${d.models.editor.delivery}` : 'not reported'}</dd>
               <dt className="text-slate-500">Questions from the last</dt><dd>{d.weekly.question_days} days, up to {d.weekly.questions_max} (EDITOR_QUESTION_DAYS, EDITOR_QUESTIONS_MAX)</dd>
               <dt className="text-slate-500">Candidates weighed</dt><dd>{d.weekly.candidates} (EDITOR_CANDIDATES)</dd>
@@ -44,7 +44,7 @@ export default function Settings() {
         </Card>
         <Card title="Approval">
           {d.approval ? (
-            <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
+            <dl className="grid grid-cols-1 gap-y-1 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-y-2 [&_dd]:mb-2 [&_dd]:break-words sm:[&_dd]:mb-0">
               <dt className="text-slate-500">Max counter prompts</dt><dd data-testid="setting-max-revisions">{d.approval.max_human_revisions} per brief</dd>
               <dt className="text-slate-500">Re-review after a change</dt><dd>{yes(d.approval.rereview_after_human)}</dd>
               <dt className="text-slate-500">M91 alert when waiting</dt><dd>{yes(d.approval.m91_notify_on_awaiting)}</dd>
@@ -55,7 +55,7 @@ export default function Settings() {
         </Card>
         <Card title="Output and publishing">
           {d.publish ? (
-            <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
+            <dl className="grid grid-cols-1 gap-y-1 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-y-2 [&_dd]:mb-2 [&_dd]:break-words sm:[&_dd]:mb-0">
               <dt className="text-slate-500">Publish target</dt><dd data-testid="setting-publish-target">{d.publish.target === 'none' ? 'none: the Markdown export is the output' : d.publish.target === 'docstar' ? 'Docstar' : d.publish.target === 'slack' ? 'Slack: a message with a link to download the .md' : d.publish.target === 'email' ? 'Email: the post with its .md attached (MAIL_TO)' : 'the blog (Embarko)'} (PUBLISH_TARGET)</dd>
               <dt className="text-slate-500">Markdown export</dt><dd>saved on every approval (Exports page)</dd>
               <dt className="text-slate-500">Docstar keys set</dt><dd data-testid="setting-docstar">{d.publish.docstar_configured ? 'yes' : 'no (DOCSTAR_API_URL, DOCSTAR_API_KEY, DOCSTAR_COLLECTION_ID)'}</dd>
@@ -65,7 +65,7 @@ export default function Settings() {
         {blogOn && (
           <Card title="Blog and publishing">
             {d.blog ? (
-              <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
+              <dl className="grid grid-cols-1 gap-y-1 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-y-2 [&_dd]:mb-2 [&_dd]:break-words sm:[&_dd]:mb-0">
                 <dt className="text-slate-500">Auto-publish on approve</dt><dd data-testid="setting-auto-publish">{yes(d.blog.auto_publish)}</dd>
                 <dt className="text-slate-500">Blog app (Embarko)</dt><dd className="font-mono text-xs">{d.blog.app_name}</dd>
                 <dt className="text-slate-500">Blog URL</dt><dd><a className="link-quiet" href={d.blog.base_url} target="_blank" rel="noreferrer">{d.blog.base_url}</a></dd>
@@ -77,7 +77,7 @@ export default function Settings() {
         )}
         <Card title="Interactive guides">
           {d.designer ? (
-            <dl className="grid grid-cols-[12rem_1fr] gap-y-2 text-sm">
+            <dl className="grid grid-cols-1 gap-y-1 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-y-2 [&_dd]:mb-2 [&_dd]:break-words sm:[&_dd]:mb-0">
               <dt className="text-slate-500">Experience Designer</dt><dd data-testid="setting-experience">{d.designer.enabled === false ? 'off (EXPERIENCE_ENABLED=false): no guides, the pre-Phase-10 review' : 'on'}</dd>
               <dt className="text-slate-500">New posts get a guide</dt><dd data-testid="setting-interactive-default">{yes(d.designer.interactive_default)} (INTERACTIVE_DEFAULT)</dd>
               <dt className="text-slate-500">Experience Designer model</dt><dd className="font-mono text-xs" data-testid="setting-designer-model">{d.models.designer ? `${d.models.designer.service} · ${d.models.designer.model} · ${d.models.designer.delivery}` : 'not reported'}</dd>

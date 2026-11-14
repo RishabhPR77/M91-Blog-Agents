@@ -376,8 +376,8 @@ export default function ApprovalDetail() {
       </div>
 
       <h2 className="mt-20 mb-6 font-serif text-[26px] font-semibold tracking-[-0.015em]">More about this post</h2>
-      <div className="grid items-start gap-x-12 gap-y-8 md:grid-cols-2">
-        <ExportCard briefId={d.brief_id} version={d.draft.version} status={d.draft.status} />
+      <div className="grid items-start gap-x-12 gap-y-8 md:grid-cols-2 [&>*]:min-w-0">
+        <ExportCard briefId={d.brief_id} version={d.draft.version} status={d.draft.status} alone={!flags.blogOn && !flags.experienceOn} />
         {flags.blogOn && <PublishCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} title={d.draft.title} />}
         {flags.experienceOn && <InteractiveCard briefId={d.brief_id} status={d.draft.status} version={d.draft.version} info={d.interactive} />}
       </div>

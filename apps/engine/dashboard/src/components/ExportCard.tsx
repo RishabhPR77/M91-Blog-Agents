@@ -12,7 +12,7 @@ import { MarkdownExportView } from './MarkdownExportView'
 type ExportPreview = { version: number; filename: string; markdown: string; front_matter: Record<string, unknown>; warnings: string[] }
 type FinalExport = { version: number; filename: string; exported_at: string | null }
 
-export function ExportCard({ briefId, version, status }: { briefId: string; version: number; status: string }) {
+export function ExportCard({ briefId, version, status, alone = false }: { briefId: string; version: number; status: string; alone?: boolean }) {
   const [open, setOpen] = useState(false)
   const preview = useQuery({
     queryKey: ['export-preview', briefId, version],
@@ -34,7 +34,8 @@ export function ExportCard({ briefId, version, status }: { briefId: string; vers
   })
   const saved = final.data
   return (
-    <Card title="Markdown export" actions={saved ? <span className="pill pill-green">Final export saved</span> : undefined}>
+    // Open (the post in reading width) or the only card: the whole row, never half of it with the other half empty.
+    <Card title="Markdown export" className={open || alone ? 'md:col-span-2' : ''} actions={saved ? <span className="pill pill-green">Final export saved</span> : undefined}>
       <p className="mb-2 text-sm text-slate-600 dark:text-slate-300">
         {saved
           ? <>Saved {saved.exported_at ? fmtDateTime(saved.exported_at) : ''} from v{saved.version} as <span className="font-mono text-xs">{saved.filename}</span>. See <Link className="underline" to="/exports">Exports</Link>.</>
