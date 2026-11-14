@@ -12,6 +12,7 @@ import { buildDocsBundle, fetchSkillReadme, DocsError } from './docs.js'
 import { classifyCluster, mergeClusterPayload, storedStoryUrls, isDuplicateTutorial } from './dedupe.js'
 import { rankClusters } from './rank.js'
 import { emit, scoutStepName, throwIfCancelled, CancelledError } from '../events.js'
+import { previewItems } from '../preview.js'
 import { saveRunLog } from '../util/runlog.js'
 import { dedupeSettings, similarity } from '../dedupe.js'
 import { expireOld, listOpportunities } from '../timely/model.js'
@@ -88,7 +89,10 @@ export async function runScout(params = {}, deps = {}) {
           onRetry: () => { callsUsed++; retries++ }
         })
         const v = validateAgainst(activeSchema.name, r.content)
-        if (v.valid) return { value: v.value, meta: { ...meta(), model: r.model ?? sc.model, delivery: r.delivery ?? delivery ?? sc.delivery } }
+        if (v.valid) {
+          emit('preview', { agent: 'scout', step: scoutStepName(call), data: { kind: 'scout', call, items: previewItems(v.value) } })
+          return { value: v.value, meta: { ...meta(), model: r.model ?? sc.model, delivery: r.delivery ?? delivery ?? sc.delivery } }
+        }
         if (schemaRetried || callsUsed >= sc.maxCalls) throw new AiError(`answer did not match ${activeSchema.name}: ${v.errors.slice(0, 3).join('; ')}`, { kind: 'schema' })
         schemaRetried = true
         retries++

@@ -16,10 +16,9 @@ function clear(root: HTMLElement) {
   root.normalize()
 }
 
-/** Marks the quoted sentence in root; true when found. */
-export function showInPost(root: HTMLElement | null, quote: string): boolean {
-  if (!root || !quote.trim()) return false
-  clear(root)
+/** The range of the quoted text in root (spaces and Markdown marks ignored), or null when it is not there. */
+export function findQuote(root: HTMLElement | null, quote: string): Range | null {
+  if (!root || !quote.trim()) return null
   const nodes: { node: Text; start: number }[] = []
   let full = ''
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
@@ -44,7 +43,7 @@ export function showInPost(root: HTMLElement | null, quote: string): boolean {
     pos = norm.indexOf(t)
     if (pos >= 0) { len = t.length; break }
   }
-  if (pos < 0) return false
+  if (pos < 0) return null
   const start = at[pos]
   const end = at[pos + len - 1] + 1
   // The text node holding a place: a start sits before a character of its node, an end just after one.
@@ -57,6 +56,15 @@ export function showInPost(root: HTMLElement | null, quote: string): boolean {
   const range = document.createRange()
   range.setStart(a.node, a.offset)
   range.setEnd(b.node, b.offset)
+  return range
+}
+
+/** Marks the quoted sentence in root; true when found. */
+export function showInPost(root: HTMLElement | null, quote: string): boolean {
+  if (!root || !quote.trim()) return false
+  clear(root)
+  const range = findQuote(root, quote)
+  if (!range) return false
   let target: Element | null = null
   try {
     const mark = document.createElement('mark')
@@ -65,7 +73,8 @@ export function showInPost(root: HTMLElement | null, quote: string): boolean {
     target = mark
   } catch {
     // The quote crosses inline markup (a link, bold): the whole paragraph is flashed instead.
-    target = a.node.parentElement?.closest('p, li, td, th, h1, h2, h3, h4, blockquote') ?? a.node.parentElement
+    const from = range.startContainer.parentElement
+    target = from?.closest('p, li, td, th, h1, h2, h3, h4, blockquote') ?? from
     target?.classList.add(FLASH)
   }
   target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })

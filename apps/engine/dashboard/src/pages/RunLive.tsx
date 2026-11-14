@@ -1,6 +1,7 @@
 // /runs/:runId — one run, live or finished. On top, what it is doing in plain words ("Writing the draft…") with a
 // progress bar, and the journey of its post (every green of the post, from all its runs). Then its steps; the
-// facts, loop timeline, outputs and event log are under "Details".
+// facts, loop timeline, outputs and event log are under "Details". On the right, the live preview (what each agent has
+// just produced: the Scout's findings, the Editor's scores, the brief, each draft, the review) or the activity.
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -16,6 +17,7 @@ import { EventLog } from '../components/EventLog'
 import { LoopTimeline } from '../components/LoopTimeline'
 import { Card, EmptyState, PageHeader } from '../components/Page'
 import { PipelineTracker } from '../components/PipelineTracker'
+import { LivePreview } from '../components/LivePreview'
 import { StatusBadge } from '../components/StatusBadge'
 import { StepOutputs } from '../components/StepOutputs'
 import { PublisherSteps, publisherProgress } from '../components/PublisherSteps'
@@ -56,6 +58,13 @@ export default function RunLive() {
   const [stopping, setStopping] = useState(false)
   const briefId = view.briefId ?? detail?.run?.brief_id ?? null
   const journey = usePostJourney(briefId ?? '', Boolean(briefId))
+  // The preview is the default while a run works (and after, while its live previews are here); a run opened later
+  // shows its activity first and its saved draft and review under Preview.
+  const pv = view.previews
+  const livePreviews = pv.scout.length + pv.strategist.length + pv.writer.length + pv.reviewer.length > 0 || Boolean(pv.editor)
+  const previewTab = running || livePreviews || Boolean(briefId)
+  const [side, setSide] = useState<'preview' | 'activity' | null>(null)
+  const tab = previewTab ? (side ?? (running || livePreviews ? 'preview' : 'activity')) : 'activity'
 
   async function stop() {
     setStopping(true)
@@ -104,42 +113,63 @@ export default function RunLive() {
           </>
         }
       />
-      <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1fr)_320px] xl:gap-16">
-        <div className="min-w-0 space-y-12">
+      {/* Phones: progress, then the preview, then the steps. Wider: progress and steps on the left, the preview beside them. */}
+      <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1fr)_380px] lg:grid-rows-[auto_1fr] xl:grid-cols-[minmax(0,1fr)_440px] xl:gap-x-14">
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
           <RunProgress view={view} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} />
+        </div>
+
+        <aside className="min-w-0 space-y-6 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1 animate-enter [animation-delay:200ms]" aria-label="About this run">
+          <WhyStopped view={view} warnings={warnings} />
+          {view.approvals.map((a) => <Banner key={a.seq} a={a} />)}
+          {previewTab && (
+            <div className="flex gap-6 border-b border-line" role="tablist" aria-label="Beside the run">
+              {(['preview', 'activity'] as const).map((t) => (
+                <button key={t} type="button" role="tab" id={`side-${t}`} aria-selected={tab === t} aria-controls={`side-${t}-panel`} onClick={() => setSide(t)}
+                  className={`-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors ${tab === t ? 'border-ink text-ink' : 'border-transparent text-ink-3 hover:text-ink'}`}>
+                  {t === 'preview' ? 'Preview' : 'Activity'}
+                </button>
+              ))}
+            </div>
+          )}
+          {tab === 'preview' ? (
+            <div role="tabpanel" id="side-preview-panel" aria-labelledby="side-preview" data-preview-scroll className="lg:-mr-3 lg:max-h-[calc(100vh-11rem)] lg:overflow-y-auto lg:pr-3 lg:pb-6">
+              <LivePreview view={view} briefId={briefId} />
+            </div>
+          ) : (
+            <div role={previewTab ? 'tabpanel' : undefined} id="side-activity-panel" aria-labelledby={previewTab ? 'side-activity' : undefined} className="space-y-8">
+              {briefId && journey.data?.stages?.length ? (
+                <div>
+                  <p className="eyebrow mb-2">The post</p>
+                  <Link to={`/approvals/${briefId}`} className="font-serif text-[20px] leading-snug font-semibold tracking-[-0.01em] hover:underline">{journey.data.title || 'This post'}</Link>
+                  <div className="mt-4"><JourneyBar stages={journey.data.stages} compact /></div>
+                </div>
+              ) : null}
+              <ActivityFeed view={view} />
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-6 text-sm">
+                {header.map(([k, v]) => (
+                  <div key={k} className={k === 'Memory calls' ? 'col-span-2' : ''}>
+                    <dt className="text-xs text-ink-3">{k}</dt>
+                    <dd className="mt-0.5 font-medium tabular-nums" data-testid={`run-${k.toLowerCase().replace(/\s+/g, '-')}`}>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+              {detail?.run?.approved_unreviewed && <p className="text-sm text-amber-700">Approved without a Reviewer pass (force_unreviewed).</p>}
+              {warnings.length > 0 && view.status !== 'failed' && view.status !== 'cancelled' && (
+                <ul className="list-disc space-y-1 pl-5 text-xs text-amber-800">
+                  {warnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+        </aside>
+        <div className="min-w-0 space-y-12 lg:col-start-1 lg:row-start-2">
           <section aria-label="Steps of this run" className="animate-enter [animation-delay:120ms]">
             <p className="eyebrow mb-6">Steps of this run</p>
             <PipelineTracker view={view} models={settings.data?.models} hidePromo={settings.data?.designer?.promo_enabled === false} hideDesigner={settings.data?.designer?.enabled === false} />
           </section>
           {publisherProgress(view.outputs).size > 0 && <Card title="Publisher"><PublisherSteps outputs={view.outputs} stepStatus={view.steps.publisher?.status ?? null} /></Card>}
         </div>
-
-        <aside className="space-y-8 lg:sticky lg:top-24 animate-enter [animation-delay:200ms]" aria-label="About this run">
-          <WhyStopped view={view} warnings={warnings} />
-          {view.approvals.map((a) => <Banner key={a.seq} a={a} />)}
-          {briefId && journey.data?.stages?.length ? (
-            <div>
-              <p className="eyebrow mb-2">The post</p>
-              <Link to={`/approvals/${briefId}`} className="font-serif text-[20px] leading-snug font-semibold tracking-[-0.01em] hover:underline">{journey.data.title || 'This post'}</Link>
-              <div className="mt-4"><JourneyBar stages={journey.data.stages} compact /></div>
-            </div>
-          ) : null}
-          <ActivityFeed view={view} />
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-6 text-sm">
-            {header.map(([k, v]) => (
-              <div key={k} className={k === 'Memory calls' ? 'col-span-2' : ''}>
-                <dt className="text-xs text-ink-3">{k}</dt>
-                <dd className="mt-0.5 font-medium tabular-nums" data-testid={`run-${k.toLowerCase().replace(/\s+/g, '-')}`}>{v}</dd>
-              </div>
-            ))}
-          </dl>
-          {detail?.run?.approved_unreviewed && <p className="text-sm text-amber-700">Approved without a Reviewer pass (force_unreviewed).</p>}
-          {warnings.length > 0 && view.status !== 'failed' && view.status !== 'cancelled' && (
-            <ul className="list-disc space-y-1 pl-5 text-xs text-amber-800">
-              {warnings.map((w, i) => <li key={i}>{w}</li>)}
-            </ul>
-          )}
-        </aside>
       </div>
 
       <details className="group mt-16 border-t border-line pt-6" data-testid="run-details">

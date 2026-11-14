@@ -113,7 +113,7 @@ function StatusMenu({ online, pending, version, live, dryRun, index, usage }: { 
 function NavTab({ item }: { item: NavItem }) {
   return (
     <NavLink to={item.to} end={item.end} data-tab
-      className={({ isActive }) => `relative z-10 flex items-center gap-2 rounded-full px-4 py-1.5 text-sm transition-colors duration-300 ${isActive ? 'font-medium text-white' : 'text-ink-2 hover:text-ink'}`}>
+      className={({ isActive }) => `relative z-10 flex items-center gap-2 rounded-full px-3 py-1.5 text-sm whitespace-nowrap transition-colors duration-300 xl:px-4 ${isActive ? 'font-medium text-white' : 'text-ink-2 hover:text-ink'}`}>
       {item.label}
       {item.badge ? <span className="min-w-5 rounded-full bg-hl px-1.5 text-center text-[11px] leading-5 font-semibold text-[#0b0e12] tabular-nums" aria-label={`${item.badge} waiting`}>{item.badge}</span> : null}
     </NavLink>
@@ -167,7 +167,7 @@ function MoreMenu({ items }: { items: NavItem[] }) {
   return (
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="more-menu" data-tab aria-current={active ? 'page' : undefined}
-        className={`relative z-10 flex items-center gap-1 rounded-full px-4 py-1.5 text-sm transition-colors duration-300 ${active ? 'font-medium text-white' : 'text-ink-2 hover:text-ink'}`}>
+        className={`relative z-10 flex items-center gap-1 rounded-full px-3 py-1.5 text-sm whitespace-nowrap transition-colors duration-300 xl:px-4 ${active ? 'font-medium text-white' : 'text-ink-2 hover:text-ink'}`}>
         More <ChevronDown size={14} className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
       {/* Always in the page (hidden with CSS while closed), so it can animate both ways and its links stay findable. */}
@@ -238,14 +238,14 @@ export function Layout({ children }: { children: ReactNode }) {
           <button type="button" className="btn-ghost -ml-2 lg:hidden" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" aria-expanded={menuOpen}>
             {menuOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <NavLink to="/" className="mr-5 flex items-center gap-2.5" aria-label="Blog Engine home">
+          <NavLink to="/" className="mr-5 flex shrink-0 items-center gap-2.5 lg:mr-2 xl:mr-5" aria-label="Blog Engine home">
             <Logo />
-            <span className="hidden font-serif text-[17px] font-semibold tracking-[-0.01em] sm:inline">Blog Engine</span>
+            <span className="hidden font-serif text-[17px] font-semibold tracking-[-0.01em] whitespace-nowrap sm:inline lg:hidden xl:inline">Blog Engine</span>
           </NavLink>
           <PillNav items={primary} more={more} />
           <div className="ml-auto flex items-center gap-1.5">
             {activeRun && (
-              <NavLink to={`/runs/${activeRun.run_id}`} className="flex items-center gap-2 rounded-full py-1.5 pr-3 pl-2.5 text-[13px] font-semibold text-red-700 transition-colors hover:bg-red-500/10">
+              <NavLink to={`/runs/${activeRun.run_id}`} className="flex items-center gap-2 rounded-full py-1.5 pr-3 pl-2.5 text-[13px] font-semibold whitespace-nowrap text-red-700 transition-colors hover:bg-red-500/10">
                 <span className="size-2 animate-signal rounded-full bg-signal text-signal" /> Live run
               </NavLink>
             )}

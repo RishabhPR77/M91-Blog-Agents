@@ -197,8 +197,9 @@ test('the real Reviewer in the loop (DRY_RUN): fail with a quoted "must" item �
   // (ai.call events come from the real viaSocket client, which the fakes replace; call names are checked above.)
   for (const t of ['step.started', 'step.finished', 'step.output']) assert.ok(reviewerEvents.includes(t), t)
   assert.match(events.find((e) => e.agent === 'reviewer' && e.type === 'step.output').message, /^Score .+ · fail · no_invented_content, simplicity 5 → writer$/)
-  const all = JSON.stringify(events)
-  assert.ok(!all.includes("You are the Reviewer for M91's blog"), 'no prompt in events')
+  // Only the live previews carry the post (never saved); no event carries a prompt.
+  assert.ok(!JSON.stringify(events).includes("You are the Reviewer for M91's blog"), 'no prompt in events')
+  const all = JSON.stringify(events.filter((e) => e.type !== 'preview'))
   assert.ok(!all.includes('A pause keeps a person in charge. You can read how'), 'no post paragraph in events')
   assert.ok(!all.includes('fake-embed-secret-for-tests') && !all.includes('m0-fakekeyfortests123'), 'no secrets in events')
   assert.ok([...store.records.values()].every((x) => x.type === 'run' || x.type === 'run_log'))

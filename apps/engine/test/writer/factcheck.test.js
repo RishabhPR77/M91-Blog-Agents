@@ -47,7 +47,7 @@ test('the Reviewer model checks the facts; the Writer fixes the sentences in its
   const [first, check, fix] = ai.requests
   assert.equal(check.agent, 'reviewer', "on the Reviewer's model")
   assert.match(check.message, /^--- POST ---\n# /)
-  assert.match(check.message, /--- BRIEF ---\n\{"claims_to_avoid":/)
+  assert.match(check.message, /--- BRIEF ---\nFORBIDDEN CLAIMS \(check every sentence of POST, the FAQ included, against each one\):\n1\. /)
   assert.equal(fix.threadId, first.threadId, "in the Writer's own thread")
   assert.match(fix.message, /--- PROBLEMS FOUND BY THE CHECKER ---\n- ".+": Overstates what M91 does\. Write instead: "Agent approval means your software waits for a person before it acts\."/)
   assert.equal(r.fact_fixes, 1)

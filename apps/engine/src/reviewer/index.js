@@ -6,7 +6,7 @@ import { log } from '../util/log.js'
 import { istIso, istDate } from '../util/time.js'
 import { randomCode } from '../util/ids.js'
 import { createViaSocketClient } from '../viasocket.js'
-import { throwIfCancelled, CancelledError } from '../events.js'
+import { emit, throwIfCancelled, CancelledError } from '../events.js'
 import { urlKey } from '../checks/content.js'
 import { loadBrief } from '../writer/inputs.js'
 import { draftVersion, draftBriefVersion } from '../writer/save.js'
@@ -143,6 +143,11 @@ export async function runReviewer(params = {}, deps = {}) {
   // ---------- decide ----------
   throwIfCancelled()
   const d = decide(res.answer, { markdown: draft.post_markdown, checkResults: draft.checks?.results ?? [], allowedUrls: allowed.set, urlKey, config, guide, guideText: guideText(guide) })
+  emit('preview', { agent: 'reviewer', step: 'reviewer', data: {
+    kind: 'reviewer', version, total: d.total, pass: d.pass, pass_mark: config.gates?.passScoreMin ?? null,
+    gates: d.gates.map(({ id, passed }) => ({ id, passed })), areas: d.areas.map(({ id, score }) => ({ id, score })),
+    feedback: d.feedback.slice(0, 20).map(({ severity, area, quote, problem, fix }) => ({ severity, area, quote, problem, fix }))
+  } })
   warnings.push(...d.warnings)
   for (const w of d.warnings) log.warn('reviewer', { briefId: params.briefId, version, warning: w })
   const ms = now() - started

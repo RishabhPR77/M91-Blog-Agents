@@ -364,6 +364,13 @@ export async function runWriter(params = {}, deps = {}) {
   const starter = needsStartHere(brief, config) ? await starterPost(store) : null
   if (needsStartHere(brief, config) && !starter) warnings.push('timely post: no approved Starter post yet, so no Start-here line (the check start_here_line fails)')
   const maxWords = Math.floor(0.8 * (brief.word_target?.max ?? config.content.targetWordsMax))
+  // What produced the current answer, for the live preview: the draft, a repair, the polish or the fact-check fix.
+  let pass = mode
+  let passFixes = []
+  const showPass = (what = pass) => emit('preview', { agent: 'writer', step: 'writer', data: {
+    kind: 'writer', pass: what, version, title: draft?.title ?? '', markdown: draft?.post_markdown ?? '', words: checks?.word_count ?? null, grade: checks?.reading?.post_grade ?? null,
+    hard: (checks?.results ?? []).filter((r) => r.severity === 'hard' && !r.passed).map((r) => r.id), soft: (checks?.results ?? []).filter((r) => r.severity === 'soft' && !r.passed).map((r) => r.id), fixes: passFixes.slice(0, 25)
+  } })
   let answer = await callModel(mode)
   let repairs = 0
   let draft = null
@@ -380,6 +387,8 @@ export async function runWriter(params = {}, deps = {}) {
   const restoreBeforePolish = () => {
     ;({ draft, checks, snippetsUsed, snippetInserts, answer } = beforePolish)
     warnings.push(`${beforePolish.what}: its answer was not better, so the draft before it was kept`)
+    passFixes = []
+    showPass('kept')
     if (beforePolish.what === 'fact check fixes') factFixes = 0
   }
 
@@ -389,7 +398,13 @@ export async function runWriter(params = {}, deps = {}) {
     const message = factCheckMessage({
       post: draft.post_markdown,
       facts: sections.m91Facts,
-      brief: JSON.stringify({ claims_to_avoid: brief.claims_to_avoid ?? [], m91_facts_to_use: brief.m91_facts_to_use ?? [], news: brief.news ?? null, story: brief.story ?? null }),
+      // The claims the brief forbids, numbered: the check goes through each one against every sentence, the FAQ too
+      // (a run's fact check missed one that sat only inside the brief's JSON).
+      brief: [
+        'FORBIDDEN CLAIMS (check every sentence of POST, the FAQ included, against each one):',
+        ...(brief.claims_to_avoid ?? []).map((c, i) => `${i + 1}. ${c}`),
+        JSON.stringify({ m91_facts_to_use: brief.m91_facts_to_use ?? [], news: brief.news ?? null, story: brief.story ?? null })
+      ].join('\n'),
       docsText: [sections.docsText, sections.tutorialText].filter(Boolean).join('\n\n') || null,
       sourceText: sections.sourceText
     })
@@ -422,6 +437,8 @@ export async function runWriter(params = {}, deps = {}) {
     if (answer.truncated) {
       if (repairs >= wc.maxRepairs) throw new WriterError(`the ${mode} answer was cut off (finish_reason "truncated") and no repairs are left`, { kind: 'truncated' })
       repairs++
+      pass = 'repair'
+      passFixes = [truncatedProblem(maxWords)]
       answer = lastThread
         ? await callModel('repair', repairTail(null, [truncatedProblem(maxWords)]), { continueThread: lastThread })
         : await callModel('repair', repairTail(answer.partial ?? '(cut off)', [truncatedProblem(maxWords)]))
@@ -437,6 +454,7 @@ export async function runWriter(params = {}, deps = {}) {
     snippetsUsed = replaced.used
     snippetInserts = replaced.inserts
     checks = await check(draft, replaced)
+    showPass()
     // A polish that broke a major check (and no repair left): the draft before it stays.
     if (beforePolish && !checks.major_passed && (beforePolish.checks.major_passed || repairs >= wc.maxRepairs)) {
       restoreBeforePolish()
@@ -444,6 +462,8 @@ export async function runWriter(params = {}, deps = {}) {
     }
     if (!checks.major_passed && repairs < wc.maxRepairs) {
       repairs++
+      pass = 'repair'
+      passFixes = majorProblems(checks.results)
       // The repair sees snippet tokens again, so it places them instead of copying code.
       answer = lastThread
         ? await callModel('repair', repairTail(null, majorProblems(checks.results)), { continueThread: lastThread })
@@ -455,6 +475,8 @@ export async function runWriter(params = {}, deps = {}) {
       : []
     if (polish.length) {
       polished = true
+      pass = 'polish'
+      passFixes = polish
       beforePolish = { what: 'polish pass', draft: structuredClone(draft), checks, snippetsUsed, snippetInserts, answer }
       answer = await callModel('polish', repairTail(null, polish), { continueThread: lastThread })
       continue
@@ -463,7 +485,10 @@ export async function runWriter(params = {}, deps = {}) {
     if (checks.major_passed && !factChecked && lastThread && wc.factCheck !== false) {
       factChecked = true
       const issues = await factCheck()
+      emit('preview', { agent: 'writer', step: 'writer', data: { kind: 'factcheck', version, issues: issues.slice(0, 30).map(({ quote, problem, fix }) => ({ quote, problem, fix })) } })
       if (issues.length) {
+        pass = 'factfix'
+        passFixes = issues.map(factFixLine)
         factFixes = issues.length
         beforePolish = { what: 'fact check fixes', draft: structuredClone(draft), checks, snippetsUsed, snippetInserts, answer }
         answer = await callModel('factfix', repairTail(null, issues.map(factFixLine)), { continueThread: lastThread })

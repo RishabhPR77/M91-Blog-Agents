@@ -274,3 +274,26 @@ details[open]::details-content { block-size: auto; }
 /* "Show in post": the sentence a review note quotes, flashed in the reading view. */
 .review-mark { background: var(--hl); color: #0b0e12; border-radius: 3px; padding: 0 2px; box-shadow: 0 0 0 2px var(--hl); }
 .review-flash { border-radius: 12px; background: var(--hl-tint); box-shadow: 0 0 0 6px var(--hl-tint); transition: box-shadow 300ms; }
+
+/* The live preview beside a run: the post in a smaller reading view, the blocks a Writer pass changed, the Reviewer's
+   reading line, and a numbered box on each part it flagged. */
+.article-compact .article-view { font-size: 15.5px; line-height: 1.68; }
+.article-compact .article-view h1 { margin: 0 0 1rem; font-size: 25px; line-height: 1.18; }
+.article-compact .article-view h2 { margin: 1.9rem 0 0.6rem; font-size: 19.5px; line-height: 1.28; }
+.article-compact .article-view h3 { margin: 1.4rem 0 0.4rem; font-size: 17px; }
+.article-compact .article-view p { margin: 0 0 1em; }
+.article-compact .article-view blockquote { margin: 1.2rem 0; font-size: 16.5px; padding-left: 1rem; }
+.article-compact .article-view pre { margin: 1.1rem 0; font-size: 12.5px; padding: 0.9rem 1rem; border-radius: 12px; }
+.article-compact .article-view table { margin: 1.1rem 0; font-size: 13px; }
+.article-compact .article-view ul, .article-compact .article-view ol { margin: 0 0 1em; }
+.preview-changed { position: relative; }
+.preview-changed::before { content: ""; position: absolute; left: -12px; top: 0.25em; bottom: 0.25em; width: 3px; border-radius: 3px; background: var(--hl); transform-origin: top; animation: grow-y 520ms var(--ease-out) backwards; }
+@keyframes grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.preview-scan { max-height: 26rem; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.preview-scan::after { content: ""; position: absolute; left: 0; right: 0; height: 72px; top: -72px; pointer-events: none; background: linear-gradient(transparent, color-mix(in oklab, var(--hl) 38%, transparent) 55%, var(--hl) 56%, transparent 58%); animation: scan 3.4s var(--ease-in-out) infinite; }
+@keyframes scan { from { top: -72px; } to { top: 100%; } }
+.preview-box { position: relative; border-radius: 8px; outline: 1.5px solid var(--box); outline-offset: 4px; background: color-mix(in oklab, var(--box) 8%, transparent); animation: pop 260ms var(--ease-out) backwards; }
+.preview-box-must { --box: #e93a34; }
+.preview-box-should { --box: #e5940e; }
+.preview-box::after { content: attr(data-n); position: absolute; top: -12px; left: -10px; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 999px; background: var(--box); color: #fff; font: 600 10.5px/1 var(--font-sans); font-style: normal; letter-spacing: 0; }
+::highlight(preview-quote) { background-color: color-mix(in oklab, var(--hl) 55%, transparent); color: #0b0e12; }

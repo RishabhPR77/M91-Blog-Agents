@@ -47,6 +47,21 @@ const mem0Of = (v: unknown): Mem0Counts | null => {
     : null
 }
 
+// Live previews (2026-11-14): what each agent has just produced, from "preview" events. Live only: a run rebuilt
+// from its record has none (the panel then shows the saved draft and review).
+export type PreviewItem = { group: string; text: string; meta: string }
+export type ScoutPreview = { seq: number; step: string; call: string; items: PreviewItem[] }
+export type EditorCandidate = { title: string; format: string; total: number | null; scores: Record<string, number> | null; leftOut: string | null; chosen: boolean }
+export type EditorPreview = { seq: number; reason: string; chosenBy: string | null; candidates: EditorCandidate[]; fallback: { title: string; format: string } | null }
+export type StrategistPreview = { seq: number; call: string; title: string; keyword: string; format: string; reader: string; angle: string; outline: { heading: string; answer_first: string }[]; problems: number }
+export type WriterPass = { seq: number; pass: string; version: number | null; title: string; markdown: string; words: number | null; grade: number | null; hard: string[]; soft: string[]; fixes: string[] }
+export type FactIssue = { quote: string; problem: string; fix: string }
+export type FactCheckPreview = { seq: number; version: number | null; issues: FactIssue[] }
+export type ReviewFeedback = { severity: string; area: string; quote: string; problem: string; fix: string }
+export type ReviewerPreview = { seq: number; version: number | null; total: number | null; pass: boolean; passMark: number | null; gates: { id: string; passed: boolean }[]; areas: { id: string; score: number }[]; feedback: ReviewFeedback[] }
+export type Previews = { scout: ScoutPreview[]; editor: EditorPreview | null; strategist: StrategistPreview[]; writer: WriterPass[]; factcheck: FactCheckPreview[]; reviewer: ReviewerPreview[] }
+export const emptyPreviews = (): Previews => ({ scout: [], editor: null, strategist: [], writer: [], factcheck: [], reviewer: [] })
+
 export type RunView = {
   runId: string
   mode: string | null
@@ -72,6 +87,7 @@ export type RunView = {
   seen: number
   source: RunSource
   timelineDropped: number
+  previews: Previews
 }
 
 /** The run record as returned by GET /api/runs/:id (only the fields used here). */
@@ -118,7 +134,8 @@ export type Action =
 export function initialRunView(runId: string): RunView {
   return {
     runId, mode: null, trigger: null, dryRun: null, status: 'unknown', startedAt: null, finishedAt: null, ms: null, resultSummary: null, briefId: null,
-    steps: {}, order: [], routes: [], approvals: [], outputs: [], log: [], logDropped: 0, totals: { aiCalls: 0, retries: 0 }, mem0: null, lastSeq: 0, seen: 0, source: 'none', timelineDropped: 0
+    steps: {}, order: [], routes: [], approvals: [], outputs: [], log: [], logDropped: 0, totals: { aiCalls: 0, retries: 0 }, mem0: null, lastSeq: 0, seen: 0, source: 'none', timelineDropped: 0,
+    previews: emptyPreviews()
   }
 }
 
@@ -223,6 +240,9 @@ export function applyEvent(state: RunView, e: EngineEvent): RunView {
       s = { ...s, totals: { aiCalls: s.totals.aiCalls + 1, retries: s.totals.retries + retries } }
       break
     }
+    case 'preview':
+      // Large (a draft): kept in previews only, never in the log.
+      return { ...s, previews: applyPreview(s.previews, e) }
     case 'loop.route':
       s = {
         ...s,
@@ -239,6 +259,31 @@ export function applyEvent(state: RunView, e: EngineEvent): RunView {
     // log and unknown types: only the log line below.
   }
   return pushLog(s, e)
+}
+
+const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
+const text = (v: unknown) => (typeof v === 'string' ? v : '')
+
+/** One preview event into the previews (each list keeps its newest entries). */
+function applyPreview(p: Previews, e: EngineEvent): Previews {
+  const d = (e.data ?? {}) as Record<string, unknown>
+  switch (d.kind) {
+    case 'scout':
+      return { ...p, scout: [...p.scout, { seq: e.seq, step: e.step ?? 'scout', call: text(d.call), items: arr<PreviewItem>(d.items) }].slice(-20) }
+    case 'editor':
+      return { ...p, editor: { seq: e.seq, reason: text(d.reason), chosenBy: str(d.chosen_by), fallback: (d.fallback as EditorPreview['fallback']) ?? null,
+        candidates: arr<Record<string, unknown>>(d.candidates).map((c) => ({ title: text(c.title), format: text(c.format), total: num(c.total), scores: (c.scores as Record<string, number> | null) ?? null, leftOut: str(c.left_out), chosen: c.chosen === true })) } }
+    case 'strategist':
+      return { ...p, strategist: [...p.strategist, { seq: e.seq, call: text(d.call), title: text(d.title), keyword: text(d.keyword), format: text(d.format), reader: text(d.reader), angle: text(d.angle), outline: arr<{ heading: string; answer_first: string }>(d.outline), problems: num(d.problems) ?? 0 }].slice(-4) }
+    case 'writer':
+      return { ...p, writer: [...p.writer, { seq: e.seq, pass: text(d.pass), version: num(d.version), title: text(d.title), markdown: text(d.markdown), words: num(d.words), grade: num(d.grade), hard: arr<string>(d.hard), soft: arr<string>(d.soft), fixes: arr<string>(d.fixes) }].slice(-10) }
+    case 'factcheck':
+      return { ...p, factcheck: [...p.factcheck, { seq: e.seq, version: num(d.version), issues: arr<FactIssue>(d.issues) }].slice(-4) }
+    case 'reviewer':
+      return { ...p, reviewer: [...p.reviewer, { seq: e.seq, version: num(d.version), total: num(d.total), pass: d.pass === true, passMark: num(d.pass_mark), gates: arr<{ id: string; passed: boolean }>(d.gates), areas: arr<{ id: string; score: number }>(d.areas), feedback: arr<ReviewFeedback>(d.feedback) }].slice(-4) }
+    default:
+      return p
+  }
 }
 
 const RECORD_STATUS: Record<string, RunStatus> = { running: 'running', succeeded: 'succeeded', failed: 'failed', cancelled: 'cancelled' }

@@ -118,6 +118,11 @@ export async function runWeeklyEditor(signals, { store, config, aiSend, runId, n
       reason = pick ? `${pick.why_now} (code's pick: no candidate of the editor passed the checks)` : 'nothing this week is new for readers: every signal repeats a live guide or an earlier post'
     }
   }
+  emit('preview', { agent: 'editor', step: 'editor', data: {
+    kind: 'editor', reason, chosen_by: chosenBy ?? null,
+    candidates: (checked ?? []).map((c) => ({ title: c.title, format: c.format, total: c.total ?? null, scores: c.scores ?? null, left_out: c.problems?.length ? c.problems.join('; ') : null, chosen: c === pick })),
+    ...(pick && !(checked ?? []).includes(pick) && { fallback: { title: pick.title, format: pick.format } })
+  } })
   if (!pick) {
     emit('step.output', { agent: 'editor', step: 'editor', message: reason, data: { counts: signalCounts(signals) } })
     return { pick: null, reason, warnings }

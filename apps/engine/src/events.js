@@ -10,7 +10,7 @@ import { mask, maskString, onLogLine } from './util/log.js'
 export const EVENT_TYPES = Object.freeze([
   'run.started', 'run.finished', 'run.failed', 'run.cancelled',
   'step.started', 'step.finished', 'step.failed', 'step.cancelled', 'step.output',
-  'ai.call', 'loop.route', 'log',
+  'ai.call', 'loop.route', 'log', 'preview',
   'approval.waiting', 'approval.approved', 'approval.changes_requested', 'approval.rejected', 'approval.reviewed'
 ])
 export const TERMINAL_TYPES = Object.freeze(['run.finished', 'run.failed', 'run.cancelled'])
@@ -18,6 +18,8 @@ export const TERMINAL_TYPES = Object.freeze(['run.finished', 'run.failed', 'run.
 export const MAX_EVENTS_PER_RUN = 5000
 export const MAX_RUNS = 20
 const MAX_DATA_CHARS = 4000
+// A live preview carries what an agent produced (a draft is up to about 25,000 characters). Never saved.
+const MAX_PREVIEW_CHARS = 60000
 
 const bus = new EventEmitter()
 bus.setMaxListeners(200)
@@ -61,11 +63,11 @@ function bufferFor(runId) {
 }
 
 // Events carry summaries, never payloads: oversized data is replaced by its keys.
-function smallData(data) {
+function smallData(data, max = MAX_DATA_CHARS) {
   if (data === undefined) return undefined
   const masked = mask(data)
   const text = JSON.stringify(masked)
-  if (text.length <= MAX_DATA_CHARS) return masked
+  if (text.length <= max) return masked
   return { truncated: true, keys: Object.keys(masked ?? {}).slice(0, 30) }
 }
 
@@ -86,7 +88,7 @@ export function emit(type, { run_id, agent, step, level, message, data } = {}) {
     ...(step && { step }),
     ...(level && { level }),
     ...(message !== undefined && { message: maskString(String(message)) }),
-    ...(data !== undefined && { data: smallData(data) })
+    ...(data !== undefined && { data: smallData(data, type === 'preview' ? MAX_PREVIEW_CHARS : MAX_DATA_CHARS) })
   }
   b.events.push(event)
   if (b.events.length > MAX_EVENTS_PER_RUN) b.events.splice(0, b.events.length - MAX_EVENTS_PER_RUN)

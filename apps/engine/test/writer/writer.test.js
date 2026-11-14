@@ -396,8 +396,13 @@ test('events: checks step, one ai.call per call with its call name, summaries; n
   const checks = evs.filter((e) => e.step === 'checks')
   assert.deepEqual(checks.filter((e) => e.type !== 'log').map((e) => e.type), ['step.started', 'step.finished', 'step.output', 'step.started', 'step.finished', 'step.output'])
   assert.match(checks.find((e) => e.type === 'step.output').message, /soft warning\(s\), 1 hard failure\(s\)/)
-  const all = JSON.stringify(evs)
+  // Only the live preview carries the post (it is never saved in the run record); every other event has none.
+  const all = JSON.stringify(evs.filter((e) => e.type !== 'preview'))
   assert.ok(!all.includes('A ringing phone gets attention fast'), 'no post text in events')
+  const previews = evs.filter((e) => e.type === 'preview')
+  assert.ok(previews.some((e) => e.data.kind === 'writer' && e.data.markdown.includes('A ringing phone gets attention fast')), 'the live preview shows the draft')
+  const { timelineEntry } = await import('../../src/timeline.js')
+  assert.ok(previews.every((e) => timelineEntry(e) === null), 'previews are never saved in the run record')
   assert.ok(!all.includes('fake-embed-secret-for-tests'))
 })
 

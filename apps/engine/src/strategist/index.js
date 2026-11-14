@@ -117,6 +117,10 @@ export async function runStrategist(params = {}, deps = {}) {
         ;({ brief, fixes } = autoFix(v.value, { config, inputs }))
         autoFixes.push(...fixes)
         problems = await findProblems(brief, { config, inputs, store, excludeBriefId: mode === 'rebrief' ? briefId : null })
+        emit('preview', { agent: 'strategist', step: 'strategist', data: {
+          kind: 'strategist', call: callName, title: brief.titles?.[0] ?? '', keyword: brief.keyword ?? '', format: brief.format ?? '', reader: brief.reader ?? '', angle: brief.angle ?? '',
+          outline: (brief.outline ?? []).map((s) => ({ heading: s.heading, answer_first: s.answer_first })), problems: problems.length
+        } })
       }
       await runLog({ call: callName, model: res.model ?? st.model, delivery: res.delivery ?? st.delivery, ms: res.ms ?? now() - started, result: problems.length ? 'problems' : 'ok', problems, auto_fixes: fixes, error: null })
       if (v.value) previous = brief ?? v.value
