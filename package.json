@@ -1,7 +1,7 @@
 {
   "name": "m91-blog-engine",
   "private": true,
-  "description": "M91 Blog Engine v2: engine app, blog app and shared content package",
+  "description": "M91 Blog Engine v2: engine app, the M91 blog (apps/m91-blog), the old static blog app and shared content package",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
@@ -13,11 +13,14 @@
   "scripts": {
     "install:dashboard": "npm run install:dashboard --workspace @m91/engine",
     "install:blog": "npm --prefix apps/blog ci",
+    "install:m91-blog": "npm --prefix apps/m91-blog ci",
     "dev:engine": "npm run dev --workspace @m91/engine",
     "dev:blog": "npm --prefix apps/blog run dev",
     "build:blog": "npm --prefix apps/blog run build",
-    "test": "npm test --workspaces --if-present && npm run test:blog",
+    "dev:m91-blog": "npm --prefix apps/m91-blog run dev",
+    "test": "npm test --workspaces --if-present && npm run test:blog && npm run test:m91-blog",
     "test:blog": "npm --prefix apps/blog test",
+    "test:m91-blog": "npm --prefix apps/m91-blog test",
     "check": "npm run check --workspace @m91/engine"
   },
   "overrides": {

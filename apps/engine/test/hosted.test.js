@@ -262,14 +262,15 @@ test('every /api route needs the session except /api/health, the login and the l
   })
 })
 
-test('the code: before the session check, api() answers only /api/health, /api/login and /api/logout', () => {
+test('the code: before the session check, api() answers only /api/health, /api/login, /api/logout and the public posts', () => {
   const src = readFileSync(new URL('../src/server.js', import.meta.url), 'utf8')
   const start = src.indexOf('async function api(req, res, url)')
   const guard = src.indexOf("if (!authed(req)) return fail(res, 401, 'unauthorized'", start)
   assert.ok(start > 0 && guard > start)
   const before = src.slice(start, guard)
   const routes = [...before.matchAll(/(?:path === |startsWith\()'(\/api\/[^']*)'|seg\[1\] === '([^']+)'/g)].map((m) => m[1] ?? `seg:${m[2]}`)
-  assert.deepEqual([...new Set(routes)].sort(), ['/api/health', '/api/login', '/api/logout'])
+  // The public posts (the blog) are read-only and show only approved posts: test/publicposts.test.js.
+  assert.deepEqual([...new Set(routes)].sort(), ['/api/health', '/api/login', '/api/logout', '/api/public/posts', '/api/public/posts/'])
 })
 
 test('/api/health without a session says only that the engine is up and how to log in; with one, everything', async () => {

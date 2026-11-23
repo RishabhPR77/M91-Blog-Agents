@@ -33,6 +33,7 @@ import { listOpportunities, nextTimely, applyAction, isExpired, OPEN_STATUSES, T
 import { istDate } from './util/time.js'
 import { previewExport, latestExport, ExportError } from './export/index.js'
 import { blogOnly } from './export/markdown.js'
+import { listPublicPosts, postSummary, PUBLIC_SLUG_RE } from './publicposts.js'
 import { createDocstar } from './publisher/docstar.js'
 import { withMem0Count, mem0Requests, currentMem0Counts } from './util/mem0count.js'
 import { judgeRecords, filterRows, planDelete, createdMs, DEFAULT_STALE_DAYS } from './memory.js'
@@ -293,6 +294,13 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
   }
   const cookieTail = (req) => (hosted || req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '')
   const streams = new Set()
+  // The public posts, kept 30 s: many readers cost one read of the (cached) draft and export lists.
+  let publicCache = { at: -Infinity, posts: null }
+  const publicPosts = async () => {
+    if (publicCache.posts && now() - publicCache.at < 30000) return publicCache.posts
+    publicCache = { at: now(), posts: await listPublicPosts(store) }
+    return publicCache.posts
+  }
 
   const send = (res, status, body, headers = {}) => {
     res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers })
@@ -496,6 +504,22 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
         revoked.set(session.nonce, session.exp)
       }
       return send(res, 200, { ok: true }, { 'set-cookie': `m91_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${cookieTail(req)}` })
+    }
+
+    // The public blog (2026-11-23): every approved post, read-only, no login (src/publicposts.js says what leaves).
+    // Anyone may read and cache it (the M91 blog and the M91 site's blog cards); never indexed itself.
+    if ((path === '/api/public/posts' || path.startsWith('/api/public/posts/')) && (method === 'GET' || method === 'HEAD')) {
+      const open = { 'cache-control': 'public, max-age=60', 'access-control-allow-origin': '*', 'x-robots-tag': 'noindex', 'x-content-type-options': 'nosniff' }
+      if (!store) return send(res, 503, { error: { code: 'not_ready', message: 'the posts are not available yet' } }, { ...open, 'cache-control': 'no-store' })
+      const posts = await publicPosts()
+      if (path === '/api/public/posts') {
+        const limit = Math.min(100, Math.max(1, Number.parseInt(url.searchParams.get('limit') ?? '100', 10) || 100))
+        return send(res, 200, { posts: posts.slice(0, limit).map(postSummary), total: posts.length }, open)
+      }
+      const slug = path.slice('/api/public/posts/'.length)
+      const post = PUBLIC_SLUG_RE.test(slug) ? posts.find((x) => x.slug === slug) : null
+      if (!post) return send(res, 404, { error: { code: 'not_found', message: 'no such post' } }, open)
+      return send(res, 200, { post }, open)
     }
 
     // A Markdown download link (from Slack) opened in a browser without a session: log in first, then download.

@@ -1,0 +1,19 @@
+{
+  "name": "m91-blog",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The M91 blog (m91-blog.embarko.app): every approved post from the M91 Blog Engine, in the look of m91.msg91.com",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test \"test/**/*.test.js\"",
+    "deploy": "node scripts/deploy.mjs"
+  },
+  "dependencies": {
+    "marked": "18.1.3"
+  }
+}

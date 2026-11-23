@@ -35,7 +35,13 @@ publishing of the blog stays off (`PUBLISH_TARGET=none`); this is only where the
   (`scrypt:N:r:p:salt:hash`, N=32768, r=8, p=3), made by `npm run admin:hash`.
   - Every page and every `/api` route needs the session. Without one, pages go to `/login`. Open: `/login`, the
     built script and style files under `/assets/` and root icons (no data in them), `/api/health` (only
-    `{ok, login}`), `POST /api/login` and `POST /api/logout`.
+    `{ok, login}`), `POST /api/login`, `POST /api/logout` and the public posts below.
+  - **The public posts (2026-11-23):** `GET /api/public/posts` and `GET /api/public/posts/<slug>`, read-only and
+    without a login, list every approved post for the M91 blog (`apps/m91-blog`, https://m91-blog.embarko.app):
+    slug, title, description, topic, tags, date (the first approval), reading time and the final Markdown export.
+    Never a draft, a review, a score, a brief or a record id (`src/publicposts.js`). Cached 30 s in the engine,
+    `Cache-Control: public, max-age=60`, `Access-Control-Allow-Origin: *` (the M91 site may list them),
+    `X-Robots-Tag: noindex`.
   - The cookie is `HttpOnly; SameSite=Strict; Path=/; Secure` (always `Secure` when hosted), 12 hours; `Strict-Transport-Security`
     is sent. Sessions live in memory: a restart logs everyone out.
   - Rate limits: 5 tries a minute per address (the last `X-Forwarded-For` entry, the one Embarko's proxy adds) and

@@ -17,10 +17,11 @@ For third-party apps, automations or AI in the product, use viaSocket: see the v
 ## Layout (npm workspaces)
 
 - `apps/engine` (`@m91/engine`): agents, orchestrator, API, CLI, tests, smoke tests, docs, Dockerfile. Scripts load the root `.env` with `--env-file=../../.env`.
-- `apps/blog`: the blog website (Phase 7).
+- `apps/m91-blog`: the live M91 blog (https://m91-blog.embarko.app), its own npm project and its own Embarko app (own token). It reads every approved post from the engine's public, read-only `GET /api/public/posts` and shows it in the look of m91.msg91.com. No secrets, no .env.
+- `apps/blog`: the old static Astro blog (Phase 7), unused.
 - `packages/content` (`@m91/content`): post format v1 and block names, shared by both apps.
 - `.env`, `env.example`, `CLAUDE.md` and `.claude/` stay at the repo root.
-- Root scripts: `npm test` (all workspaces), `npm run check` (viaSocket check on `apps/engine/src`), `npm run dev:engine`.
+- Root scripts: `npm test` (all workspaces and both blogs), `npm run check` (viaSocket check on `apps/engine/src`), `npm run dev:engine`, `npm run dev:m91-blog`.
 - Git: commit after each task; before every commit run `git status` and confirm no `.env` file is staged. Never push without asking; never put tokens in git config, the remote URL or any file.
 
 ## Project notes

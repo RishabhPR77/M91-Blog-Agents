@@ -19,19 +19,20 @@ beforeEach(() => resetEvents())
 const quiet = () => setSink(() => {})
 
 // The exact error mem0ai 3.3.1 threw (RateLimitError, its message is Mem0's JSON answer).
-const BODY = { error: 'Monthly retrieval limit reached (1000 of 1000). Connect your own LLM key to raise it to 10,000 a month: https://app.mem0.ai/dashboard/settings?tab=org-llm', event_type: 'SEARCH', quota_limit: 1000, quota_used: 1000, quota_reset: '2026-11-19T00:00:00+00:00', next_step: 'add_llm_key', next_step_url: 'https://app.mem0.ai/dashboard/settings?tab=org-llm' }
+// Mem0's reset date is far ahead: the API test below runs on the real clock, and a passed date means "one day from now".
+const BODY = { error: 'Monthly retrieval limit reached (1000 of 1000). Connect your own LLM key to raise it to 10,000 a month: https://app.mem0.ai/dashboard/settings?tab=org-llm', event_type: 'SEARCH', quota_limit: 1000, quota_used: 1000, quota_reset: '2099-11-19T00:00:00+00:00', next_step: 'add_llm_key', next_step_url: 'https://app.mem0.ai/dashboard/settings?tab=org-llm' }
 const limitError = () => Object.assign(new Error(JSON.stringify(BODY)), { name: 'RateLimitError' })
 const OCT28 = Date.parse('2026-10-28T13:35:00Z')
 const dataConfig = (over = {}) => fakeConfig({ ENGINE_DATA_DIR: mkdtempSync(join(tmpdir(), 'm91-limit-')), ...over })
 
 test('recognised: kind, figures, Mem0\'s reset date, the link; a burst rate limit or another error is not the monthly limit', () => {
-  assert.deepEqual(mem0LimitOf(limitError()), { kind: 'retrievals', limit: 1000, used: 1000, reset_at: '2026-11-19T00:00:00.000Z', event_type: 'SEARCH', next_step_url: 'https://app.mem0.ai/dashboard/settings?tab=org-llm' })
+  assert.deepEqual(mem0LimitOf(limitError()), { kind: 'retrievals', limit: 1000, used: 1000, reset_at: '2099-11-19T00:00:00.000Z', event_type: 'SEARCH', next_step_url: 'https://app.mem0.ai/dashboard/settings?tab=org-llm' })
   assert.equal(mem0LimitOf(Object.assign(new Error('{"error":"Monthly add limit reached (10000 of 10000)."}'), { name: 'RateLimitError' })).kind, 'adds')
   assert.equal(mem0LimitOf(Object.assign(new Error('{"error":"Too many requests, slow down"}'), { name: 'RateLimitError' })), null)
   assert.equal(mem0LimitOf(new Error('fetch failed')), null)
   assert.equal(mem0LimitOf(null), null)
   const msg = limitMessage(mem0LimitOf(limitError()))
-  assert.match(msg, /^Mem0's monthly retrieval limit is reached \(1000 of 1000\)\. Mem0 resets it on 19 Nov 2026; until then the engine cannot read its data/)
+  assert.match(msg, /^Mem0's monthly retrieval limit is reached \(1000 of 1000\)\. Mem0 resets it on 19 Nov 2099; until then the engine cannot read its data/)
   const e = new Mem0LimitError(mem0LimitOf(limitError()))
   assert.deepEqual([e.status, e.code, e.message], [429, 'mem0_quota', msg])
   assert.deepEqual(mem0LimitOf(e), e.info)
@@ -41,13 +42,13 @@ test('the guard records it: stop until Mem0\'s reset (the 19th, kept across the 
   const config = dataConfig()
   recordMem0Limit(mem0LimitOf(limitError()), { config, now: () => OCT28 })
   let u = usageStatus(config, { now: () => OCT28 })
-  assert.deepEqual([u.level, u.limited, u.used, u.limit, u.pct, u.resets_on], ['stop', 'retrievals', 1000, 1000, 100, '2026-11-19T00:00:00.000Z'])
-  assert.match(stopMessage(u), /^Mem0's monthly retrieval limit is reached \(Mem0 says 1000 of 1000\)\. Runs paused until Mem0 resets it on 19 Nov 2026/)
+  assert.deepEqual([u.level, u.limited, u.used, u.limit, u.pct, u.resets_on], ['stop', 'retrievals', 1000, 1000, 100, '2099-11-19T00:00:00.000Z'])
+  assert.match(stopMessage(u), /^Mem0's monthly retrieval limit is reached \(Mem0 says 1000 of 1000\)\. Runs paused until Mem0 resets it on 19 Nov 2099/)
   // 1 November: a new month for the estimate, but Mem0 has not reset yet.
   u = usageStatus(config, { now: () => Date.parse('2026-11-01T06:00:00Z') })
   assert.equal(u.level, 'stop')
   // 19 November: Mem0's reset date has passed.
-  assert.equal(usageStatus(config, { now: () => Date.parse('2026-11-19T06:00:00Z') }).level, 'ok')
+  assert.equal(usageStatus(config, { now: () => Date.parse('2099-11-19T06:00:00Z') }).level, 'ok')
   // Raised in Mem0, then the figures set again: the stop is gone.
   setUsage(config, 120, { now: () => OCT28 })
   assert.deepEqual([usageStatus(config, { now: () => OCT28 }).level, usageStatus(config, { now: () => OCT28 }).blocked], ['ok', undefined])
@@ -92,9 +93,9 @@ test('API: a request that hits the limit answers 429 mem0_quota with the plain m
     recordMem0Limit(mem0LimitOf(limitError()), { config })
     const run = await fetch(`${base}/api/runs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'scout' }) })
     assert.equal(run.status, 429)
-    assert.match((await run.json()).error.message, /Runs paused until Mem0 resets it on 19 Nov 2026/)
+    assert.match((await run.json()).error.message, /Runs paused until Mem0 resets it on 19 Nov 2099/)
     const health = await (await fetch(`${base}/api/health`)).json()
-    assert.equal(health.mem0_usage.blocked.until, '2026-11-19T00:00:00.000Z')
+    assert.equal(health.mem0_usage.blocked.until, '2099-11-19T00:00:00.000Z')
   } finally {
     await new Promise((r) => srv.close(r))
     restore()
