@@ -1,7 +1,9 @@
 // The public blog's posts (2026-11-23): every approved post, and every post you wrote and published on the dashboard's
 // Write page (2026-11-24, src/blogposts.js), read-only and without a login, for the M91 blog
 // (apps/m91-blog, https://m91-blog.embarko.app) and anything else that lists M91's posts, such as the blog cards on
-// m91.msg91.com. A post is public once it is approved: its final Markdown export (saved on Approve) is the post.
+// m91.msg91.com. An approved post is public once you OK it for the website on the dashboard (2026-11-24): its final
+// Markdown export (saved on Approve) is the post, and the export's metadata says where it stands (websiteOf). Exports
+// made before that OK existed count as on the website.
 //
 // Only what a reader sees leaves the engine: the slug, title, description, topic, tags, dates, reading time and the
 // post's Markdown. Never a draft, a review, a score, a brief, a record id or anything a run wrote.
@@ -69,10 +71,18 @@ export function writtenPost(rec) {
   }
 }
 
+/** An approved post's place: 'on' the website, 'waiting' for your OK on the dashboard, or kept 'off'. */
+export const WEBSITE_STATES = Object.freeze(['on', 'waiting', 'off'])
+export const websiteOf = (rec) => (rec?.metadata?.website === 'waiting' || rec?.metadata?.website === 'off' ? rec.metadata.website : 'on')
+
 const newestFirst = (a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')) || String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? ''))
 
-/** Every approved post, newest first, one per slug. Reads the draft and export lists (the engine's index caches both). */
-export async function listApprovedPosts(store) {
+/**
+ * Every approved post, newest first, one per slug, with where it stands: [{ post, brief_id, website }]. For the
+ * dashboard and the slug check; the public list keeps only the ones on the website (listApprovedPosts).
+ * Reads the draft and export lists (the engine's index caches both).
+ */
+export async function listEnginePosts(store) {
   // A brief is public when one of its drafts is approved (or was published); the earliest approval is its date.
   const firstApproval = new Map()
   for (const status of ['approved', 'published']) {
@@ -91,9 +101,14 @@ export async function listApprovedPosts(store) {
     const post = publicPost(r, { publishedAt: firstApproval.get(briefId) })
     if (!post) continue
     const had = bySlug.get(post.slug)
-    if (!had || String(post.updated_at ?? '') > String(had.updated_at ?? '')) bySlug.set(post.slug, post)
+    if (!had || String(post.updated_at ?? '') > String(had.post.updated_at ?? '')) bySlug.set(post.slug, { post, brief_id: briefId, website: websiteOf(r) })
   }
-  return [...bySlug.values()].sort(newestFirst)
+  return [...bySlug.values()].sort((a, b) => newestFirst(a.post, b.post))
+}
+
+/** The approved posts that are on the website, newest first. */
+export async function listApprovedPosts(store) {
+  return (await listEnginePosts(store)).filter((e) => e.website === 'on').map((e) => e.post)
 }
 
 /** Every approved post and every post you published, newest first, one per slug. */

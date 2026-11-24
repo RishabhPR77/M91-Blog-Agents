@@ -1,32 +1,17 @@
 // /write — posts you write yourself for the M91 blog (2026-11-24): start one (or drop a .md file), open your drafts and
-// published posts, and see the engine's approved posts that are already on the blog.
+// published posts. And the engine's approved posts: each new one waits here for your OK before it goes on the website
+// (the blog and m91.msg91.com/guides), and any of them can be taken off or put back (components/WebsiteGate.tsx).
 import { useRef, useState, type DragEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 import { ExternalLink, FileUp, PenLine, Plus } from 'lucide-react'
-import { api } from '../api/client'
 import { Card, EmptyState, PageHeader, PageSkeleton } from '../components/Page'
+import { EnginePostsList, WebsiteWaitingList, useBlogPosts } from '../components/WebsiteGate'
 import { toast } from '../components/Toasts'
 import { fmtDateTime } from '../format'
 import { isMarkdownFile } from '../write/edit'
 
-export type BlogPostSummary = {
-  id: string
-  status: 'draft' | 'published'
-  title: string
-  slug: string
-  description: string
-  topic: string | null
-  tags: string[]
-  cover: string | null
-  created_at: string | null
-  updated_at: string | null
-  published_at: string | null
-}
-export type EnginePost = { slug: string; title: string; date: string | null; topic: string | null; reading_minutes: number }
-export type BlogList = { posts: BlogPostSummary[]; engine_posts: EnginePost[]; topics: string[]; blog_url: string }
-
-export const useBlogPosts = () => useQuery({ queryKey: ['blog-posts'], queryFn: () => api<BlogList>('/api/blog/posts') })
+export { useBlogPosts } from '../components/WebsiteGate'
+export type { BlogPostSummary, BlogList, EnginePost } from '../components/WebsiteGate'
 
 /** A dropped or chosen .md file opens a new post with it (the editor reads it from the navigation state). */
 export function useMarkdownFileOpener() {
@@ -67,6 +52,8 @@ export default function Write() {
         actions={<Link to="/write/new" className="btn-primary"><Plus size={15} /> New post</Link>}
       />
 
+      {data && <WebsiteWaitingList posts={data.engine_posts} />}
+
       <div
         className={`mb-14 flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed px-6 py-10 text-center transition-colors ${over ? 'border-lime-500 bg-hl-tint' : 'border-line-strong bg-surface/60'}`}
         onDragOver={(e) => { e.preventDefault(); setOver(true) }}
@@ -105,17 +92,9 @@ export default function Write() {
       </Card>
 
       {data?.engine_posts.length ? (
-        <Card title="Already on the blog from the engine" className="mt-12">
-          <p className="-mt-2 mb-4 text-sm text-ink-2">Approved posts from the engine’s runs. They are edited on the Review page, not here.</p>
-          <ul className="divide-y divide-line">
-            {data.engine_posts.map((p) => (
-              <li key={p.slug} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3">
-                <span className="min-w-0 flex-1 text-[15px] text-ink">{p.title}</span>
-                <span className="text-xs text-ink-3">{[p.topic, p.date].filter(Boolean).join(' · ')}</span>
-                <a className="btn-ghost" href={`${blogUrl}/posts/${p.slug}`} target="_blank" rel="noopener noreferrer" aria-label={`View ${p.title} on the blog`}><ExternalLink size={15} /></a>
-              </li>
-            ))}
-          </ul>
+        <Card title="From the engine" className="mt-12">
+          <p className="-mt-2 mb-4 text-sm text-ink-2">Posts the engine’s runs approved. Each new one waits for your OK before it goes on the blog and m91.msg91.com/guides; you can take any of them off. Their text is edited on the Review page, not here.</p>
+          <EnginePostsList posts={data.engine_posts} blogUrl={blogUrl} />
         </Card>
       ) : null}
     </>

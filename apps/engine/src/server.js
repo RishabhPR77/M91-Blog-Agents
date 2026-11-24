@@ -33,7 +33,7 @@ import { listOpportunities, nextTimely, applyAction, isExpired, OPEN_STATUSES, T
 import { istDate } from './util/time.js'
 import { previewExport, latestExport, ExportError } from './export/index.js'
 import { blogOnly } from './export/markdown.js'
-import { listPublicPosts, listApprovedPosts, postSummary, PUBLIC_SLUG_RE } from './publicposts.js'
+import { listPublicPosts, listEnginePosts, postSummary, PUBLIC_SLUG_RE } from './publicposts.js'
 import { listBlogPosts, getBlogPost, saveBlogPost, setPublished, deleteBlogPost, BlogError, M91_BLOG_URL } from './blogposts.js'
 import { saveImage, readImage, MAX_IMAGE_BYTES } from './blogimages.js'
 import { createDocstar } from './publisher/docstar.js'
@@ -630,16 +630,29 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
     // The Write page (2026-11-24): posts you write for the M91 blog, and their images (src/blogposts.js, src/blogimages.js).
     if (path === '/api/blog/posts' && method === 'GET') {
       const posts = await listBlogPosts(store)
-      const approved = await listApprovedPosts(store)
-      const topics = [...new Set([...approved, ...posts].map((p) => p.topic).filter(Boolean))].sort()
-      return send(res, 200, { posts, engine_posts: approved.map(({ slug, title, date, topic, reading_minutes }) => ({ slug, title, date, topic, reading_minutes })), topics, blog_url: M91_BLOG_URL })
+      const engine = await listEnginePosts(store)
+      const topics = [...new Set([...engine.map((e) => e.post), ...posts].map((p) => p.topic).filter(Boolean))].sort()
+      const enginePosts = engine.map(({ post: { slug, title, description, date, topic, reading_minutes }, brief_id, website }) => ({ slug, title, description, date, topic, reading_minutes, brief_id, website }))
+      return send(res, 200, { posts, engine_posts: enginePosts, website_waiting: enginePosts.filter((p) => p.website === 'waiting').length, topics, blog_url: M91_BLOG_URL })
+    }
+    // Your OK for the website (2026-11-24): an approved post goes on the blog and m91.msg91.com/guides, or stays off.
+    if (seg[1] === 'blog' && seg[2] === 'engine-posts' && seg[4] === 'website' && seg.length === 5 && method === 'POST') {
+      const briefId = seg[3]
+      if (!BRIEF_ID_RE.test(briefId)) throw new ApiError(400, 'bad_brief_id', 'brief_id must look like YYMMDD-HHMM-XXXX')
+      const body = await readJson(req)
+      if (typeof body.on !== 'boolean') throw new ApiError(400, 'bad_body', 'send { "on": true } to put the post on the website, { "on": false } to keep it off')
+      if (!(await listEnginePosts(store)).some((e) => e.brief_id === briefId)) throw new ApiError(404, 'not_found', `${briefId} is not an approved post`)
+      const rec = await latestExport(store, briefId)
+      await store.updateRecord(rec.id, undefined, { website: body.on ? 'on' : 'off' }, { known: rec })
+      publicCache = { at: -Infinity, posts: null }
+      return send(res, 200, { brief_id: briefId, website: body.on ? 'on' : 'off' })
     }
     if (path === '/api/blog/images' && method === 'POST') {
       const image = saveImage(config, await readRaw(req, MAX_IMAGE_BYTES + 1))
       return send(res, 201, { image })
     }
     if (seg[1] === 'blog' && seg[2] === 'posts') {
-      const takenSlugs = async () => (await listApprovedPosts(store)).map((p) => p.slug)
+      const takenSlugs = async () => (await listEnginePosts(store)).map((e) => e.post.slug)
       const changed = (status, body) => {
         publicCache = { at: -Infinity, posts: null }
         return send(res, status, body)

@@ -3,9 +3,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from '../src/server.js'
+import { createRunManager } from '../src/runs.js'
+import { stubAgents } from '../src/agents/stubs.js'
 import { setSink } from '../src/util/log.js'
-import { listPublicPosts, publicPost, readingMinutes, PUBLIC_SLUG_RE } from '../src/publicposts.js'
-import { fakeConfig, memoryStore } from './helpers.js'
+import { listPublicPosts, listEnginePosts, publicPost, readingMinutes, PUBLIC_SLUG_RE } from '../src/publicposts.js'
+import { fakeConfig, memoryStore, fakeNotifier } from './helpers.js'
 
 const BODY = (title) => `# ${title}\n\nA ringing phone gets an answer.\n\n## TL;DR\n\n- One\n- Two\n\n## What happens at night?\n\n${'Words to read here. '.repeat(120)}\n`
 
@@ -26,7 +28,9 @@ async function seed(store) {
 }
 
 async function serve(store, env = {}) {
-  const server = createServer({ triggerKey: 'fake-trigger-key-0123456789', store, config: fakeConfig({ DASHBOARD_AUTH: 'true', DASHBOARD_PASSWORD: 'right-password-123', ...env }) })
+  const config = fakeConfig({ DASHBOARD_AUTH: 'true', DASHBOARD_PASSWORD: 'right-password-123', ...env })
+  const manager = createRunManager({ config, storeFactory: () => store, notifierFactory: () => fakeNotifier(), agentsFactory: () => stubAgents })
+  const server = createServer({ triggerKey: 'fake-trigger-key-0123456789', manager, store, config })
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${server.address().port}`
   return { base, close: () => new Promise((ok) => server.close(ok)) }
@@ -107,6 +111,46 @@ test('a new approval shows within the 30 s cache', async () => {
     assert.equal(after.posts[0].slug, 'still-waiting')
   } finally {
     await new Promise((ok) => server.close(ok))
+    restore()
+  }
+})
+
+// ---------- the website OK (2026-11-24) ----------
+
+test('a newly approved post waits for your OK; on and off on the dashboard; older exports count as on', async () => {
+  const restore = setSink(() => {})
+  const store = await seed(memoryStore())
+  // A post approved after the OK existed: its export says "waiting".
+  await store.createRecord({ type: 'draft', briefId: '261124-0900-NEWP', payload: { brief_id: '261124-0900-NEWP', version: 1 }, status: 'approved', version: 1, meta: { approved_at: '2026-11-24T09:40:00+05:30' } })
+  await store.createRecord({ type: 'markdown_export', briefId: '261124-0900-NEWP', status: 'final', version: 1, meta: { slug: 'brand-new', website: 'waiting' },
+    payload: { brief_id: '261124-0900-NEWP', slug: 'brand-new', title: 'Brand new', markdown: BODY('Brand new'), exported_at: '2026-11-24T09:41:00+05:30', front_matter: { title: 'Brand new', slug: 'brand-new', date: '2026-11-24' } } })
+  assert.deepEqual((await listPublicPosts(store)).map((p) => p.slug), ['how-to-add-human-approval', 'older-post'], 'waiting: not public; the older exports: public')
+  const engine = await listEnginePosts(store)
+  assert.deepEqual(engine.map((e) => [e.post.slug, e.website]), [['brand-new', 'waiting'], ['how-to-add-human-approval', 'on'], ['older-post', 'on']])
+
+  const s = await serve(store)
+  try {
+    const cookie = (await fetch(`${s.base}/api/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'right-password-123' }) })).headers.get('set-cookie').split(';')[0]
+    const call = (method, path, body, auth = true) => fetch(`${s.base}${path}`, { method, headers: { 'content-type': 'application/json', ...(auth && { cookie }) }, body: body === undefined ? undefined : JSON.stringify(body) })
+    assert.equal((await call('POST', '/api/blog/engine-posts/261124-0900-NEWP/website', { on: true }, false)).status, 401, 'needs the login')
+    const list = await (await call('GET', '/api/blog/posts')).json()
+    assert.equal(list.website_waiting, 1)
+    assert.deepEqual(list.engine_posts.find((p) => p.slug === 'brand-new'), { slug: 'brand-new', title: 'Brand new', description: '', date: '2026-11-24', topic: null, reading_minutes: 2, brief_id: '261124-0900-NEWP', website: 'waiting' })
+
+    const on = await call('POST', '/api/blog/engine-posts/261124-0900-NEWP/website', { on: true })
+    assert.deepEqual(await on.json(), { brief_id: '261124-0900-NEWP', website: 'on' })
+    assert.deepEqual((await (await fetch(`${s.base}/api/public/posts`)).json()).posts.map((p) => p.slug), ['brand-new', 'how-to-add-human-approval', 'older-post'], 'on the website at once')
+
+    await call('POST', '/api/blog/engine-posts/261101-0900-AAAA/website', { on: false })
+    assert.deepEqual((await (await fetch(`${s.base}/api/public/posts`)).json()).posts.map((p) => p.slug), ['brand-new', 'how-to-add-human-approval'], 'kept off')
+    assert.equal((await fetch(`${s.base}/api/public/posts/older-post`)).status, 404)
+    assert.equal((await (await call('GET', '/api/blog/posts')).json()).website_waiting, 0)
+
+    assert.equal((await call('POST', '/api/blog/engine-posts/261130-0900-ABCD/website', { on: true })).status, 404, 'not approved: nothing to put on')
+    assert.equal((await call('POST', '/api/blog/engine-posts/261124-0900-NEWP/website', { on: 'yes' })).status, 400)
+    assert.equal((await call('POST', '/api/blog/engine-posts/nope/website', { on: true })).status, 400)
+  } finally {
+    await s.close()
     restore()
   }
 })

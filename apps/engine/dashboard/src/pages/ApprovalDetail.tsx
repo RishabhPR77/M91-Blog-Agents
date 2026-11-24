@@ -3,6 +3,7 @@
 // in post") and your decision: "Approve and publish" (one run: approval, Markdown export, publish), approve only,
 // ask for a review, request changes, reject the topic. Approving stays on this page (the journey shows each step);
 // the other actions open the live run.
+import { WebsiteGateBanner } from '../components/WebsiteGate'
 import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -120,6 +121,7 @@ export default function ApprovalDetail() {
       return (
         <>
           <PageHeader title={journey.data.title || 'A post in the making'} subtitle={<span className="font-mono text-xs">{briefId}</span>} />
+          <WebsiteGateBanner briefId={briefId} />
           <JourneyCard journey={journey.data} />
           <EmptyState>No draft yet: the post appears here as soon as the Writer has written it.</EmptyState>
         </>

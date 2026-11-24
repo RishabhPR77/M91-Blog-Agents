@@ -428,7 +428,7 @@ test('AUTO_PUBLISH=true: approve publishes in the same run (publisher sub-steps 
   const r = await run('approve', { brief_id: BRIEF_ID })
   restore()
   assert.equal(r.status, 'succeeded')
-  assert.match(r.run.result_summary, /; published → https:\/\/m91-blog\.embarko\.app\/posts\/how-agent-approval-works\/$/)
+  assert.match(r.run.result_summary, /; published → https:\/\/m91-blog\.embarko\.app\/posts\/how-agent-approval-works\/; waiting for your OK on the dashboard to go on the website$/)
   const subs = replay(r.run_id).filter((e) => e.type === 'step.output' && e.step === 'publisher').map((e) => e.message.split(':')[0])
   assert.deepEqual(subs.slice(0, 6), ['1/6 build post', '2/6 export', '3/6 build blog', '4/6 deploy', '5/6 verify', '6/6 mark published'])
   assert.equal(posts(s.store)[0].status, 'published')

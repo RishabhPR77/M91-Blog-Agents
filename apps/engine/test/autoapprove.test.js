@@ -23,7 +23,7 @@ test('an AI-passed post is approved automatically, exported and sent to Slack in
   const { store, notifier, r } = await fullRun({}, { reviews: [{ pass: true, total: 88 }] })
   restore()
   assert.equal(r.status, 'succeeded', r.run?.result_summary)
-  assert.match(r.run.result_summary, /approved automatically \(v1, score 88\); Markdown export: how-agent-approval-works\.md; sent to Slack$/)
+  assert.match(r.run.result_summary, /approved automatically \(v1, score 88\); Markdown export: how-agent-approval-works\.md; sent to Slack; waiting for your OK on the dashboard to go on the website$/)
   assert.deepEqual(r.run.steps.map((s) => s.name).slice(-3), ['promo', 'export', 'publisher'])
   const [d] = byType(store, 'draft')
   assert.deepEqual([d.status, d.metadata.approved_by, d.metadata.approved_unreviewed], ['approved', 'auto', false])

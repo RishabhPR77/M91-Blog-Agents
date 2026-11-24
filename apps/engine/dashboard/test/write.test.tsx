@@ -16,7 +16,11 @@ const LIST = {
     { id: 'p-1', status: 'published', title: 'Written by me', slug: 'written-by-me', description: '', topic: 'On-call', tags: [], cover: null, created_at: '2026-11-24T10:00:00+05:30', updated_at: '2026-11-24T10:00:00+05:30', published_at: '2026-11-24T10:00:00+05:30' },
     { id: 'p-2', status: 'draft', title: 'Half done', slug: 'half-done', description: '', topic: null, tags: [], cover: null, created_at: null, updated_at: '2026-11-24T09:00:00+05:30', published_at: null }
   ],
-  engine_posts: [{ slug: 'from-the-engine', title: 'From the engine', date: '2026-11-14', topic: 'AI agents', reading_minutes: 11 }],
+  engine_posts: [
+    { slug: 'engine-new', title: 'A new one from the engine', description: '', date: '2026-11-24', topic: 'On-call', reading_minutes: 6, brief_id: '261124-0900-NEWP', website: 'waiting' },
+    { slug: 'engine-live', title: 'Live from the engine', description: '', date: '2026-11-14', topic: 'AI agents', reading_minutes: 11, brief_id: '261114-1535-Y49U', website: 'on' }
+  ],
+  website_waiting: 1,
   topics: ['AI agents', 'On-call'],
   blog_url: 'https://m91-blog.embarko.app'
 }
@@ -83,7 +87,30 @@ describe('the Write page', () => {
     expect(within(list).getByText('On the blog')).toBeInTheDocument()
     expect(within(list).getByText('Draft')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'View Written by me on the blog' })).toHaveAttribute('href', 'https://m91-blog.embarko.app/posts/written-by-me')
-    expect(screen.getByText('From the engine')).toBeInTheDocument()
+    const engine = screen.getByTestId('engine-posts')
+    expect(within(engine).getByText('Live from the engine')).toBeInTheDocument()
+    expect(within(engine).getByText('On the website')).toBeInTheDocument()
+  })
+
+  it('a new post from the engine waits for your OK: Put on the website, Keep off, or read it first', async () => {
+    const calls = mockFetch({
+      'GET /api/blog/posts': { body: LIST },
+      'POST /api/blog/engine-posts/261124-0900-NEWP/website': { body: { brief_id: '261124-0900-NEWP', website: 'on' } }
+    })
+    page('/write')
+    const box = await screen.findByTestId('website-waiting')
+    expect(box).toHaveTextContent('A new post is ready for the website')
+    expect(within(box).getByRole('link', { name: 'Read it' })).toHaveAttribute('href', '/approvals/261124-0900-NEWP')
+    await userEvent.click(within(box).getByRole('button', { name: 'Put on the website' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/blog/engine-posts/261124-0900-NEWP/website' && (c.body as { on?: boolean })?.on === true)).toBe(true))
+    expect(await screen.findByText(/is going on the website/)).toBeInTheDocument()
+  })
+
+  it('nothing waits: no section', async () => {
+    mockFetch({ 'GET /api/blog/posts': { body: { ...LIST, engine_posts: [LIST.engine_posts[1]], website_waiting: 0 } } })
+    page('/write')
+    await screen.findByTestId('engine-posts')
+    expect(screen.queryByTestId('website-waiting')).not.toBeInTheDocument()
   })
 
   it('a .md file dropped on the page opens a new post with its details filled', async () => {

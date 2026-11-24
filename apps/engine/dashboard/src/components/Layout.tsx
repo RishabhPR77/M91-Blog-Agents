@@ -1,5 +1,6 @@
 // Every page: a slim top bar (the main places, a "More" menu, the live run, one engine status button with the
 // details behind it, the theme and settings), the warning banners, and the page itself, which fades in.
+import { useBlogPosts } from './WebsiteGate'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
@@ -197,10 +198,12 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const activeRun = runs.data?.find((r) => r.status === 'running')
   const waiting = approvals.data?.length ?? 0
+  // Approved posts waiting for your OK before they go on the website (components/WebsiteGate.tsx).
+  const websiteWaiting = useBlogPosts(online).data?.website_waiting ?? 0
   const primary: NavItem[] = [
     { to: '/', label: 'Home', end: true },
     { to: '/approvals', label: 'Review', badge: waiting },
-    { to: '/write', label: 'Write' },
+    { to: '/write', label: 'Write', badge: websiteWaiting },
     { to: '/runs', label: 'Posts & runs', end: true },
     // The viaSocket memory: every record the engine keeps, why one may not be useful, and deleting what you do not need.
     { to: '/memory', label: 'Memory' },

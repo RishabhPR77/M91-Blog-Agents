@@ -1,6 +1,7 @@
 // The Markdown export (Phase 11): which draft is exported, the preview (nothing saved) and the final export
 // (saved on Approve: one markdown_export record per brief in Mem0, and apps/engine/exports/<slug>.md).
 
+import { websiteOf } from '../publicposts.js'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -77,10 +78,13 @@ export async function saveFinalExport({ store, config, briefId, version, now = D
     exported_at: istIso(new Date(now()))
   }
   const existing = await latestExport(store, briefId)
+  // The website (2026-11-24): a newly approved post waits for your OK on the dashboard before it goes on the blog and
+  // m91.msg91.com/guides (src/publicposts.js websiteOf). A re-export keeps the choice already made.
   const record = existing
     ? { id: existing.id, ...(await store.updateRecord(existing.id, payload, { status: 'final', slug: built.slug }, { known: existing })) }
-    : await store.createRecord({ type: 'markdown_export', briefId, payload, status: 'final', version: built.version, meta: { slug: built.slug, brief_version: built.brief_version } })
-  return { ...built, record_id: record?.id ?? existing?.id ?? null, path, exported_at: payload.exported_at, replaced: Boolean(existing) }
+    : await store.createRecord({ type: 'markdown_export', briefId, payload, status: 'final', version: built.version, meta: { slug: built.slug, brief_version: built.brief_version, website: 'waiting' } })
+  const website = existing ? websiteOf(existing) : 'waiting'
+  return { ...built, record_id: record?.id ?? existing?.id ?? null, path, exported_at: payload.exported_at, replaced: Boolean(existing), website }
 }
 
 /**

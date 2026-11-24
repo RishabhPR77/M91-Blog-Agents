@@ -280,7 +280,9 @@ export async function runApprove({ briefId, runId, params = {}, config, store, n
   const pubText = published?.url ? `; published → ${published.url}` : ''
   const expText = exported?.filename ? `; Markdown export: ${exported.filename}` : ''
   const slackText = published?.status === 'sent' ? (target === 'email' ? '; emailed' : target === 'slack' ? '; sent to Slack' : '') : ''
-  return { status: 'succeeded', brief_id: briefId, summary: `approved ${by === 'auto' ? 'automatically' : 'by you'} (v${version}${scoreText})${expText}${pubText}${slackText}`, warnings, run_fields: { approved_unreviewed: unreviewed, approved_by: by } }
+  // A new post goes on the blog and the website only with your OK on the dashboard (Write page), never by an alert.
+  const webText = exported?.website === 'waiting' ? '; waiting for your OK on the dashboard to go on the website' : ''
+  return { status: 'succeeded', brief_id: briefId, summary: `approved ${by === 'auto' ? 'automatically' : 'by you'} (v${version}${scoreText})${expText}${pubText}${slackText}${webText}`, warnings, run_fields: { approved_unreviewed: unreviewed, approved_by: by } }
 }
 
 /**

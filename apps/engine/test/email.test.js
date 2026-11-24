@@ -59,7 +59,7 @@ test('an approved post is emailed once, with the .md attached by a signed link; 
   const { store, notifier, r } = await fullRun(cfg(), { reviews: [{ pass: true, total: 88 }] })
   restore()
   assert.equal(r.status, 'succeeded', r.run?.result_summary)
-  assert.match(r.run.result_summary, /approved automatically \(v1, score 88\); Markdown export: how-agent-approval-works\.md; emailed$/)
+  assert.match(r.run.result_summary, /approved automatically \(v1, score 88\); Markdown export: how-agent-approval-works\.md; emailed; waiting for your OK on the dashboard to go on the website$/)
   assert.equal(notifier.sent.slack.length, 0, JSON.stringify(notifier.sent.slack))
   assert.equal(notifier.sent.mail.length, 1)
   const m = notifier.sent.mail[0]

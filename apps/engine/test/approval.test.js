@@ -51,7 +51,7 @@ test('approve: statuses approved (by human, with time), promo off by default, no
   const r = await s.run('approve')
   restore()
   assert.equal(r.status, 'succeeded')
-  assert.equal(r.run.result_summary, 'approved by you (v1, score 88); Markdown export: how-agent-approval-works.md')
+  assert.equal(r.run.result_summary, 'approved by you (v1, score 88); Markdown export: how-agent-approval-works.md; waiting for your OK on the dashboard to go on the website')
   assert.deepEqual(r.run.steps.map((x) => [x.name, x.status, x.summary]), [
     ['promo', 'succeeded', 'Promo pack is off (PROMO_ENABLED=false)'],
     ['export', 'succeeded', 'Markdown export saved: how-agent-approval-works.md (1,842 characters)'],
@@ -233,7 +233,7 @@ test('approve with force_unreviewed: approved, approved_unreviewed saved on the 
   assert.equal(d.status, 'approved')
   assert.equal(d.metadata.approved_unreviewed, true)
   assert.equal(r.run.approved_unreviewed, true)
-  assert.equal(r.run.result_summary, 'approved by you (v1, not reviewed); Markdown export: how-agent-approval-works.md')
+  assert.equal(r.run.result_summary, 'approved by you (v1, not reviewed); Markdown export: how-agent-approval-works.md; waiting for your OK on the dashboard to go on the website')
   assert.ok(r.run.warnings.includes('v1 approved without a Reviewer pass (force_unreviewed)'))
   assert.equal(replay(r.run_id).find((e) => e.type === 'approval.approved').data.approved_unreviewed, true)
   assert.equal(r2.status, 'succeeded')
