@@ -42,6 +42,13 @@ publishing of the blog stays off (`PUBLISH_TARGET=none`); this is only where the
     Never a draft, a review, a score, a brief or a record id (`src/publicposts.js`). Cached 30 s in the engine,
     `Cache-Control: public, max-age=60`, `Access-Control-Allow-Origin: *` (the M91 site may list them),
     `X-Robots-Tag: noindex`.
+  - **The Write page (2026-11-24):** posts you write yourself (`/write` in the dashboard: paste or upload Markdown,
+    drop images, preview the blog page, publish). Behind the login: `GET/POST /api/blog/posts`,
+    `GET/PUT/DELETE /api/blog/posts/<id>`, `POST /api/blog/posts/<id>/publish|unpublish`, `POST /api/blog/images`
+    (PNG, JPEG, GIF or WebP by their first bytes, 5 MB at most, never SVG). Saved as `blog_post` records in Mem0; the
+    images in `DATA_DIR/engine/blog-images/` (kept across deploys), named by their content. Open without a login:
+    `GET /api/public/images/<name>` (`immutable`, `nosniff`, a sandbox CSP), which the blog shows as `/images/<name>`.
+    Published posts join the public posts list. The dashboard's CSP allows `https:` images (a post preview may show one).
   - The cookie is `HttpOnly; SameSite=Strict; Path=/; Secure` (always `Secure` when hosted), 12 hours; `Strict-Transport-Security`
     is sent. Sessions live in memory: a restart logs everyone out.
   - Rate limits: 5 tries a minute per address (the last `X-Forwarded-For` entry, the one Embarko's proxy adds) and

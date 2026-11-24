@@ -2,8 +2,9 @@
 //   GET /                 every post (?topic=<slug> for one topic)
 //   GET /posts/<slug>     one post
 //   GET /posts.json       the post list as JSON, for the M91 site's blog cards (any site may read it)
+//   GET /images/<name>    an image of a post you wrote, from the engine (kept in memory, never changing)
 //   GET /rss.xml · /sitemap.xml · /robots.txt · /favicon.svg · /assets/blog.css · /health
-// No cookies, no forms, no scripts: every answer is read-only.
+// No cookies, no forms; one script of this site (public/blog.js) adds reading helps. Every answer is read-only.
 
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -13,20 +14,52 @@ import { indexPage, postPage, messagePage, LOGO_SVG, BLOG_TITLE, BLOG_DESCRIPTIO
 
 const CSS = readFileSync(new URL('../public/blog.css', import.meta.url))
 const CSS_PATH = `/assets/blog.css?v=${createHash('sha256').update(CSS).digest('hex').slice(0, 10)}`
+const JS = readFileSync(new URL('../public/blog.js', import.meta.url))
+const JS_PATH = `/assets/blog.js?v=${createHash('sha256').update(JS).digest('hex').slice(0, 10)}`
 const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" ${LOGO_SVG.slice(5).replace(' aria-hidden="true"', '').replace(/currentColor/g, '#0B0E12')}`
 
 export const SECURITY_HEADERS = Object.freeze({
-  'content-security-policy': "default-src 'none'; style-src 'self'; img-src 'self' https: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self' https://m91.msg91.com https://*.msg91.com",
+  'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self' https://m91.msg91.com https://*.msg91.com",
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'strict-origin-when-cross-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()'
 })
 
+const IMAGE_NAME_RE = /^[a-f0-9]{20}\.(png|jpg|gif|webp)$/
+const IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' }
+const IMAGE_CACHE_BYTES = 64 * 1024 * 1024
+
 const xml = (s) => String(s ?? '').replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c])
 
 export function createApp(cfg, { fetchImpl, now, log = () => {} } = {}) {
   const posts = createPostSource({ engineUrl: cfg.engineUrl, freshMs: cfg.freshMs, timeoutMs: cfg.timeoutMs, fetchImpl, now, onStale: (key, error) => log('warn', 'serving the last copy', { key, error: error.message }) })
-  const assets = { css: CSS_PATH }
+  const assets = { css: CSS_PATH, js: JS_PATH }
+  // Images by name never change, so a copy is kept (oldest dropped past 64 MB) and browsers keep theirs for a year.
+  const images = new Map()
+  let imageBytes = 0
+  async function image(name) {
+    const m = IMAGE_NAME_RE.exec(name)
+    if (!m) return null
+    if (images.has(name)) return images.get(name)
+    let res
+    try {
+      res = await (fetchImpl ?? globalThis.fetch)(`${cfg.engineUrl}/api/public/images/${name}`, { headers: { 'user-agent': 'm91-blog' }, signal: AbortSignal.timeout(cfg.timeoutMs) })
+    } catch (error) {
+      throw new EngineError(`the engine could not be reached (${error.message})`)
+    }
+    if (res.status === 404) return null
+    if (!res.ok) throw new EngineError(`the engine answered ${res.status}`)
+    const body = Buffer.from(await res.arrayBuffer())
+    const img = { body, type: IMAGE_TYPES[m[1]] }
+    images.set(name, img)
+    imageBytes += body.length
+    for (const [k, v] of images) {
+      if (imageBytes <= IMAGE_CACHE_BYTES) break
+      images.delete(k)
+      imageBytes -= v.body.length
+    }
+    return img
+  }
 
   function reply(req, res, status, type, body, headers = {}) {
     const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body), 'utf8')
@@ -49,6 +82,7 @@ export function createApp(cfg, { fetchImpl, now, log = () => {} } = {}) {
 
     if (path === '/health') return reply(req, res, 200, 'application/json', '{"ok":true}', { 'cache-control': 'no-store' })
     if (path === '/assets/blog.css') return reply(req, res, 200, 'text/css; charset=utf-8', CSS, { 'cache-control': url.searchParams.has('v') ? 'public, max-age=31536000, immutable' : 'public, max-age=300' })
+    if (path === '/assets/blog.js') return reply(req, res, 200, 'text/javascript; charset=utf-8', JS, { 'cache-control': url.searchParams.has('v') ? 'public, max-age=31536000, immutable' : 'public, max-age=300' })
     if (path === '/favicon.svg') return reply(req, res, 200, 'image/svg+xml', FAVICON, { 'cache-control': 'public, max-age=86400' })
     if (path === '/robots.txt') return reply(req, res, 200, 'text/plain; charset=utf-8', `User-agent: *\nAllow: /\n\nSitemap: ${cfg.siteUrl}/sitemap.xml\n`, { 'cache-control': 'public, max-age=3600' })
     if (path.length > 1 && path.endsWith('/')) {
@@ -75,6 +109,11 @@ export function createApp(cfg, { fetchImpl, now, log = () => {} } = {}) {
         const others = all.filter((p) => p.slug !== slug)
         const more = [...others.filter((p) => post.topic && p.topic === post.topic), ...others.filter((p) => !post.topic || p.topic !== post.topic)].slice(0, 3)
         return html(req, res, 200, postPage(cfg, { post, rendered, more, assets }))
+      }
+      if (path.startsWith('/images/')) {
+        const img = await image(path.slice('/images/'.length))
+        if (!img) return notFound(req, res)
+        return reply(req, res, 200, img.type, img.body, { 'cache-control': 'public, max-age=31536000, immutable' })
       }
       if (path === '/posts.json') {
         const all = await posts.list()

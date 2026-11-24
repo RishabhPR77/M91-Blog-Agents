@@ -52,8 +52,11 @@ M91 rings a person's phone when your software needs a decision. [Get started wit
 const POSTS = [
   { slug: 'how-to-add-human-approval', title: 'How to add human approval to an AI agent', description: 'Pause the risky steps and ring a phone.', topic: 'AI agents', tags: ['approvals'], date: '2026-11-14', updated_at: '2026-11-14T15:56:00+05:30', reading_minutes: 6 },
   { slug: 'shared-alert-responsibility', title: 'How M91 Handles Shared Alert Responsibility', description: 'One person takes it.', topic: 'On-call', tags: [], date: '2026-10-29', updated_at: null, reading_minutes: 5 },
-  { slug: 'older-post', title: 'An <older> post', description: '', topic: 'AI agents', tags: [], date: '2026-10-20', updated_at: null, reading_minutes: 4 }
+  { slug: 'older-post', title: 'An <older> post', description: '', topic: 'AI agents', tags: [], date: '2026-10-20', updated_at: null, reading_minutes: 4 },
+  { slug: 'written-by-hand', title: 'Written by hand', description: 'With a cover.', topic: 'On-call', tags: [], date: '2026-10-10', updated_at: null, reading_minutes: 2, cover: '/images/0123456789abcdef0123.png' }
 ]
+const IMG = '0123456789abcdef0123.png'
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(40, 7)])
 
 function fakeEngine({ posts = POSTS, down = false } = {}) {
   const calls = []
@@ -63,6 +66,7 @@ function fakeEngine({ posts = POSTS, down = false } = {}) {
     if (state.down) throw new TypeError('fetch failed')
     const path = new URL(url).pathname
     if (path === '/api/public/posts') return Response.json({ posts: state.posts, total: state.posts.length })
+    if (path.startsWith('/api/public/images/')) return path.endsWith(IMG) ? new Response(PNG, { headers: { 'content-type': 'image/png' } }) : Response.json({ error: {} }, { status: 404 })
     const slug = path.split('/').pop()
     const p = state.posts.find((x) => x.slug === slug)
     return p ? Response.json({ post: { ...p, markdown: slug === 'how-to-add-human-approval' ? MD : `# ${p.title}\n\nBody of ${slug}.\n` } }) : Response.json({ error: { code: 'not_found' } }, { status: 404 })
@@ -120,7 +124,7 @@ test('a post from the engine is checked field by field', () => {
   assert.equal(cleanPost({ slug: '../x', title: 'X' }), null)
   assert.equal(cleanPost({ slug: 'x', title: '' }), null)
   assert.equal(cleanPost({ slug: 'x', title: 'X' }, { withBody: true }), null, 'a post needs its Markdown')
-  assert.deepEqual(cleanPost({ slug: 'x', title: 'X', date: 'yesterday', reading_minutes: -3, tags: ['a', 7, ''] }), { slug: 'x', title: 'X', description: '', topic: null, tags: ['a'], date: null, updated_at: null, reading_minutes: 1 })
+  assert.deepEqual(cleanPost({ slug: 'x', title: 'X', date: 'yesterday', reading_minutes: -3, tags: ['a', 7, ''] }), { slug: 'x', title: 'X', description: '', topic: null, tags: ['a'], date: null, updated_at: null, reading_minutes: 1, cover: null })
   assert.equal(fmtDay('2026-11-14'), '14 Nov 2026')
 })
 
@@ -137,16 +141,19 @@ test('the list: every post as a card, newest first, topics to filter by, safe he
     assert.equal(r.headers.get('x-content-type-options'), 'nosniff')
     assert.equal(r.headers.get('cache-control'), 'public, max-age=60')
     const cards = [...r.text.matchAll(/<a class="bl-card" href="\/posts\/([^"]+)">/g)].map((m) => m[1])
-    assert.deepEqual(cards, ['how-to-add-human-approval', 'shared-alert-responsibility', 'older-post'])
+    assert.deepEqual(cards, ['how-to-add-human-approval', 'shared-alert-responsibility', 'older-post', 'written-by-hand'])
     assert.match(r.text, /Notes on waking people up\./)
     assert.match(r.text, /14 Nov 2026 · 6 min read/)
     assert.match(r.text, /An &lt;older&gt; post/, 'titles are escaped')
     assert.match(r.text, /<a class="chip" href="\/\?topic=on-call">On-call<\/a>/)
-    assert.ok(!/<script(?! type="application\/ld\+json")/.test(r.text), 'no script runs on the page')
+    // One script, this site's own file; no inline script (the CSP allows only 'self').
+    const scripts = [...r.text.matchAll(/<script([^>]*)>/g)].map((m) => m[1])
+    assert.deepEqual(scripts.filter((x) => !x.includes('application/ld+json')).map((x) => x.match(/src="([^"?]+)/)?.[1]), ['/assets/blog.js'])
+    assert.match(r.headers.get('content-security-policy'), /script-src 'self';/)
     assert.match(r.text, /<link rel="canonical" href="https:\/\/blog\.test\/">/)
 
     const on = await s.get('/?topic=on-call')
-    assert.deepEqual([...on.text.matchAll(/class="bl-card" href="\/posts\/([^"]+)"/g)].map((m) => m[1]), ['shared-alert-responsibility'])
+    assert.deepEqual([...on.text.matchAll(/class="bl-card" href="\/posts\/([^"]+)"/g)].map((m) => m[1]), ['shared-alert-responsibility', 'written-by-hand'])
     assert.match(on.text, /<a class="chip is-on" href="\/\?topic=on-call" aria-current="page">/)
     assert.equal((await s.get('/?topic=nope')).status, 404)
   } finally {
@@ -165,7 +172,7 @@ test('a post: title, meta, the article, a table of contents, more posts; JSON-LD
     assert.match(r.text, /<nav class="toc" aria-label="On this page">/)
     assert.match(r.text, /<aside class="tldr"/)
     assert.match(r.text, /More from the blog/)
-    assert.deepEqual([...r.text.matchAll(/class="bl-card" href="\/posts\/([^"]+)"/g)].map((m) => m[1]), ['older-post', 'shared-alert-responsibility'], 'the same topic first')
+    assert.deepEqual([...r.text.matchAll(/class="bl-card" href="\/posts\/([^"]+)"/g)].map((m) => m[1]), ['older-post', 'shared-alert-responsibility', 'written-by-hand'], 'the same topic first')
     const ld = r.text.match(/<script type="application\/ld\+json">([^<]*)<\/script>/)[1]
     assert.equal(JSON.parse(ld)['@type'], 'BlogPosting')
     assert.match(r.text, /<meta property="og:type" content="article">/)
@@ -234,7 +241,7 @@ test('the engine: one read per minute, the last copy while it is down, a 503 pag
     assert.equal(stale.status, 200, 'the last copy')
     assert.match(stale.text, /How M91 Handles Shared Alert Responsibility/)
     engine.state.down = false
-    engine.state.posts = POSTS.slice(1)
+    engine.state.posts = POSTS.slice(1, 3)
     t += 61000
     const fresh = await s.get('/')
     assert.ok(!fresh.text.includes('how-to-add-human-approval'), 'a post the engine no longer lists is gone')
@@ -259,6 +266,61 @@ test('an empty blog says the first posts are on their way', async () => {
     const r = await s.get('/')
     assert.equal(r.status, 200)
     assert.match(r.text, /The first posts are on their way\./)
+  } finally {
+    await s.close()
+  }
+})
+
+test('images: an uploaded image or https is shown (a caption from its title); any other address is dropped', () => {
+  const md = `# T\n\n![The lock screen](/images/${IMG} "It rings until someone answers")\n\n![remote](https://example.com/a.png)\n\n![plain](http://example.com/a.png) ![path](/etc/passwd) ![data](data:image/png;base64,AAAA)\n`
+  const { html } = renderPost(md)
+  assert.match(html, new RegExp(`<span class="figure"><img src="/images/${IMG}" alt="The lock screen" loading="lazy" decoding="async"><span class="caption">It rings until someone answers</span></span>`))
+  assert.match(html, /<img src="https:\/\/example\.com\/a\.png" alt="remote"/)
+  assert.ok(!/src="http:|src="\/etc|src="data:/.test(html))
+  assert.match(html, /plain path data/)
+})
+
+test('a post with a cover; /images/<name> comes from the engine once, then from memory; unknown names are 404', async () => {
+  const engine = fakeEngine()
+  const s = await serve(engine)
+  try {
+    const page = await s.get('/posts/written-by-hand')
+    assert.match(page.text, new RegExp(`<figure class="cover shell"><img src="/images/${IMG}" alt="" decoding="async"></figure>`))
+    assert.match(page.text, new RegExp(`<meta property="og:image" content="https://blog\\.test/images/${IMG}">`))
+    assert.match(page.text, /<meta name="twitter:card" content="summary_large_image">/)
+    const a = await s.get(`/images/${IMG}`)
+    assert.equal(a.status, 200)
+    assert.equal(a.headers.get('content-type'), 'image/png')
+    assert.equal(a.headers.get('cache-control'), 'public, max-age=31536000, immutable')
+    await s.get(`/images/${IMG}`)
+    assert.equal(engine.calls.filter((c) => c.includes('/api/public/images/')).length, 1, 'kept after the first read')
+    assert.equal((await s.get('/images/ffffffffffffffffffff.png')).status, 404)
+    assert.equal((await s.get('/images/..%2Fsecret')).status, 404)
+    assert.equal(engine.calls.filter((c) => c.includes('secret')).length, 0)
+  } finally {
+    await s.close()
+  }
+})
+
+test('reading helps: the contents twice (side and phone menu), heading links, share links, back to the top, an Updated date', async () => {
+  const engine = fakeEngine({ posts: POSTS.map((p) => (p.slug === 'how-to-add-human-approval' ? { ...p, updated_at: '2026-11-20T10:00:00+05:30' } : p)) })
+  const s = await serve(engine)
+  try {
+    const r = await s.get('/posts/how-to-add-human-approval')
+    assert.equal([...r.text.matchAll(/<nav class="toc" aria-label="On this page/g)].length, 2, 'the side list and the phone menu')
+    assert.match(r.text, /<details class="toc-mobile"><summary><span class="toc-k">On this page<\/span><span class="toc-now"><\/span><\/summary>/)
+    assert.match(r.text, /<h2 id="what-needs-a-pause">What needs a pause\?<a class="anchor" href="#what-needs-a-pause" aria-label="Link to this section">#<\/a><\/h2>/)
+    assert.match(r.text, /href="https:\/\/www\.linkedin\.com\/sharing\/share-offsite\/\?url=https%3A%2F%2Fblog\.test%2Fposts%2Fhow-to-add-human-approval"/)
+    assert.match(r.text, /<button type="button" class="share-b js-only" data-copy-link="https:\/\/blog\.test\/posts\/how-to-add-human-approval">Copy link<\/button>/)
+    assert.match(r.text, /<a class="to-top" href="#main" aria-label="Back to the top">/)
+    assert.match(r.text, /14 Nov 2026<\/time><span aria-hidden="true"> · <\/span>6 min read<span aria-hidden="true"> · <\/span>Updated 20 Nov 2026/)
+    const older = await s.get('/posts/older-post')
+    assert.ok(!older.text.includes('Updated'), 'no Updated date when it was not changed later')
+    const js = await s.get(r.text.match(/<script src="([^"]+)" defer><\/script>/)[1])
+    assert.equal(js.status, 200)
+    assert.match(js.headers.get('content-type'), /text\/javascript/)
+    assert.equal(js.headers.get('cache-control'), 'public, max-age=31536000, immutable')
+    assert.match(js.text, /is-current/)
   } finally {
     await s.close()
   }

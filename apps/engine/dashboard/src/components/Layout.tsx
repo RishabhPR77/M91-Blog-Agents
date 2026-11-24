@@ -200,6 +200,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const primary: NavItem[] = [
     { to: '/', label: 'Home', end: true },
     { to: '/approvals', label: 'Review', badge: waiting },
+    { to: '/write', label: 'Write' },
     { to: '/runs', label: 'Posts & runs', end: true },
     // The viaSocket memory: every record the engine keeps, why one may not be useful, and deleting what you do not need.
     { to: '/memory', label: 'Memory' },
@@ -277,7 +278,8 @@ export function Layout({ children }: { children: ReactNode }) {
       {online && <QuotaBanner usage={health.data?.mem0_usage} />}
       {online && <IndexBanner index={health.data?.index} running={Boolean(health.data?.run_in_progress)} />}
       <main className="mx-auto w-full max-w-6xl flex-1 px-5 pt-12 pb-28 sm:px-8 sm:pt-16">
-        <div key={location.pathname} className="animate-enter">{children}</div>
+        {/* A new page fades in; the editor stays one page when a new post gets its address on the first save. */}
+        <div key={location.pathname.startsWith('/write/') ? '/write/:id' : location.pathname} className="animate-enter">{children}</div>
       </main>
     </div>
   )

@@ -49,7 +49,7 @@ test('GET / serves index.html with the security headers and no cache', async () 
     assert.equal(res.headers.get('cache-control'), 'no-cache')
     expectSecurityHeaders(res)
     assert.equal(await res.text(), INDEX)
-    assert.equal(res.headers.get('content-security-policy'), "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
+    assert.equal(res.headers.get('content-security-policy'), "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'")
   })
 })
 

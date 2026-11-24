@@ -23,7 +23,9 @@ export const RECORD_TYPES = Object.freeze([
   // only so records from before the weekly editor can still be listed and cleaned up.
   'roadmap', 'knowledge', 'timely_opportunity', 'weekly_pick',
   // The M91 guides already live on msg91.com/guide (src/guides/sync.js).
-  'published_guide'
+  'published_guide',
+  // Posts you write on the dashboard's Write page for the M91 blog (src/blogposts.js).
+  'blog_post'
 ])
 
 // Statuses used across record types. brief: new → superseded (re-brief) / approved (Reviewer pass).

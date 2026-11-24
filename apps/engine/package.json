@@ -58,6 +58,7 @@
     "timely": "node --env-file=../../.env src/cli.js timely",
     "admin:hash": "node scripts/admin-hash.mjs",
     "package:embarko": "node scripts/package-embarko.mjs",
+    "sync:blog-preview": "node scripts/sync-blog-preview.mjs",
     "deploy:embarko": "node --env-file=../../.env scripts/deploy-embarko.mjs",
     "embarko:env": "node scripts/embarko-env.mjs",
     "embarko:env-sync": "node --env-file=../../.env scripts/embarko-env-sync.mjs",

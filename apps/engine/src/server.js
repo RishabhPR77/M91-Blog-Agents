@@ -33,7 +33,9 @@ import { listOpportunities, nextTimely, applyAction, isExpired, OPEN_STATUSES, T
 import { istDate } from './util/time.js'
 import { previewExport, latestExport, ExportError } from './export/index.js'
 import { blogOnly } from './export/markdown.js'
-import { listPublicPosts, postSummary, PUBLIC_SLUG_RE } from './publicposts.js'
+import { listPublicPosts, listApprovedPosts, postSummary, PUBLIC_SLUG_RE } from './publicposts.js'
+import { listBlogPosts, getBlogPost, saveBlogPost, setPublished, deleteBlogPost, BlogError, M91_BLOG_URL } from './blogposts.js'
+import { saveImage, readImage, MAX_IMAGE_BYTES } from './blogimages.js'
 import { createDocstar } from './publisher/docstar.js'
 import { withMem0Count, mem0Requests, currentMem0Counts } from './util/mem0count.js'
 import { judgeRecords, filterRows, planDelete, createdMs, DEFAULT_STALE_DAYS } from './memory.js'
@@ -152,9 +154,9 @@ const runSummary = (r) => {
 
 export const DEFAULT_DASHBOARD_DIR = fileURLToPath(new URL('../dashboard/dist', import.meta.url))
 
-/** Headers on every dashboard file: no inline scripts, same-origin API only, never framed. */
+/** Headers on every dashboard file: no inline scripts, same-origin API only, never framed. https images: a post preview (Write page) may show one. */
 export const DASHBOARD_HEADERS = Object.freeze({
-  'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
+  'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'",
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'same-origin'
 })
@@ -403,12 +405,24 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
   }
 
 
-  async function readJson(req) {
+  /** The raw request body, at most max bytes (413 beyond). */
+  async function readRaw(req, max) {
     const chunks = []
     let size = 0
     for await (const c of req) {
       size += c.length
-      if (size > 64 * 1024) throw new ApiError(413, 'too_large', 'request body is larger than 64 KB')
+      if (size > max) throw new ApiError(413, 'too_large', `the upload is larger than ${Math.round(max / 1024 / 1024)} MB`)
+      chunks.push(c)
+    }
+    return Buffer.concat(chunks)
+  }
+
+  async function readJson(req, max = 64 * 1024) {
+    const chunks = []
+    let size = 0
+    for await (const c of req) {
+      size += c.length
+      if (size > max) throw new ApiError(413, 'too_large', `request body is larger than ${Math.round(max / 1024)} KB`)
       chunks.push(c)
     }
     if (!size) return {}
@@ -521,6 +535,13 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       if (!post) return send(res, 404, { error: { code: 'not_found', message: 'no such post' } }, open)
       return send(res, 200, { post }, open)
     }
+    // The images of the posts you write (src/blogimages.js): public by their content-hash name, never changing.
+    if (path.startsWith('/api/public/images/') && (method === 'GET' || method === 'HEAD')) {
+      const img = readImage(config, path.slice('/api/public/images/'.length))
+      if (!img) return send(res, 404, { error: { code: 'not_found', message: 'no such image' } }, { 'access-control-allow-origin': '*' })
+      res.writeHead(200, { 'content-type': img.type, 'content-length': img.body.length, 'cache-control': 'public, max-age=31536000, immutable', 'access-control-allow-origin': '*', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox", 'x-robots-tag': 'noindex' })
+      return res.end(method === 'HEAD' ? undefined : img.body)
+    }
 
     // A Markdown download link (from Slack) opened in a browser without a session: log in first, then download.
     if (!authed(req) && method === 'GET' && /^\/api\/exports\/[\w-]+\/download$/.test(path)) {
@@ -604,6 +625,32 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       if (!rec) return fail(res, 404, 'not_found', `no final Markdown export of ${briefId} yet: approve it first`)
       if (seg[3] === 'download') return sendMarkdown(res, blogOnly(rec.payload.markdown), rec.payload.filename, true)
       return send(res, 200, { export: { ...exportSummary(rec), markdown: blogOnly(rec.payload.markdown), front_matter: rec.payload.front_matter, warnings: rec.payload.warnings ?? [] } })
+    }
+
+    // The Write page (2026-11-24): posts you write for the M91 blog, and their images (src/blogposts.js, src/blogimages.js).
+    if (path === '/api/blog/posts' && method === 'GET') {
+      const posts = await listBlogPosts(store)
+      const approved = await listApprovedPosts(store)
+      const topics = [...new Set([...approved, ...posts].map((p) => p.topic).filter(Boolean))].sort()
+      return send(res, 200, { posts, engine_posts: approved.map(({ slug, title, date, topic, reading_minutes }) => ({ slug, title, date, topic, reading_minutes })), topics, blog_url: M91_BLOG_URL })
+    }
+    if (path === '/api/blog/images' && method === 'POST') {
+      const image = saveImage(config, await readRaw(req, MAX_IMAGE_BYTES + 1))
+      return send(res, 201, { image })
+    }
+    if (seg[1] === 'blog' && seg[2] === 'posts') {
+      const takenSlugs = async () => (await listApprovedPosts(store)).map((p) => p.slug)
+      const changed = (status, body) => {
+        publicCache = { at: -Infinity, posts: null }
+        return send(res, status, body)
+      }
+      if (seg.length === 3 && method === 'POST') return changed(201, { post: await saveBlogPost(store, { body: await readJson(req, 512 * 1024), takenSlugs: await takenSlugs(), now }) })
+      const id = seg[3]
+      if (!id || !/^[\w-]{1,80}$/.test(id)) throw new ApiError(400, 'bad_id', 'a post id looks like letters, digits and dashes')
+      if (seg.length === 4 && method === 'GET') return send(res, 200, { post: await getBlogPost(store, id) })
+      if (seg.length === 4 && method === 'PUT') return changed(200, { post: await saveBlogPost(store, { id, body: await readJson(req, 512 * 1024), takenSlugs: await takenSlugs(), now }) })
+      if (seg.length === 4 && method === 'DELETE') return changed(200, await deleteBlogPost(store, id))
+      if (seg.length === 5 && method === 'POST' && (seg[4] === 'publish' || seg[4] === 'unpublish')) return changed(200, { post: await setPublished(store, id, seg[4] === 'publish', { now }) })
     }
 
     // The timely lane: the cards (newest first; a card past its window shows as expired before a run marks it), the
@@ -1035,7 +1082,7 @@ export function createServer({ triggerKey, run, manager, store, config, now = Da
       return send(res, 404, { error: 'not found' })
     } catch (error) {
       if (res.headersSent) return res.end()
-      if (error instanceof RunError || error instanceof PinError || error instanceof ApiError) {
+      if (error instanceof RunError || error instanceof PinError || error instanceof ApiError || error instanceof BlogError) {
         if (url.pathname === '/run') return send(res, error.status, { error: error.message })
         return fail(res, error.status ?? 400, error.code ?? 'bad_request', error.message)
       }

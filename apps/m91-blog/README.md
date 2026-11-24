@@ -23,12 +23,22 @@ http(s), mailto and in-site links are kept.
 | Path | What it is |
 | --- | --- |
 | `/` | Every post, newest first (`/?topic=on-call` for one topic) |
-| `/posts/<slug>` | One post, with "On this page" on wide screens and three more posts |
+| `/posts/<slug>` | One post: "On this page" beside it on wide screens (a menu at the top on phones), the section you are reading marked, share links and three more posts |
+| `/images/<name>` | An image of a post written on the engine's Write page (from the engine, kept in memory) |
 | `/posts.json` | The list as JSON for the M91 site's blog cards (`slug`, `title`, `description`, `topic`, `date`, `reading_minutes`, `url`); any site may read it |
 | `/rss.xml`, `/sitemap.xml`, `/robots.txt` | Feed and search engines |
 
-No cookies, forms or scripts. A strict Content-Security-Policy; the pages can be framed only by m91.msg91.com
-(and other msg91.com sites).
+Posts also come from the engine's **Write page** (paste or upload Markdown, drop images, preview, publish): they are
+listed with the approved posts, and their images are served here at `/images/<name>`. Images in a post: `![alt](src
+"caption")` shows the caption under the picture; a click shows it large.
+
+No cookies or forms. One script of this site's own (`public/blog.js`, deferred) adds reading helps: the section being
+read marked in "On this page", copy buttons on code and heading links, a picture shown large, "Back to the top". Every
+page works without it. A strict Content-Security-Policy (scripts from this site only, no inline script); the pages can
+be framed only by m91.msg91.com (and other msg91.com sites).
+
+The engine's dashboard shows a preview with copies of `src/markdown.js`, `src/pages.js` and `public/blog.css`: after
+changing them, run `npm run sync:blog-preview` in `apps/engine` (a test fails while the copies differ).
 
 ## Settings
 

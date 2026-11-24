@@ -13,6 +13,17 @@ export class EngineError extends Error {
 }
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '')
+const IMAGE_PATH_RE = /^\/images\/[a-f0-9]{20}\.(?:png|jpg|gif|webp)$/
+/** A cover: an uploaded image (/images/<name>) or an https address, else null. */
+export function cleanCover(v) {
+  const c = str(v)
+  if (IMAGE_PATH_RE.test(c)) return c
+  try {
+    return c && new URL(c).protocol === 'https:' ? new URL(c).href : null
+  } catch {
+    return null
+  }
+}
 
 /** A post from the engine, checked field by field (anything unexpected is dropped, never shown). */
 export function cleanPost(p, { withBody = false } = {}) {
@@ -28,7 +39,8 @@ export function cleanPost(p, { withBody = false } = {}) {
     tags: Array.isArray(p.tags) ? p.tags.map(str).filter(Boolean).slice(0, 12) : [],
     date: DAY_RE.test(str(p.date)) ? str(p.date) : null,
     updated_at: str(p.updated_at) || null,
-    reading_minutes: Number.isInteger(p.reading_minutes) && p.reading_minutes > 0 ? p.reading_minutes : 1
+    reading_minutes: Number.isInteger(p.reading_minutes) && p.reading_minutes > 0 ? p.reading_minutes : 1,
+    cover: cleanCover(p.cover)
   }
   if (withBody) {
     const markdown = typeof p.markdown === 'string' ? p.markdown : ''

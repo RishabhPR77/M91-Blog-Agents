@@ -14,7 +14,7 @@ export class ApiError extends Error {
 
 export const isApiError = (e: unknown): e is ApiError => e instanceof ApiError
 
-type Options = { method?: 'GET' | 'POST' | 'DELETE'; body?: unknown; signal?: AbortSignal }
+type Options = { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; body?: unknown; signal?: AbortSignal }
 
 let onUnauthorized: (() => void) | null = null
 /** Called on any 401 except from /api/login itself (the app sends the user to the login page). */
@@ -53,6 +53,27 @@ export async function api<T>(path: string, { method = 'GET', body, signal }: Opt
     throw new ApiError(res.status, code, message)
   }
   return json as T
+}
+
+/** Uploads an image for a post (the Write page): the file's bytes as the body. Returns its address on the blog (/images/<name>). */
+export async function uploadImage(file: Blob): Promise<{ url: string; name: string; bytes: number; type: string }> {
+  let res: Response
+  try {
+    res = await fetch('/api/blog/images', { method: 'POST', credentials: 'same-origin', headers: { accept: 'application/json', 'content-type': file.type || 'application/octet-stream' }, body: file })
+  } catch {
+    throw new ApiError(0, 'network', 'Cannot reach the engine. Is it running?')
+  }
+  let json: { image?: { url: string; name: string; bytes: number; type: string }; error?: { code?: string; message?: string } } | null = null
+  try {
+    json = await res.json()
+  } catch {
+    json = null
+  }
+  if (!res.ok || !json?.image) {
+    if (res.status === 401) onUnauthorized?.()
+    throw new ApiError(res.status, json?.error?.code ?? `http_${res.status}`, json?.error?.message ?? (res.status === 413 ? 'The image is too large (5 MB at most).' : res.statusText || `HTTP ${res.status}`))
+  }
+  return json.image
 }
 
 /** A short, human message for any error (used by toasts). */

@@ -21,6 +21,8 @@ const Posts = lazy(() => import('./pages/Posts'))
 const Exports = lazy(() => import('./pages/Exports'))
 const Week = lazy(() => import('./pages/Week'))
 const Agents = lazy(() => import('./pages/Agents'))
+const Write = lazy(() => import('./pages/Write'))
+const WriteEditor = lazy(() => import('./pages/WriteEditor'))
 
 export function AppRoutes() {
   return (
@@ -40,6 +42,8 @@ export function AppRoutes() {
                 <Route path="/content" element={<Content />} />
                 <Route path="/memory" element={<Memory />} />
                 <Route path="/agents" element={<Agents />} />
+                <Route path="/write" element={<Write />} />
+                <Route path="/write/:id" element={<WriteEditor />} />
                 <Route path="/records/:memoryId" element={<RecordDetail />} />
                 <Route path="/pinned" element={<Pinned />} />
                 <Route path="/lessons" element={<Lessons />} />

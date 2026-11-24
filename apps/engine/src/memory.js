@@ -130,6 +130,7 @@ export function judgeRecords(records, { now = Date.now(), staleDays = DEFAULT_ST
     if (r.type === 'weekly_pick' && r.status === 'written') protect(r, 'confirm', 'why a post was chosen (its post page shows it)')
     if (r.type === 'markdown_export' && r.briefId && briefs.get(r.briefId)?.live) protect(r, briefs.get(r.briefId).onBlog ? 'never' : 'confirm', "an approved post's export")
     if (r.type === 'published_guide' && r.status === 'live') protect(r, 'confirm', 'a guide that is live on msg91.com/guide (the editor and the links use it)')
+    if (r.type === 'blog_post') protect(r, r.status === 'published' ? 'never' : 'confirm', r.status === 'published' ? 'a post you wrote that is on the blog (unpublish it on the Write page first)' : 'a draft you wrote on the Write page')
     if (r.type === 'lesson') protect(r, 'confirm', 'a lesson the agents learn from')
     if (r.type === 'pinned_topic' && r.status === 'open') protect(r, 'confirm', 'an open pinned topic')
     if (['brief', 'draft', 'review'].includes(r.type) && r.briefId && briefs.get(r.briefId)?.live) protect(r, 'confirm', 'part of an approved or published post')

@@ -37,7 +37,7 @@ test('only approved posts, newest approval first, dated by the first approval (n
   assert.deepEqual(posts.map((p) => p.slug), ['how-to-add-human-approval', 'older-post'])
   assert.equal(posts[1].date, '2026-11-01', 'the approval day, not the re-export day')
   assert.equal(posts[1].updated_at, '2026-11-20T10:00:00+05:30')
-  assert.deepEqual(Object.keys(posts[0]).sort(), ['date', 'description', 'markdown', 'reading_minutes', 'slug', 'tags', 'title', 'topic', 'updated_at'])
+  assert.deepEqual(Object.keys(posts[0]).sort(), ['cover', 'date', 'description', 'markdown', 'reading_minutes', 'slug', 'tags', 'title', 'topic', 'updated_at'])
   assert.ok(!JSON.stringify(posts).includes('DRAFT TEXT'))
   assert.ok(!JSON.stringify(posts).includes('261114-1535-Y49U'), 'no brief id')
   assert.ok(!JSON.stringify(posts).includes('review_score'))

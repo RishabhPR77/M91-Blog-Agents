@@ -124,14 +124,31 @@ section.bl { position: relative; isolation: isolate; overflow: hidden; padding: 
 .back:hover { color: var(--ink); }
 .post-meta { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); font: 600 12.5px/1.4 var(--mono); letter-spacing: .04em; color: var(--ink-3); }
 
-.post-grid { display: grid; grid-template-columns: minmax(0, 720px) minmax(0, 1fr); gap: 72px; align-items: start; padding-bottom: 96px; }
+.post-grid { display: grid; grid-template-columns: minmax(0, 720px) minmax(0, 1fr); gap: 56px 72px; align-items: start; padding-bottom: 96px; }
+.post-grid > .rail { grid-column: 2; grid-row: 1 / span 2; }
 .rail { position: sticky; top: 96px; max-width: 260px; justify-self: end; width: 100%; }
 @media (max-width: 1180px) { .post-grid { grid-template-columns: minmax(0, 1fr); } .rail { display: none; } }
 @media (max-width: 700px) { .post-grid { padding-bottom: 64px; } }
 .toc-k { font: 700 10.5px/1 var(--mono); letter-spacing: .15em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 14px; }
 .toc ol { list-style: none; padding: 0; border-left: 1px solid var(--line); }
 .toc a { display: block; padding: 7px 0 7px 16px; margin-left: -1px; border-left: 2px solid transparent; font-size: 14px; line-height: 1.4; color: var(--ink-2); transition: color 160ms, border-color 160ms; }
-.toc a:hover { color: var(--ink); border-left-color: var(--lime-deep); }
+.toc a:hover { color: var(--ink); border-left-color: var(--line-2); }
+/* The section being read (the script marks it). */
+.toc a.is-current { color: var(--ink); font-weight: 650; border-left-color: var(--lime-deep); background: linear-gradient(90deg, var(--lime-tint), transparent 85%); }
+.rail { max-height: calc(100vh - 120px); overflow-y: auto; scrollbar-width: thin; }
+
+/* Phones and tablets: "On this page" as a menu at the top of the post. */
+.toc-mobile { display: none; }
+@media (max-width: 1180px) {
+  .toc-mobile { display: block; position: sticky; top: 68px; z-index: 20; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.96); backdrop-filter: blur(8px); box-shadow: 0 12px 28px -24px rgba(11,14,18,.45); }
+  .toc-mobile summary { display: flex; align-items: center; gap: 10px; padding: 13px 16px; cursor: pointer; list-style: none; min-width: 0; }
+  .toc-mobile summary::-webkit-details-marker { display: none; }
+  .toc-mobile summary::after { content: ""; margin-left: auto; flex: 0 0 auto; width: 8px; height: 8px; border-right: 1.6px solid var(--ink-2); border-bottom: 1.6px solid var(--ink-2); transform: rotate(45deg) translateY(-2px); transition: transform 160ms; }
+  .toc-mobile[open] summary::after { transform: rotate(-135deg) translateY(-2px); }
+  .toc-mobile .toc-k { margin: 0; flex: 0 0 auto; }
+  .toc-now { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .toc-mobile .toc { max-height: 55vh; overflow-y: auto; padding: 0 16px 14px; }
+}
 
 /* The article text. */
 .prose { font-size: 18px; line-height: 1.75; color: var(--ink-hover); letter-spacing: -.006em; min-width: 0; }
@@ -144,6 +161,11 @@ section.bl { position: relative; isolation: isolate; overflow: hidden; padding: 
 .prose h3 { margin-top: 1.9em; font-size: 21px; font-weight: 750; letter-spacing: -.024em; line-height: 1.3; color: var(--ink); }
 .prose h4 { margin-top: 1.6em; font-size: 18px; font-weight: 700; color: var(--ink); }
 .prose h2 + *, .prose h3 + *, .prose h4 + * { margin-top: .7em; }
+/* A section's own link, beside its heading (hover or focus shows it). */
+.prose .anchor { margin-left: .35em; color: var(--ink-3); font-weight: 500; text-decoration: none; opacity: 0; transition: opacity 140ms; }
+.prose h2:hover .anchor, .prose h3:hover .anchor, .prose h4:hover .anchor, .prose .anchor:focus-visible { opacity: 1; }
+.prose .anchor:hover { color: var(--ink); background: none; }
+@media (hover: none) { .prose .anchor { display: none; } }
 .prose a { color: var(--ink); text-decoration: underline; text-decoration-color: #B9D23A; text-decoration-thickness: 2px; text-underline-offset: 4px; transition: background 160ms; }
 .prose a:hover { background: var(--lime-tint); }
 .prose strong { font-weight: 700; color: var(--ink); }
@@ -157,11 +179,29 @@ section.bl { position: relative; isolation: isolate; overflow: hidden; padding: 
 .prose code { font: 500 .86em var(--mono); background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px; padding: .1em .38em; }
 .prose pre { margin-top: 1.5em; padding: 20px 22px; border-radius: 16px; background: var(--dark-bg); color: #E6EAEE; overflow-x: auto; font: 500 14px/1.7 var(--mono); }
 .prose pre code { background: none; border: 0; padding: 0; font: inherit; color: inherit; }
+.prose pre { position: relative; }
+.copy-code { position: absolute; top: 10px; right: 10px; padding: 5px 10px; border: 1px solid rgba(255,255,255,.18); border-radius: 999px; background: rgba(255,255,255,.08); color: #E6EAEE; font: 600 11.5px/1 var(--font); cursor: pointer; opacity: 0; transition: opacity 140ms, background 140ms; }
+.prose pre:hover .copy-code, .copy-code:focus-visible { opacity: 1; }
+.copy-code:hover { background: rgba(255,255,255,.16); }
+@media (hover: none) { .copy-code { opacity: 1; } }
 .prose .table-wrap { margin-top: 1.5em; overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
 .prose table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.55; }
 .prose th { padding: 13px 16px; text-align: left; font: 700 10.5px/1.3 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); background: var(--bg-2); border-bottom: 1px solid var(--line); white-space: nowrap; }
 .prose td { padding: 13px 16px; vertical-align: top; border-bottom: 1px solid var(--line); }
 .prose tr:last-child td { border-bottom: 0; }
+
+/* Images: full width of the text, rounded; a caption under it. The cover sits under the post's title. */
+.prose img { display: block; max-width: 100%; height: auto; margin: 0 auto; border-radius: 16px; border: 1px solid var(--line); background: var(--bg-2); }
+.prose p:has(> img:only-child), .prose p:has(> .figure:only-child) { margin-top: 1.6em; margin-bottom: 1.6em; }
+.prose .figure { display: block; }
+.js .zoomable { cursor: zoom-in; }
+dialog.zoom { padding: 0; border: 0; background: transparent; max-width: 96vw; max-height: 94vh; overflow: visible; }
+dialog.zoom::backdrop { background: rgba(11,14,18,.84); }
+dialog.zoom img { display: block; max-width: 96vw; max-height: 94vh; width: auto; height: auto; border-radius: 12px; cursor: zoom-out; background: #fff; }
+.prose .caption { display: block; margin-top: 10px; text-align: center; font-size: 14px; line-height: 1.5; color: var(--ink-3); }
+.cover { margin: 0 auto 48px; }
+.cover img { display: block; width: 100%; max-width: 1100px; max-height: 560px; object-fit: cover; border-radius: 24px; border: 1px solid var(--line); background: var(--bg-2); }
+@media (max-width: 700px) { .cover { margin-bottom: 28px; } .cover img { border-radius: 16px; } }
 
 /* TL;DR: a lime card, like the M91 blog cards. */
 .prose .tldr { margin-top: 2em; padding: 22px 26px 24px; border-radius: 20px; border: 1px solid rgba(85,101,26,.22); background: var(--lime-tint); font-size: 16.5px; line-height: 1.65; color: var(--ink); }
@@ -182,6 +222,25 @@ section.bl { position: relative; isolation: isolate; overflow: hidden; padding: 
 .prose .cta a { color: var(--lime); text-decoration-color: rgba(223,245,107,.45); }
 .prose .cta a:hover { background: rgba(223,245,107,.12); }
 @media (max-width: 700px) { .prose .cta { padding: 26px 22px 28px; border-radius: 22px; } .cta-body { font-size: 17.5px; } }
+
+/* Under the post: share it. */
+.post-end { grid-column: 1; }
+.share { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-top: 26px; border-top: 1px solid var(--line); }
+.share-k { margin-right: 6px; font: 700 11px/1 var(--mono); letter-spacing: .15em; text-transform: uppercase; color: var(--ink-3); }
+.share-b { display: inline-flex; align-items: center; padding: 8px 14px; border: 1px solid var(--line-2); border-radius: 999px; background: #fff; color: var(--ink); font: 600 13.5px/1 var(--font); cursor: pointer; transition: border-color 160ms, background 160ms; }
+.share-b:hover { border-color: var(--ink); background: var(--bg-2); }
+.js-only { display: none; }
+.js .js-only { display: inline-flex; }
+
+/* Back to the top (shown by the script once you have scrolled). */
+.to-top { position: fixed; right: 20px; bottom: 20px; z-index: 40; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 999px; background: var(--ink); color: #fff; box-shadow: 0 14px 28px -14px rgba(11,14,18,.6); opacity: 0; transform: translateY(10px); pointer-events: none; transition: opacity 200ms, transform 200ms; }
+.to-top svg { width: 18px; height: 18px; }
+.to-top.show { opacity: 1; transform: none; pointer-events: auto; }
+.to-top:hover { background: var(--ink-hover); }
+
+/* A short note ("Link copied"). */
+.blog-note { position: fixed; left: 50%; bottom: 24px; z-index: 70; padding: 10px 16px; border-radius: 999px; background: var(--ink); color: #fff; font: 600 13.5px/1.2 var(--font); transform: translate(-50%, 16px); opacity: 0; pointer-events: none; transition: opacity 200ms, transform 200ms; }
+.blog-note.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* More posts, on the ruled paper again. */
 section.more { padding: 72px 0 88px; border-top: 1px solid var(--line); }
@@ -211,6 +270,6 @@ section.msg { padding: 120px 0 140px; }
   .bl-card:nth-child(n) { transform: none; }
 }
 @media print {
-  .masthead, .rail, .more, .foot, .read-bar, .back { display: none !important; }
+  .masthead, .rail, .toc-mobile, .more, .foot, .read-bar, .back, .share, .to-top, .anchor, .copy-code { display: none !important; }
   .post-grid { display: block; }
 }

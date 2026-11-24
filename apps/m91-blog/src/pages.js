@@ -1,6 +1,7 @@
 // The pages, as HTML strings: the post list, a post, "not found" and "not available". The look follows
-// m91.msg91.com (its colours, system fonts, the M91 mark, the lime blog cards on ruled paper). No script runs on
-// any page: the download menu is a <details>, the reading bar is CSS.
+// m91.msg91.com (its colours, system fonts, the M91 mark, the lime blog cards on ruled paper). Every page works
+// without script; one small script of this site's own (public/blog.js) adds reading helps: the section being read
+// marked in "On this page", copy buttons, a picture shown large, "Back to the top".
 
 import { escapeHtml as e } from './markdown.js'
 
@@ -9,6 +10,7 @@ export const LOGO_SVG = '<svg viewBox="0 0 120 120" fill="none" aria-hidden="tru
 const APP_STORE = 'https://apps.apple.com/app/id6759090472'
 const GOOGLE_PLAY = 'https://play.google.com/store/apps/details?id=com.msg91.m91'
 const ARROW = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+const UP = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 const BACK = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 8H3M7 4L3 8l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 export const BLOG_TITLE = 'M91 Blog'
@@ -67,7 +69,7 @@ function footer(cfg) {
 }
 
 /** The whole document. */
-export function layout(cfg, { title, description, path, body, type = 'website', ld = null, noindex = false, assets }) {
+export function layout(cfg, { title, description, path, body, type = 'website', ld = null, noindex = false, image = null, assets }) {
   const url = `${cfg.siteUrl}${path}`
   return `<!doctype html>
 <html lang="en">
@@ -82,11 +84,12 @@ ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <meta property="og:title" content="${e(title)}">
 <meta property="og:description" content="${e(description)}">
 <meta property="og:url" content="${e(url)}">
-<meta name="twitter:card" content="summary">
+${image ? `<meta property="og:image" content="${e(image)}">\n<meta name="twitter:card" content="summary_large_image">` : '<meta name="twitter:card" content="summary">'}
 <meta name="theme-color" content="#FFFFFF">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="alternate" type="application/rss+xml" title="${BLOG_TITLE}" href="/rss.xml">
 <link rel="stylesheet" href="${e(assets.css)}">
+${assets.js ? `<script src="${e(assets.js)}" defer></script>` : ''}
 ${ld ? `<script type="application/ld+json">${jsonLd(ld)}</script>` : ''}
 </head>
 <body>
@@ -147,13 +150,31 @@ export function indexPage(cfg, { posts, topic = null, assets }) {
   })
 }
 
+/** The share links under a post: copy the address (with the script), LinkedIn, X and email. */
+function shareRow(url, title) {
+  const u = encodeURIComponent(url)
+  const t = encodeURIComponent(title)
+  return `<div class="share" aria-label="Share this post">
+  <span class="share-k">Share this post</span>
+  <button type="button" class="share-b js-only" data-copy-link="${e(url)}">Copy link</button>
+  <a class="share-b" href="https://www.linkedin.com/sharing/share-offsite/?url=${u}" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+  <a class="share-b" href="https://x.com/intent/post?url=${u}&amp;text=${t}" target="_blank" rel="noopener noreferrer">X</a>
+  <a class="share-b" href="mailto:?subject=${t}&amp;body=${u}">Email</a>
+</div>`
+}
+
 /** One post. */
 export function postPage(cfg, { post, rendered, more, assets }) {
-  const toc = rendered.toc.length > 1
-    ? `<nav class="toc" aria-label="On this page"><p class="toc-k">On this page</p><ol>${rendered.toc.map((t) => `<li><a href="#${e(t.id)}">${e(t.text)}</a></li>`).join('')}</ol></nav>`
-    : ''
+  const items = rendered.toc.map((t) => `<li><a href="#${e(t.id)}">${e(t.text)}</a></li>`).join('')
+  const many = rendered.toc.length > 1
+  const toc = many ? `<nav class="toc" aria-label="On this page"><p class="toc-k">On this page</p><ol>${items}</ol></nav>` : ''
+  // Phones and tablets: the same list as a menu at the top of the post (the side list needs a wide screen).
+  const tocMobile = many ? `<details class="toc-mobile"><summary><span class="toc-k">On this page</span><span class="toc-now"></span></summary><nav class="toc" aria-label="On this page (menu)"><ol>${items}</ol></nav></details>` : ''
   const when = post.date ? `<time datetime="${e(post.date)}">${e(fmtDay(post.date))}</time>` : ''
-  const meta = [when, e(minutes(post.reading_minutes))].filter(Boolean).join('<span aria-hidden="true"> · </span>')
+  const changedDay = String(post.updated_at ?? '').slice(0, 10)
+  const updated = post.date && /^\d{4}-\d{2}-\d{2}$/.test(changedDay) && changedDay > post.date ? `Updated ${e(fmtDay(changedDay))}` : ''
+  const meta = [when, e(minutes(post.reading_minutes)), updated].filter(Boolean).join('<span aria-hidden="true"> · </span>')
+  const url = `${cfg.siteUrl}/posts/${post.slug}`
   const body = `<div class="read-bar" aria-hidden="true"></div>
 <article class="post">
   <header class="post-head shell">
@@ -163,12 +184,16 @@ export function postPage(cfg, { post, rendered, more, assets }) {
     ${post.description ? `<p class="sub">${e(post.description)}</p>` : ''}
     <p class="post-meta">${meta}</p>
   </header>
+  ${post.cover ? `<figure class="cover shell"><img src="${e(post.cover)}" alt="" decoding="async"></figure>` : ''}
   <div class="shell post-grid">
+    ${tocMobile}
     <div class="prose">
 ${rendered.html}
     </div>
     ${toc ? `<aside class="rail">${toc}</aside>` : ''}
+    <div class="post-end">${shareRow(url, post.title)}</div>
   </div>
+  <a class="to-top" href="#main" aria-label="Back to the top">${UP}</a>
 </article>
 ${more.length ? `<section class="bl more" aria-labelledby="more-h">
   <div class="shell">
@@ -183,8 +208,10 @@ ${more.length ? `<section class="bl more" aria-labelledby="more-h">
     type: 'article',
     body,
     assets,
+    image: post.cover ? (post.cover.startsWith('/') ? `${cfg.siteUrl}${post.cover}` : post.cover) : null,
     ld: {
       '@context': 'https://schema.org', '@type': 'BlogPosting', headline: post.title, description: post.description || undefined,
+      image: post.cover ? (post.cover.startsWith('/') ? `${cfg.siteUrl}${post.cover}` : post.cover) : undefined,
       datePublished: post.date || undefined, dateModified: post.updated_at || post.date || undefined, keywords: post.tags.length ? post.tags.join(', ') : undefined,
       mainEntityOfPage: `${cfg.siteUrl}/posts/${post.slug}`, url: `${cfg.siteUrl}/posts/${post.slug}`,
       author: { '@type': 'Organization', name: 'M91', url: `${cfg.m91Url}/` },

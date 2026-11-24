@@ -230,7 +230,7 @@ const API_ROUTES = [
   ['GET', '/api/settings'], ['GET', '/api/runs'], ['GET', '/api/runs?limit=5'], ['GET', '/api/runs/R-261023-0600-ABCD'], ['GET', '/api/runs/R-261023-0600-ABCD/events'],
   ['GET', '/api/events'], ['GET', '/api/approvals'], ['GET', '/api/approvals/261023-0600-ABCD'], ['GET', '/api/records?type=draft'], ['GET', '/api/posts'],
   ['GET', '/api/pinned'], ['GET', '/api/lessons'], ['GET', '/api/exports'], ['GET', '/api/exports/261023-0600-ABCD'], ['GET', '/api/exports/261023-0600-ABCD/download'],
-  ['GET', '/api/roadmap'], ['GET', '/api/timely'], ['GET', '/api/briefs'], ['GET', '/api/drafts/261023-0600-ABCD'],
+  ['GET', '/api/roadmap'], ['GET', '/api/timely'], ['GET', '/api/briefs'], ['GET', '/api/drafts/261023-0600-ABCD'], ['GET', '/api/blog/posts'], ['POST', '/api/blog/posts'], ['POST', '/api/blog/images'],
   ['POST', '/api/runs'], ['POST', '/api/runs/R-261023-0600-ABCD/cancel'], ['POST', '/api/pinned'], ['DELETE', '/api/pinned/PIN-1'],
   ['POST', '/api/approvals/261023-0600-ABCD/approve'], ['POST', '/api/approvals/261023-0600-ABCD/reject'], ['POST', '/api/approvals/261023-0600-ABCD/counter'],
   ['POST', '/api/roadmap/approve'], ['POST', '/api/roadmap/slots/s0-1'], ['POST', '/api/roadmap/slots/s0-1/move'], ['POST', '/api/roadmap/slots/s0-1/skip'],
@@ -270,7 +270,7 @@ test('the code: before the session check, api() answers only /api/health, /api/l
   const before = src.slice(start, guard)
   const routes = [...before.matchAll(/(?:path === |startsWith\()'(\/api\/[^']*)'|seg\[1\] === '([^']+)'/g)].map((m) => m[1] ?? `seg:${m[2]}`)
   // The public posts (the blog) are read-only and show only approved posts: test/publicposts.test.js.
-  assert.deepEqual([...new Set(routes)].sort(), ['/api/health', '/api/login', '/api/logout', '/api/public/posts', '/api/public/posts/'])
+  assert.deepEqual([...new Set(routes)].sort(), ['/api/health', '/api/login', '/api/logout', '/api/public/images/', '/api/public/posts', '/api/public/posts/'])
 })
 
 test('/api/health without a session says only that the engine is up and how to log in; with one, everything', async () => {

@@ -1,8 +1,9 @@
 // A post's Markdown as the article's HTML. The engine's export is plain Markdown (no HTML), laid out as:
 //   # Title · the intro · ## TL;DR · the sections · ## Sources · ## Try M91
 // The title is shown by the page itself, the intro becomes the lead, TL;DR a highlighted box, Sources a quiet list
-// and Try M91 the closing panel. Safety: raw HTML is never rendered, and a link or image is kept only when its
-// address is http(s), mailto, a site path or an in-page anchor.
+// and Try M91 the closing panel. Safety: raw HTML is never rendered, a link is kept only when its address is http(s), mailto,
+// a site path or an in-page anchor, and an image only when it is https or an uploaded image (/images/<name>).
+// Images: ![alt](src "caption") shows the caption under the picture.
 
 import { Marked } from 'marked'
 
@@ -21,6 +22,15 @@ export function safeHref(href) {
   }
 }
 
+/** An image address the post may show: an uploaded image (/images/<name>) or https. */
+export const IMAGE_PATH_RE = /^\/images\/[a-f0-9]{20}\.(?:png|jpg|gif|webp)$/
+export function safeImage(src) {
+  const s = String(src ?? '').trim()
+  if (IMAGE_PATH_RE.test(s)) return s
+  const url = safeHref(s)
+  return url && url.startsWith('https://') ? url : null
+}
+
 /** A heading's text as an id: lower case, letters and digits joined by dashes. */
 export const slugify = (text) => String(text ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'section'
 
@@ -28,6 +38,9 @@ export const slugify = (text) => String(text ?? '').toLowerCase().normalize('NFK
 function plainText(tokens = []) {
   return tokens.map((t) => (t.tokens ? plainText(t.tokens) : t.type === 'br' ? ' ' : (t.text ?? ''))).join('').replace(/\s+/g, ' ').trim()
 }
+
+/** A section's own link, shown beside its heading (the script copies it). */
+const anchor = (id) => `<a class="anchor" href="#${id}" aria-label="Link to this section">#</a>`
 
 const KIND = [
   [/^tl;?\s?dr:?$/i, 'tldr'],
@@ -58,7 +71,8 @@ export function renderPost(markdown, { siteUrl = '' } = {}) {
       heading({ tokens, depth }) {
         const text = plainText(tokens)
         const level = Math.min(6, Math.max(2, depth))
-        return `<h${level} id="${uniqueId(text)}">${this.parser.parseInline(tokens)}</h${level}>\n`
+        const id = uniqueId(text)
+        return `<h${level} id="${id}">${this.parser.parseInline(tokens)}${anchor(id)}</h${level}>\n`
       },
       link({ href, title, tokens }) {
         const url = safeHref(href)
@@ -68,10 +82,11 @@ export function renderPost(markdown, { siteUrl = '' } = {}) {
         const out = own(url) || url.startsWith('mailto:') ? '' : ' target="_blank" rel="noopener noreferrer"'
         return `<a href="${escapeHtml(url)}"${t}${out}>${inner}</a>`
       },
-      image({ href, text }) {
-        const url = safeHref(href)
-        if (!url || !/^https:\/\//.test(url)) return escapeHtml(text)
-        return `<img src="${escapeHtml(url)}" alt="${escapeHtml(text)}" loading="lazy" decoding="async">`
+      image({ href, title, text }) {
+        const url = safeImage(href)
+        if (!url) return escapeHtml(text)
+        const img = `<img src="${escapeHtml(url)}" alt="${escapeHtml(text)}" loading="lazy" decoding="async">`
+        return title ? `<span class="figure">${img}<span class="caption">${escapeHtml(title)}</span></span>` : img
       },
       table(token) {
         const cell = (c, tag) => `<${tag}${c.align ? ` style="text-align:${c.align}"` : ''}>${this.parser.parseInline(c.tokens)}</${tag}>`
@@ -120,7 +135,7 @@ export function renderPost(markdown, { siteUrl = '' } = {}) {
       html.push(`<section class="cta" id="${id}" aria-labelledby="${id}-h"><p class="cta-k" id="${id}-h">${escapeHtml(text)}</p><div class="cta-body">${inner}</div></section>`)
     } else {
       toc.push({ id, text })
-      html.push(`<h2 id="${id}">${marked.parseInline(s.heading.text ?? text)}</h2>\n${inner}`)
+      html.push(`<h2 id="${id}">${marked.parseInline(s.heading.text ?? text)}${anchor(id)}</h2>\n${inner}`)
     }
   }
   return { title, html: html.join('\n'), toc }
